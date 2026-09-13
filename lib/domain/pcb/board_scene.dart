@@ -1,0 +1,724 @@
+import 'dart:math' as math;
+import 'dart:ui';
+
+import '../models/models.dart';
+import 'board.dart';
+import 'board_edge.dart';
+import 'board_layer.dart';
+import 'board_outline.dart';
+import 'board_zone.dart';
+import 'footprint.dart';
+import 'footprint_placement.dart';
+
+/// One pad of one placed footprint, resolved to a position on the board.
+class PlacedPad {
+  const PlacedPad({
+    required this.pad,
+    required this.partId,
+    required this.reference,
+    required this.footprintId,
+    required this.position,
+    required this.angle,
+    required this.layers,
+    this.netId,
+    this.netName,
+  });
+
+  final Pad pad;
+  final String partId;
+  final String reference;
+
+  /// The [PlacedFootprintRef] this pad belongs to.
+  final String footprintId;
+
+  /// Centre of the pad, in board millimetres.
+  final Offset position;
+
+  /// The pad's own rotation on the board, in degrees.
+  final double angle;
+
+  /// The copper layers this pad reaches, after any flip.
+  final List<BoardLayer> layers;
+
+  final String? netId;
+  final String? netName;
+
+  /// `R1.2` — how the schematic already names this connection.
+  String get label => '$reference.${pad.number}';
+
+  /// A stable identity, since a pad has none of its own in the file.
+  String get id => '$footprintId/${pad.number}/${pad.at.x}/${pad.at.y}';
+
+  bool get isConnected => netId != null;
+
+  bool reaches(CopperLayer layer) => layers.contains(layer.layer);
+
+  /// Whether [point] falls on the pad's copper.
+  ///
+  /// Rectangular for every shape but the round ones, which is close enough
+  /// for hit-testing a finger and exact enough for deciding whether a track
+  /// endpoint has landed on a pad.
+  bool contains(Offset point, {double toleranceMm = 0}) {
+    final local = _toLocal(point);
+    if (pad.shape == PadShape.circle) {
+      return local.distance <= pad.sizeX / 2 + toleranceMm;
+    }
+    return local.dx.abs() <= pad.sizeX / 2 + toleranceMm &&
+        local.dy.abs() <= pad.sizeY / 2 + toleranceMm;
+  }
+
+  Offset _toLocal(Offset point) {
+    final d = point - position;
+    final radians = -angle * math.pi / 180;
+    final cos = math.cos(radians);
+    final sin = math.sin(radians);
+    return Offset(d.dx * cos + d.dy * sin, -d.dx * sin + d.dy * cos);
+  }
+}
+
+/// One footprint, positioned and ready to draw.
+class PlacedFootprint {
+  const PlacedFootprint({
+    required this.ref,
+    required this.part,
+    required this.placement,
+    required this.pads,
+    this.definition,
+  });
+
+  final PlacedFootprintRef ref;
+  final Part part;
+  final FootprintPlacement placement;
+  final List<PlacedPad> pads;
+
+  /// Null when the footprint's library is no longer installed. Pads are
+  /// then absent too — unlike a symbol, a footprint has nothing to fall
+  /// back on, because the project never snapshotted one.
+  final FootprintDefinition? definition;
+
+  bool get isResolved => definition != null;
+
+  /// The footprint's extent on the board.
+  Rect get bounds {
+    final definition = this.definition;
+    if (definition == null) {
+      return Rect.fromCenter(
+        center: Offset(ref.x, ref.y),
+        width: 2,
+        height: 2,
+      );
+    }
+    final local = footprintBounds(definition);
+    if (local == Rect.zero) {
+      return Rect.fromCenter(
+        center: Offset(ref.x, ref.y),
+        width: 2,
+        height: 2,
+      );
+    }
+    var rect = Rect.fromPoints(
+      placement.apply(local.left, local.top),
+      placement.apply(local.right, local.top),
+    );
+    for (final corner in [
+      placement.apply(local.right, local.bottom),
+      placement.apply(local.left, local.bottom),
+    ]) {
+      rect = rect.expandToInclude(Rect.fromLTWH(corner.dx, corner.dy, 0, 0));
+    }
+    return rect;
+  }
+}
+
+/// One line of the ratsnest: a connection the netlist demands and the copper
+/// has not yet made.
+class RatsnestLine {
+  const RatsnestLine({
+    required this.netId,
+    required this.netName,
+    required this.from,
+    required this.to,
+  });
+
+  final String netId;
+  final String netName;
+  final Offset from;
+  final Offset to;
+
+  double get lengthMm => (to - from).distance;
+}
+
+/// Everything the board canvas needs for one frame.
+///
+/// Built the same way the schematic's scene is, and for the same reason:
+/// hit-testing and drawing work from one set of numbers, so a pad is
+/// touchable exactly where it is drawn.
+class BoardScene {
+  const BoardScene({
+    required this.board,
+    required this.footprints,
+    required this.pads,
+    required this.tracks,
+    required this.vias,
+    required this.ratsnest,
+    required this.unplaced,
+    this.edges = const [],
+    this.zones = const [],
+    this.staleTrackIds = const {},
+    this.staleViaIds = const {},
+  });
+
+  static BoardScene build({
+    required Board board,
+    required List<PartWithDetails> parts,
+    required List<NetWithEndpoints> nets,
+    required List<PlacedFootprintRef> placements,
+    required Map<String, FootprintDefinition> definitions,
+    List<Track> tracks = const [],
+    List<Via> vias = const [],
+    List<BoardEdge> edges = const [],
+    List<BoardZone> zones = const [],
+  }) {
+    final partsById = {for (final part in parts) part.part.id: part};
+
+    // A pad connects to a net through the schematic pin that carries the
+    // same number. That mapping is the whole bridge between the two halves
+    // of the app, and it is the reason pad numbers are strings.
+    final netByPin = <String, NetWithEndpoints>{
+      for (final net in nets)
+        for (final endpoint in net.endpoints) endpoint.pin.id: net,
+    };
+
+    final placed = <PlacedFootprint>[];
+    final allPads = <PlacedPad>[];
+    final unplaced = <PlacedFootprintRef>[];
+
+    for (final ref in placements) {
+      final part = partsById[ref.partId];
+      if (part == null) continue;
+      if (!ref.placed) {
+        unplaced.add(ref);
+        continue;
+      }
+
+      final definition = definitions[ref.libId];
+      final placement = FootprintPlacement.of(ref);
+      final pads = <PlacedPad>[];
+
+      if (definition != null) {
+        // Pin numbers repeat legally on a symbol, and a pad number can
+        // repeat on a footprint too. Matching on the number rather than on
+        // identity is what KiCad does, and it is what makes a ground pad
+        // shared by three pins land on one net.
+        final netForNumber = <String, NetWithEndpoints>{};
+        for (final pin in part.pins) {
+          final net = netByPin[pin.id];
+          if (net != null) netForNumber.putIfAbsent(pin.number, () => net);
+        }
+
+        for (final pad in definition.pads) {
+          final net = pad.isConnectable ? netForNumber[pad.number] : null;
+          pads.add(
+            PlacedPad(
+              pad: pad,
+              partId: part.part.id,
+              reference: part.part.reference,
+              footprintId: ref.id,
+              position: placement.applyPoint(pad.at),
+              angle: placement.padAngle(pad.angle),
+              layers: [
+                for (final layer in pad.layers) placement.layerOf(layer)!,
+              ],
+              netId: net?.net.id,
+              netName: net?.displayName,
+            ),
+          );
+        }
+      }
+
+      placed.add(
+        PlacedFootprint(
+          ref: ref,
+          part: part.part,
+          placement: placement,
+          pads: pads,
+          definition: definition,
+        ),
+      );
+      allPads.addAll(pads);
+    }
+
+    // What net each piece of copper is really on, decided by what it
+    // touches rather than by the id it was drawn with. Net ids do not
+    // survive the schematic changing underneath the board: merging two nets
+    // deletes one, and undoing the merge recreates both under new ids, so a
+    // stored id is a hint about intent, not a fact about connectivity.
+    final resolved = _resolveCopperNets(allPads, tracks, vias);
+
+    return BoardScene(
+      board: board,
+      footprints: placed,
+      pads: allPads,
+      tracks: resolved.tracks,
+      vias: resolved.vias,
+      ratsnest: _ratsnest(allPads, resolved.tracks, resolved.vias),
+      unplaced: unplaced,
+      edges: edges,
+      zones: zones,
+      staleTrackIds: resolved.staleTracks,
+      staleViaIds: resolved.staleVias,
+    );
+  }
+
+  final Board board;
+
+  /// Extra shapes on Edge.Cuts, beyond the board outline.
+  final List<BoardEdge> edges;
+
+  /// Copper pours, drawn under the tracks and exported as zone outlines.
+  final List<BoardZone> zones;
+
+  final List<PlacedFootprint> footprints;
+  final List<PlacedPad> pads;
+  final List<Track> tracks;
+  final List<Via> vias;
+
+  /// What is still unrouted. Empty means the board is done.
+  final List<RatsnestLine> ratsnest;
+
+  /// Footprints assigned to a part but not yet put anywhere.
+  final List<PlacedFootprintRef> unplaced;
+
+  /// Copper whose stored net no longer matches what it connects, and whose
+  /// net [tracks] and [vias] have already been corrected for. Kept so the
+  /// board can write the correction back, making storage — and so the
+  /// exported file — agree with what is drawn.
+  final Set<String> staleTrackIds;
+  final Set<String> staleViaIds;
+
+  bool get hasStaleCopper =>
+      staleTrackIds.isNotEmpty || staleViaIds.isNotEmpty;
+
+  /// Copper on no net at all: drawn for a connection the schematic no
+  /// longer has.
+  List<Track> get orphanTracks =>
+      [for (final track in tracks) if (track.netId == null) track];
+
+  /// The board edge — a rectangle, a circle or a polygon.
+  BoardOutline get outline => board.outline;
+
+  /// The box the edge fits inside, for framing the view.
+  Rect get outlineBounds => outline.bounds;
+
+  bool get isEmpty => footprints.isEmpty;
+
+  bool get isFullyRouted => ratsnest.isEmpty;
+
+  /// Nets that still have at least one unrouted connection.
+  Set<String> get unroutedNetIds => {for (final line in ratsnest) line.netId};
+
+  /// The pad nearest [point] within [toleranceMm], on [layer] if given.
+  PlacedPad? padNear(Offset point, double toleranceMm, {CopperLayer? layer}) {
+    PlacedPad? best;
+    var bestDistance = double.infinity;
+    for (final pad in pads) {
+      if (layer != null && !pad.reaches(layer)) continue;
+      final distance = (pad.position - point).distance;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = pad;
+      }
+    }
+    if (best == null) return null;
+    // Landing anywhere on the copper counts, however large the pad.
+    if (best.contains(point, toleranceMm: toleranceMm)) return best;
+    return bestDistance <= toleranceMm ? best : null;
+  }
+
+  /// The footprint under [point], topmost first.
+  PlacedFootprint? footprintAt(Offset point, {double paddingMm = 0.5}) {
+    for (final footprint in footprints.reversed) {
+      if (footprint.bounds.inflate(paddingMm).contains(point)) return footprint;
+    }
+    return null;
+  }
+
+  /// The track nearest [point], within [toleranceMm], on [layer].
+  Track? trackNear(Offset point, double toleranceMm, {CopperLayer? layer}) {
+    Track? best;
+    var bestDistance = double.infinity;
+    for (final track in tracks) {
+      if (layer != null && track.layer != layer) continue;
+      final distance = distanceToSegment(
+        point,
+        Offset(track.startX, track.startY),
+        Offset(track.endX, track.endY),
+      );
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = track;
+      }
+    }
+    return bestDistance <= toleranceMm ? best : null;
+  }
+
+  /// Everything a project still owes: what is not placed, and what is not
+  /// routed. The board's own to-do list.
+  Rect get contentBounds {
+    var rect = outlineBounds;
+    for (final footprint in footprints) {
+      rect = rect.expandToInclude(footprint.bounds);
+    }
+    return rect.inflate(5);
+  }
+
+  // --- ratsnest --------------------------------------------------------
+
+  /// How close copper has to come to a pad or to other copper to count as
+  /// joined, in millimetres. Tracks are drawn to snapped coordinates, so
+  /// this only has to absorb floating-point noise.
+  static const _touchMm = 0.001;
+
+  /// The connections a net still needs, given the copper already drawn.
+  ///
+  /// This is the feedback loop routing runs on: draw a track and the line it
+  /// satisfies disappears. Computing it from the copper rather than from a
+  /// "routed" flag means it stays honest when a track is deleted, moved, or
+  /// drawn to the wrong place.
+  static List<RatsnestLine> _ratsnest(
+    List<PlacedPad> pads,
+    List<Track> tracks,
+    List<Via> vias,
+  ) {
+    final byNet = <String, List<PlacedPad>>{};
+    for (final pad in pads) {
+      final netId = pad.netId;
+      if (netId == null) continue;
+      (byNet[netId] ??= []).add(pad);
+    }
+
+    final lines = <RatsnestLine>[];
+    for (final entry in byNet.entries) {
+      final netPads = entry.value;
+      if (netPads.length < 2) continue;
+
+      final groups = _copperGroups(netPads, tracks, vias, entry.key);
+
+      // One group means the net is fully routed and owes nothing. Otherwise
+      // the tree is built between groups, so a half-routed net shows only
+      // the hops it still needs rather than starting again from scratch.
+      for (final edge in _spanningTree(groups)) {
+        final (from, to) = _closestPair(groups[edge.$1], groups[edge.$2]);
+        lines.add(
+          RatsnestLine(
+            netId: entry.key,
+            netName: from.netName ?? '',
+            from: from.position,
+            to: to.position,
+          ),
+        );
+      }
+    }
+    return lines;
+  }
+
+  /// Groups a net's pads by what the drawn copper already joins.
+  ///
+  /// Copper is treated as a graph of nodes: one per pad, and one per
+  /// distinct point-on-a-layer that a track ends at. A track joins its own
+  /// two ends; two tracks meeting at a point share the node for it; a via
+  /// joins the two layers at its own point; and a track ending inside a pad
+  /// joins that pad. Whatever ends up in one component is one piece of
+  /// copper.
+  static List<List<PlacedPad>> _copperGroups(
+    List<PlacedPad> pads,
+    List<Track> tracks,
+    List<Via> vias,
+    String netId,
+  ) {
+    final parent = <String, String>{};
+
+    String find(String node) {
+      var root = parent.putIfAbsent(node, () => node);
+      while (parent[root] != root) {
+        root = parent[root]!;
+      }
+      var current = node;
+      while (parent[current] != root) {
+        final next = parent[current]!;
+        parent[current] = root;
+        current = next;
+      }
+      return root;
+    }
+
+    void union(String a, String b) {
+      final rootA = find(a);
+      final rootB = find(b);
+      if (rootA != rootB) parent[rootA] = rootB;
+    }
+
+    /// A point on a layer, quantised so that two tracks drawn to the same
+    /// place share one node rather than missing each other by a rounding.
+    String pointNode(Offset point, CopperLayer layer) {
+      final x = (point.dx / _touchMm).round();
+      final y = (point.dy / _touchMm).round();
+      return '${layer.name}@$x,$y';
+    }
+
+    String padNode(int index) => 'pad:$index';
+
+    /// Joins a point to any pad whose copper covers it.
+    void bindToPads(Offset point, CopperLayer layer) {
+      for (var i = 0; i < pads.length; i++) {
+        final pad = pads[i];
+        if (!pad.reaches(layer)) continue;
+        if (pad.contains(point, toleranceMm: _touchMm)) {
+          union(pointNode(point, layer), padNode(i));
+        }
+      }
+    }
+
+    for (var i = 0; i < pads.length; i++) {
+      find(padNode(i));
+    }
+
+    for (final track in tracks) {
+      if (track.netId != netId) continue;
+      final start = Offset(track.startX, track.startY);
+      final end = Offset(track.endX, track.endY);
+
+      union(pointNode(start, track.layer), pointNode(end, track.layer));
+      bindToPads(start, track.layer);
+      bindToPads(end, track.layer);
+    }
+
+    for (final via in vias) {
+      if (via.netId != netId) continue;
+      final at = Offset(via.x, via.y);
+      union(
+        pointNode(at, CopperLayer.front),
+        pointNode(at, CopperLayer.back),
+      );
+      bindToPads(at, CopperLayer.front);
+      bindToPads(at, CopperLayer.back);
+
+      // A track ending anywhere inside the via's barrel reaches it, the
+      // same way a track ending inside a pad reaches the pad.
+      for (final track in tracks) {
+        if (track.netId != netId) continue;
+        for (final end in [
+          Offset(track.startX, track.startY),
+          Offset(track.endX, track.endY),
+        ]) {
+          if ((end - at).distance <= via.diameter / 2 + _touchMm) {
+            union(pointNode(end, track.layer), pointNode(at, track.layer));
+          }
+        }
+      }
+    }
+
+    final grouped = <String, List<PlacedPad>>{};
+    for (var i = 0; i < pads.length; i++) {
+      (grouped[find(padNode(i))] ??= []).add(pads[i]);
+    }
+    return grouped.values.toList();
+  }
+
+  /// Decides each track's and via's net from the pads its copper reaches.
+  ///
+  /// Copper is grouped by geometry alone — ignoring stored nets — and a
+  /// group touching exactly one net's pads is on that net. A group touching
+  /// none keeps what it had (it may be a stub routed ahead of time, or an
+  /// orphan the design check will report), and a group touching two nets is
+  /// a short, which keeps its stored nets so the clearance check can see
+  /// the collision rather than have it quietly relabelled away.
+  static ({
+    List<Track> tracks,
+    List<Via> vias,
+    Set<String> staleTracks,
+    Set<String> staleVias,
+  })
+  _resolveCopperNets(
+    List<PlacedPad> pads,
+    List<Track> tracks,
+    List<Via> vias,
+  ) {
+    if (tracks.isEmpty && vias.isEmpty) {
+      return (
+        tracks: tracks,
+        vias: vias,
+        staleTracks: const {},
+        staleVias: const {},
+      );
+    }
+
+    final parent = <String, String>{};
+    String find(String node) {
+      var root = parent.putIfAbsent(node, () => node);
+      while (parent[root] != root) {
+        root = parent[root]!;
+      }
+      var current = node;
+      while (parent[current] != root) {
+        final next = parent[current]!;
+        parent[current] = root;
+        current = next;
+      }
+      return root;
+    }
+
+    void union(String a, String b) {
+      final rootA = find(a);
+      final rootB = find(b);
+      if (rootA != rootB) parent[rootA] = rootB;
+    }
+
+    String pointNode(Offset point, CopperLayer layer) =>
+        '${layer.name}@${(point.dx / _touchMm).round()},'
+        '${(point.dy / _touchMm).round()}';
+
+    // Which net each pad is on, joined into the graph as its own node.
+    final padNets = <String, String>{};
+    void bindToPads(Offset point, CopperLayer layer) {
+      for (var i = 0; i < pads.length; i++) {
+        final pad = pads[i];
+        final net = pad.netId;
+        if (net == null || !pad.reaches(layer)) continue;
+        if (!pad.contains(point, toleranceMm: _touchMm)) continue;
+        final node = 'pad:$i';
+        padNets[node] = net;
+        union(pointNode(point, layer), node);
+      }
+    }
+
+    for (final track in tracks) {
+      final start = Offset(track.startX, track.startY);
+      final end = Offset(track.endX, track.endY);
+      union('track:${track.id}', pointNode(start, track.layer));
+      union('track:${track.id}', pointNode(end, track.layer));
+      bindToPads(start, track.layer);
+      bindToPads(end, track.layer);
+    }
+
+    for (final via in vias) {
+      final at = Offset(via.x, via.y);
+      union('via:${via.id}', pointNode(at, CopperLayer.front));
+      union('via:${via.id}', pointNode(at, CopperLayer.back));
+      bindToPads(at, CopperLayer.front);
+      bindToPads(at, CopperLayer.back);
+      for (final track in tracks) {
+        for (final end in [
+          Offset(track.startX, track.startY),
+          Offset(track.endX, track.endY),
+        ]) {
+          if ((end - at).distance <= via.diameter / 2 + _touchMm) {
+            union('via:${via.id}', pointNode(end, track.layer));
+          }
+        }
+      }
+    }
+
+    final netsByGroup = <String, Set<String>>{};
+    for (final entry in padNets.entries) {
+      (netsByGroup[find(entry.key)] ??= {}).add(entry.value);
+    }
+
+    String? netFor(String node, String? stored) {
+      final nets = netsByGroup[find(node)];
+      if (nets == null || nets.length != 1) return stored;
+      return nets.single;
+    }
+
+    final staleTracks = <String>{};
+    final resolvedTracks = <Track>[];
+    for (final track in tracks) {
+      final net = netFor('track:${track.id}', track.netId);
+      if (net != track.netId) staleTracks.add(track.id);
+      resolvedTracks.add(net == track.netId ? track : track.withNet(net));
+    }
+
+    final staleVias = <String>{};
+    final resolvedVias = <Via>[];
+    for (final via in vias) {
+      final net = netFor('via:${via.id}', via.netId);
+      if (net != via.netId) staleVias.add(via.id);
+      resolvedVias.add(net == via.netId ? via : via.withNet(net));
+    }
+
+    return (
+      tracks: resolvedTracks,
+      vias: resolvedVias,
+      staleTracks: staleTracks,
+      staleVias: staleVias,
+    );
+  }
+
+  /// The two pads, one from each group, that are closest together.
+  static (PlacedPad, PlacedPad) _closestPair(
+    List<PlacedPad> a,
+    List<PlacedPad> b,
+  ) {
+    var best = (a.first, b.first);
+    var bestDistance = double.infinity;
+    for (final left in a) {
+      for (final right in b) {
+        final distance = (left.position - right.position).distance;
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = (left, right);
+        }
+      }
+    }
+    return best;
+  }
+
+  /// A minimum spanning tree over groups, by nearest-pad distance.
+  static List<(int, int)> _spanningTree(List<List<PlacedPad>> groups) {
+    if (groups.length < 2) return const [];
+
+    final edges = <(int, int)>[];
+    final inTree = List<bool>.filled(groups.length, false);
+    final nearest = List<double>.filled(groups.length, double.infinity);
+    final parent = List<int>.filled(groups.length, -1);
+    nearest[0] = 0;
+
+    for (var step = 0; step < groups.length; step++) {
+      var next = -1;
+      var nextDistance = double.infinity;
+      for (var i = 0; i < groups.length; i++) {
+        if (!inTree[i] && nearest[i] < nextDistance) {
+          nextDistance = nearest[i];
+          next = i;
+        }
+      }
+      if (next < 0) break;
+
+      inTree[next] = true;
+      if (parent[next] >= 0) edges.add((parent[next], next));
+
+      for (var i = 0; i < groups.length; i++) {
+        if (inTree[i]) continue;
+        final (a, b) = _closestPair(groups[i], groups[next]);
+        final distance = (a.position - b.position).distance;
+        if (distance < nearest[i]) {
+          nearest[i] = distance;
+          parent[i] = next;
+        }
+      }
+    }
+    return edges;
+  }
+}
+
+/// Shortest distance from [p] to the segment [a]-[b].
+double distanceToSegment(Offset p, Offset a, Offset b) {
+  final dx = b.dx - a.dx;
+  final dy = b.dy - a.dy;
+  final lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared < 1e-12) return (p - a).distance;
+
+  var t = ((p.dx - a.dx) * dx + (p.dy - a.dy) * dy) / lengthSquared;
+  t = t.clamp(0.0, 1.0);
+  return (p - Offset(a.dx + t * dx, a.dy + t * dy)).distance;
+}

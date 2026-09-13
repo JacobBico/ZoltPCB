@@ -1,0 +1,273 @@
+import 'dart:io';
+
+import '../../domain/export/board_document.dart';
+import '../../domain/export/schematic_document.dart';
+import '../../domain/pcb/pcb.dart';
+import '../../domain/symbols/symbols.dart';
+import '../../kicad/board_project_writer.dart';
+import '../../kicad/board_writer.dart';
+import '../../kicad/bom_writer.dart';
+import '../../kicad/schematic_writer.dart';
+import '../repositories/board_repository.dart';
+import '../repositories/footprint_library_repository.dart';
+import '../repositories/net_repository.dart';
+import '../repositories/part_repository.dart';
+import '../repositories/project_repository.dart';
+import '../repositories/symbol_library_repository.dart';
+
+/// What kind of file an export produced.
+enum ExportKind {
+  schematic('KiCad schematic', '.kicad_sch'),
+  board('KiCad board', '.kicad_pcb'),
+  boardProject('KiCad project', '.kicad_pro'),
+  bom('Bill of materials', '.csv');
+
+  const ExportKind(this.label, this.extension);
+
+  final String label;
+  final String extension;
+}
+
+/// One written file.
+class ExportedFile {
+  const ExportedFile({
+    required this.kind,
+    required this.path,
+    required this.fileName,
+    required this.byteSize,
+  });
+
+  final ExportKind kind;
+  final String path;
+  final String fileName;
+  final int byteSize;
+
+  @override
+  String toString() => 'ExportedFile($fileName, $byteSize bytes)';
+}
+
+/// Thrown when a project cannot be exported.
+class ExportException implements Exception {
+  const ExportException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'ExportException: $message';
+}
+
+/// Turns a stored project into files on disk.
+///
+/// The assembly step between the repositories and the writers: it gathers a
+/// project's parts, nets and symbol definitions into a [SchematicDocument]
+/// and hands that to the format writers, which know nothing about storage.
+class ProjectExporter {
+  ProjectExporter({
+    required this.projects,
+    required this.parts,
+    required this.nets,
+    required this.libraries,
+    required this.outputDirectory,
+    this.boards,
+    this.footprints,
+  });
+
+  final ProjectRepository projects;
+  final PartRepository parts;
+  final NetRepository nets;
+  final SymbolLibraryRepository libraries;
+
+  /// The board side. Optional so a build that only ever exports schematics
+  /// — and every existing test — needs no board at all.
+  final BoardRepository? boards;
+  final FootprintLibraryRepository? footprints;
+
+  /// Where exported files are written. Injected so tests can use a
+  /// temporary directory.
+  final Directory outputDirectory;
+
+  /// Collects everything the writers need.
+  ///
+  /// Symbols whose library is no longer installed are simply absent; the
+  /// schematic writer falls back to the pin snapshot the project owns, so
+  /// the export still describes a complete circuit.
+  Future<SchematicDocument> buildDocument(String projectId) async {
+    final project = await projects.getById(projectId);
+    if (project == null) {
+      throw const ExportException('That project no longer exists');
+    }
+
+    final partList = await parts.getPartsWithDetails(projectId);
+    final netList = await nets.getNets(projectId);
+    final hints = await nets.routeHints(projectId);
+
+    final symbols = <String, SymbolDefinition>{};
+    for (final libId in partList.map((p) => p.part.libId).toSet()) {
+      final symbol = await libraries.loadSymbol(libId);
+      if (symbol != null) symbols[libId] = symbol;
+    }
+
+    return SchematicDocument(
+      project: project,
+      parts: partList,
+      nets: netList,
+      symbols: symbols,
+      routeHints: hints,
+    );
+  }
+
+  /// Gathers the board, or null when the project has no board worth
+  /// writing — nothing placed means nothing to fabricate.
+  Future<BoardDocument?> buildBoardDocument(String projectId) async {
+    final boards = this.boards;
+    final footprints = this.footprints;
+    if (boards == null || footprints == null) return null;
+
+    final project = await projects.getById(projectId);
+    if (project == null) {
+      throw const ExportException('That project no longer exists');
+    }
+
+    final placements = await boards.getFootprints(projectId);
+    if (placements.where((p) => p.placed).isEmpty) return null;
+
+    final definitions = <String, FootprintDefinition>{};
+    final sources = <String, Object>{};
+    for (final libId in placements.map((p) => p.libId).toSet()) {
+      final definition = await footprints.loadFootprint(libId);
+      if (definition != null) definitions[libId] = definition;
+      final node = await footprints.loadFootprintNode(libId);
+      if (node != null) sources[libId] = node;
+    }
+
+    final netList = await nets.getNets(projectId);
+    final scene = BoardScene.build(
+      board: await boards.ensureBoard(projectId),
+      parts: await parts.getPartsWithDetails(projectId),
+      nets: netList,
+      placements: placements,
+      definitions: definitions,
+      tracks: await boards.getTracks(projectId),
+      vias: await boards.getVias(projectId),
+      edges: await boards.getEdges(projectId),
+      zones: await boards.getZones(projectId),
+    );
+
+    return BoardDocument(
+      project: project,
+      scene: scene,
+      nets: netList,
+      footprintSources: sources,
+    );
+  }
+
+  Future<List<ExportedFile>> exportAll(String projectId) async {
+    final document = await buildDocument(projectId);
+    final files = [
+      await _write(
+        document,
+        ExportKind.schematic,
+        const SchematicWriter().write(document),
+      ),
+      await _write(document, ExportKind.bom, BomWriter.write(document)),
+    ];
+
+    // The board comes out only when there is one. A project that never left
+    // the schematic should not produce an empty board file for the user to
+    // wonder about.
+    final board = await buildBoardDocument(projectId);
+    if (board != null) files.addAll(await _writeBoard(board));
+    return files;
+  }
+
+  Future<List<ExportedFile>> exportBoard(String projectId) async {
+    final board = await buildBoardDocument(projectId);
+    if (board == null) {
+      throw const ExportException(
+        'Nothing has been placed on the board yet',
+      );
+    }
+    return _writeBoard(board);
+  }
+
+  /// The board and the project file beside it.
+  ///
+  /// Always both. KiCad keeps the design rules in the project file, so a
+  /// `.kicad_pcb` on its own opens with the desktop's default clearance
+  /// rather than the one the board was drawn to.
+  Future<List<ExportedFile>> _writeBoard(BoardDocument board) async {
+    final base = fileNameFor(board.project.name);
+    final projectFileName = '$base${ExportKind.boardProject.extension}';
+
+    return [
+      await _writeNamed(
+        ExportKind.board,
+        '$base${ExportKind.board.extension}',
+        const BoardWriter().write(board),
+      ),
+      await _writeNamed(
+        ExportKind.boardProject,
+        projectFileName,
+        BoardProjectWriter.write(board, fileName: projectFileName),
+      ),
+    ];
+  }
+
+  Future<ExportedFile> exportSchematic(String projectId) async {
+    final document = await buildDocument(projectId);
+    return _write(
+      document,
+      ExportKind.schematic,
+      const SchematicWriter().write(document),
+    );
+  }
+
+  Future<ExportedFile> exportBom(String projectId) async {
+    final document = await buildDocument(projectId);
+    return _write(document, ExportKind.bom, BomWriter.write(document));
+  }
+
+  Future<ExportedFile> _write(
+    SchematicDocument document,
+    ExportKind kind,
+    String contents,
+  ) {
+    final base = fileNameFor(document.project.name);
+    final fileName = kind == ExportKind.bom
+        ? '$base-bom${kind.extension}'
+        : '$base${kind.extension}';
+    return _writeNamed(kind, fileName, contents);
+  }
+
+  Future<ExportedFile> _writeNamed(
+    ExportKind kind,
+    String fileName,
+    String contents,
+  ) async {
+    if (!outputDirectory.existsSync()) {
+      await outputDirectory.create(recursive: true);
+    }
+
+    final file = File('${outputDirectory.path}/$fileName');
+    await file.writeAsString(contents, flush: true);
+
+    return ExportedFile(
+      kind: kind,
+      path: file.path,
+      fileName: fileName,
+      byteSize: contents.length,
+    );
+  }
+
+  /// Turns a project name into something safe on every filesystem the file
+  /// might land on, including the FAT-formatted storage of a phone.
+  static String fileNameFor(String projectName) {
+    final cleaned = projectName
+        .trim()
+        .replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1f]'), '')
+        .replaceAll(RegExp(r'\s+'), '_');
+    final trimmed = cleaned.replaceAll(RegExp(r'^[._]+|[._]+$'), '');
+    if (trimmed.isEmpty) return 'schematic';
+    return trimmed.length <= 64 ? trimmed : trimmed.substring(0, 64);
+  }
+}

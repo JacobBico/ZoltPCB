@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Window background shown while the Flutter engine starts. Matches the
+     app's background colour so launch does not flash. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/hintpcb_background" />
+</layer-list>
