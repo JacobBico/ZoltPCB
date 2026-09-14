@@ -40,6 +40,73 @@ enum TrackAngleLock {
   }
 }
 
+/// The corners that take a track from [from] to [to] using only the angles
+/// [lock] allows.
+///
+/// This is how KiCad routes, and the reason a board drawn in it never has a
+/// 17° segment in it: any two points can be joined by at most two segments —
+/// a straight run along an axis and a 45° diagonal — so the cursor can go
+/// anywhere while the copper stays on legal angles. Constraining the target
+/// point instead, which is the obvious thing to try, means the track simply
+/// cannot reach a pad that is not already on a legal bearing.
+///
+/// Returns the points to append, ending at [to]; [from] is not included.
+/// With [diagonalFirst] the bend comes first and the straight run goes into
+/// the target, which is KiCad's `/` toggle.
+List<Offset> legalCorners(
+  Offset from,
+  Offset to,
+  TrackAngleLock lock, {
+  bool diagonalFirst = false,
+}) {
+  if (lock == TrackAngleLock.any) return [to];
+
+  final dx = to.dx - from.dx;
+  final dy = to.dy - from.dy;
+  if (dx.abs() < _epsilon && dy.abs() < _epsilon) return const [];
+
+  // Already on a legal bearing: one segment does it.
+  if (isLegalBearing(dx, dy, lock)) return [to];
+
+  if (lock == TrackAngleLock.deg90) {
+    // A single right-angled dogleg, one way round or the other.
+    return diagonalFirst
+        ? [Offset(from.dx, to.dy), to]
+        : [Offset(to.dx, from.dy), to];
+  }
+
+  final adx = dx.abs();
+  final ady = dy.abs();
+  final sx = dx.isNegative ? -1.0 : 1.0;
+  final sy = dy.isNegative ? -1.0 : 1.0;
+
+  if (diagonalFirst) {
+    // The diagonal uses up the shorter axis, then a straight run finishes.
+    final run = math.min(adx, ady);
+    return [Offset(from.dx + sx * run, from.dy + sy * run), to];
+  }
+
+  // A straight run along the longer axis, then 45° into the target — which
+  // is what "a straight line and then a 45 into the pad" describes.
+  return adx > ady
+      ? [Offset(from.dx + sx * (adx - ady), from.dy), to]
+      : [Offset(from.dx, from.dy + sy * (ady - adx)), to];
+}
+
+/// Whether a step of [dx], [dy] is one [lock] permits.
+bool isLegalBearing(double dx, double dy, TrackAngleLock lock) {
+  if (lock == TrackAngleLock.any) return true;
+  final horizontal = dy.abs() < _epsilon;
+  final vertical = dx.abs() < _epsilon;
+  if (horizontal || vertical) return true;
+  if (lock == TrackAngleLock.deg90) return false;
+  return (dx.abs() - dy.abs()).abs() < _epsilon;
+}
+
+/// A micron. Board geometry is in millimetres, and nothing on a board is
+/// meaningfully smaller than this.
+const _epsilon = 1e-3;
+
 /// Rounds the corners of a path, so a track can bend rather than turn.
 ///
 /// Real curved copper is an arc, and KiCad can carry one; what comes out of

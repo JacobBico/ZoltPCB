@@ -140,4 +140,136 @@ void main() {
       expect(sharpest, lessThan(45 * math.pi / 180));
     });
   });
+
+  group('reaching a point on legal angles', () {
+    // "when I try to connect to another pad, it just connects straight from
+    // pad a to pad b, where it should be like 90 degree straight line and
+    // then 45 degree angle into the next pad."
+    test('a straight run then a 45 into the target', () {
+      const from = Offset(0, 0);
+      const to = Offset(10, 3);
+      final corners = legalCorners(from, to, TrackAngleLock.deg45);
+
+      expect(corners, hasLength(2));
+      // The long axis first, square.
+      expect(corners.first, const Offset(7, 0));
+      expect(corners.last, to);
+
+      // Every segment on a legal bearing, which is the whole claim.
+      final path = [from, ...corners];
+      for (var i = 0; i < path.length - 1; i++) {
+        final d = path[i + 1] - path[i];
+        expect(
+          isLegalBearing(d.dx, d.dy, TrackAngleLock.deg45),
+          isTrue,
+          reason: 'segment $i runs at an illegal angle',
+        );
+      }
+    });
+
+    test('the vertical case picks the other axis', () {
+      final corners = legalCorners(
+        Offset.zero,
+        const Offset(3, 10),
+        TrackAngleLock.deg45,
+      );
+      expect(corners.first, const Offset(0, 7));
+      expect(corners.last, const Offset(3, 10));
+    });
+
+    test('a pad already on a 45 needs only one segment', () {
+      final corners = legalCorners(
+        Offset.zero,
+        const Offset(5, 5),
+        TrackAngleLock.deg45,
+      );
+      expect(corners, [const Offset(5, 5)]);
+    });
+
+    test('a pad square on needs only one segment', () {
+      expect(
+        legalCorners(Offset.zero, const Offset(8, 0), TrackAngleLock.deg45),
+        [const Offset(8, 0)],
+      );
+    });
+
+    test('90° gives a right-angled dogleg, never a diagonal', () {
+      const to = Offset(10, 4);
+      final corners = legalCorners(Offset.zero, to, TrackAngleLock.deg90);
+      expect(corners, hasLength(2));
+      expect(corners.first, const Offset(10, 0));
+
+      final path = [Offset.zero, ...corners];
+      for (var i = 0; i < path.length - 1; i++) {
+        final d = path[i + 1] - path[i];
+        expect(isLegalBearing(d.dx, d.dy, TrackAngleLock.deg90), isTrue);
+      }
+    });
+
+    test('the diagonal can be put first instead', () {
+      final corners = legalCorners(
+        Offset.zero,
+        const Offset(10, 3),
+        TrackAngleLock.deg45,
+        diagonalFirst: true,
+      );
+      expect(corners.first, const Offset(3, 3));
+      expect(corners.last, const Offset(10, 3));
+    });
+
+    test('any angle takes the direct line', () {
+      const to = Offset(10, 3);
+      expect(legalCorners(Offset.zero, to, TrackAngleLock.any), [to]);
+    });
+
+    test('a pad off the grid still gets a clean 45', () {
+      // The real case: an 0805 pad sits at 30.9125 mm and never on a grid.
+      // Rounding the corner to the grid afterwards is what turned a 45 into
+      // something in the twenties.
+      const from = Offset(30.9125, 35);
+      const to = Offset(44.0875, 41.5);
+      final corners = legalCorners(from, to, TrackAngleLock.deg45);
+
+      final path = [from, ...corners];
+      for (var i = 0; i < path.length - 1; i++) {
+        final d = path[i + 1] - path[i];
+        expect(
+          isLegalBearing(d.dx, d.dy, TrackAngleLock.deg45),
+          isTrue,
+          reason: 'segment $i is at a stray angle',
+        );
+      }
+      expect(path.last, to);
+    });
+
+    test('a target on top of the start adds nothing', () {
+      expect(
+        legalCorners(Offset.zero, Offset.zero, TrackAngleLock.deg45),
+        isEmpty,
+      );
+    });
+  });
+
+  group('legal bearings', () {
+    test('45 allows the eight compass points and nothing else', () {
+      for (final d in const [
+        Offset(1, 0),
+        Offset(0, 1),
+        Offset(1, 1),
+        Offset(-1, 1),
+        Offset(-3, -3),
+      ]) {
+        expect(isLegalBearing(d.dx, d.dy, TrackAngleLock.deg45), isTrue);
+      }
+      for (final d in const [Offset(10, 3), Offset(1, 5), Offset(7, -2)]) {
+        expect(isLegalBearing(d.dx, d.dy, TrackAngleLock.deg45), isFalse);
+      }
+    });
+
+    test('90 allows only the four', () {
+      expect(isLegalBearing(1, 1, TrackAngleLock.deg90), isFalse);
+      expect(isLegalBearing(1, 0, TrackAngleLock.deg90), isTrue);
+      expect(isLegalBearing(0, -4, TrackAngleLock.deg90), isTrue);
+    });
+  });
 }

@@ -30,6 +30,7 @@ Board _board() => Board(
 String _write({
   List<BoardEdge> edges = const [],
   List<BoardZone> zones = const [],
+  List<BoardText> texts = const [],
 }) {
   final scene = BoardScene(
     board: _board(),
@@ -41,6 +42,7 @@ String _write({
     unplaced: const [],
     edges: edges,
     zones: zones,
+    texts: texts,
   );
   return const BoardWriter().write(
     BoardDocument(
@@ -264,6 +266,57 @@ void main() {
         circle.distanceTo(Offset(5 * math.cos(0.7), 5 * math.sin(0.7))),
         closeTo(0, 1e-9),
       );
+    });
+  });
+
+  group('silkscreen text', () {
+    test('front text is a gr_text on F.SilkS at its size', () {
+      final text = _write(
+        texts: const [
+          BoardText(
+            id: 't1',
+            projectId: 'p',
+            content: 'HINTPCB',
+            position: Offset(12, 8),
+            size: 1.5,
+          ),
+        ],
+      );
+      expect(text, contains('(gr_text "HINTPCB"'));
+      expect(text, contains('(at 12 8 0)'));
+      expect(text, contains('(layer "F.SilkS")'));
+      expect(text, contains('(size 1.5 1.5)'));
+      expect(text, isNot(contains('mirror')));
+    });
+
+    test('back text is mirrored, because it is read through the board', () {
+      final text = _write(
+        texts: const [
+          BoardText(
+            id: 't1',
+            projectId: 'p',
+            content: 'REV A',
+            position: Offset(12, 8),
+            back: true,
+          ),
+        ],
+      );
+      expect(text, contains('(layer "B.SilkS")'));
+      expect(text, contains('(justify mirror)'));
+    });
+
+    test('blank text is left out rather than written empty', () {
+      final text = _write(
+        texts: const [
+          BoardText(
+            id: 't1',
+            projectId: 'p',
+            content: '   ',
+            position: Offset(1, 1),
+          ),
+        ],
+      );
+      expect(text, isNot(contains('(gr_text')));
     });
   });
 }

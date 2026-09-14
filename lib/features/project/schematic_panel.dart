@@ -8,6 +8,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/appearance.dart';
 import '../../app/edit_history.dart';
 import '../../app/providers.dart';
+import '../../data/repositories/part_repository.dart';
+import '../../domain/symbols/mcu_essentials.dart';
+import 'starter_circuit.dart';
+import 'starter_circuit_dialog.dart';
 import '../../core/theme/kicad_palette.dart';
 import '../../core/widgets/panel.dart';
 import '../../core/widgets/zoom_controls.dart';
@@ -85,6 +89,21 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   String? _candidateUnitId;
   bool _isDraggingUnit = false;
 
+  // Where the parts being dragged have got to, held here and written once
+  // when the finger lifts. Writing every frame sent each move through the
+  // database and back and re-drew the sheet from that, which is what made
+  // dragging a part feel sticky — worst zoomed out, with most on screen.
+  Map<String, Offset>? _draggingUnits;
+  Map<String, Offset> _dragOriginals = const {};
+
+  /// Parts swept up together, which move and delete as one.
+  Set<String> _selectedUnitIds = const {};
+
+  /// In Select mode a drag sweeps a box instead of panning the sheet.
+  bool _boxSelecting = false;
+  Offset? _boxFrom;
+  Offset? _boxTo;
+
   // One run of a wire can be nudged off its automatic route. The run is
   // resolved at grab time so it always slides the way the finger pushes it.
   WireHandleHit? _candidateWire;
@@ -148,7 +167,19 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       return const SizedBox.shrink();
     }
 
-    var scene = _sceneFor(parts, nets, symbols, _routeHints());
+    final hints = _routeHints();
+    var scene = _sceneFor(parts, nets, symbols, hints);
+
+    final live = _draggingUnits;
+    if (live != null && live.isNotEmpty) {
+      scene = SchematicScene.build(
+        paper: widget.project.paper,
+        parts: _withUnitsAt(parts, live),
+        nets: nets,
+        symbols: symbols,
+        routeHints: hints,
+      );
+    }
 
     final draggingLabel = _candidateLabel;
     final labelAt = _draggingLabelAt;
@@ -169,6 +200,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
         if (pickerOpen)
           ComponentSidebar(
             onAdd: _addFromLibrary,
+            onStarter: _addStarter,
             onClose: () =>
                 ref.read(componentPickerOpenProvider.notifier).set(false),
           ),
@@ -221,6 +253,28 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     return scene;
   }
 
+  /// [parts] with the units in [positions] moved there.
+  static List<PartWithDetails> _withUnitsAt(
+    List<PartWithDetails> parts,
+    Map<String, Offset> positions,
+  ) => [
+    for (final part in parts)
+      if (part.units.any((u) => positions.containsKey(u.id)))
+        PartWithDetails(
+          part: part.part,
+          units: [
+            for (final unit in part.units)
+              if (positions[unit.id] case final at?)
+                unit.copyWith(x: at.dx, y: at.dy, placed: true)
+              else
+                unit,
+          ],
+          pins: part.pins,
+        )
+      else
+        part,
+  ];
+
   /// Stored wire adjustments, with the one being dragged overridden by its
   /// live position so the wire follows the finger.
   Map<String, List<double>> _routeHints() {
@@ -267,6 +321,89 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     if (!mounted) return;
     setState(() => _selectedUnitId = added.units.first.id);
     await _recordAddition(added.part.id, 'Add ${added.part.reference}');
+  }
+
+  /// Adds a microcontroller with what it needs to run round it: decoupling,
+  /// crystal, reset and boot buttons, after showing what was found.
+  Future<void> _addStarter(SymbolIndexEntry entry) async {
+    final libraries = ref.read(symbolLibraryRepositoryProvider);
+    final symbol = await libraries.loadSymbol(entry.libId);
+    if (symbol == null) {
+      _notify('${entry.libId} could not be read');
+      return;
+    }
+    final power = await _powerSymbols();
+    if (!mounted) return;
+    bool isGround(SymbolIndexEntry e) =>
+        e.name.toUpperCase().startsWith('GND');
+
+    final chosen = await showStarterCircuitDialog(
+      context,
+      mcuName: entry.name,
+      essentials: McuEssentials.ofSymbol(symbol),
+      supplies: power.where((e) => !isGround(e)).toList(),
+      crystalValue: _crystalFor(entry.name),
+    );
+    if (chosen == null || !mounted) return;
+
+    final ground =
+        power.where((e) => e.name.toUpperCase() == 'GND').firstOrNull ??
+        power.where(isGround).firstOrNull;
+    final repository = ref.read(partRepositoryProvider);
+    final result = await buildStarterCircuit(
+      parts: repository,
+      nets: ref.read(netRepositoryProvider),
+      libraries: libraries,
+      projectId: widget.project.id,
+      mcuSymbol: symbol,
+      at: _spotInView(symbol) ?? const Offset(100, 80),
+      options: StarterOptions(
+        supplyLibId: chosen.supplyLibId,
+        groundLibId: ground?.libId ?? chosen.groundLibId,
+        decoupling: chosen.decoupling,
+        crystal: chosen.crystal,
+        reset: chosen.reset,
+        boot: chosen.boot,
+        crystalValue: chosen.crystalValue,
+      ),
+    );
+
+    final snapshots = <PartSnapshot>[];
+    for (final id in result.partIds) {
+      final snapshot = await repository.capturePart(id);
+      if (snapshot != null) snapshots.add(snapshot);
+    }
+    if (!mounted) return;
+    ref.read(componentPickerOpenProvider.notifier).set(false);
+    setState(() => _selectedUnitId = null);
+    _record(
+      '${result.mcu.part.reference} starter circuit',
+      undo: () async {
+        for (final id in result.partIds) {
+          await repository.deletePart(id);
+        }
+      },
+      redo: () async {
+        for (final snapshot in snapshots) {
+          await repository.restorePart(snapshot);
+        }
+      },
+    );
+    _notify(
+      result.skipped.isEmpty
+          ? '${result.mcu.part.reference} added with '
+                '${result.partIds.length - 1} parts round it'
+          : 'Skipped: ${result.skipped.join('; ')}',
+    );
+  }
+
+  /// The crystal each family is usually run from, as a starting value.
+  static String _crystalFor(String name) {
+    final upper = name.toUpperCase();
+    if (upper.contains('RP2040') || upper.contains('RP2350')) return '12MHz';
+    if (upper.contains('ESP32')) return '40MHz';
+    if (upper.contains('ATMEGA') || upper.contains('ATTINY')) return '16MHz';
+    return '8MHz';
   }
 
   /// Where a newly added symbol should go: on screen, and clear of
@@ -366,6 +503,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
                         viewport: viewport,
                         colors: colors,
                         selectedUnitId: _selectedUnitId,
+                        selectedUnitIds: _selectedUnitIds,
+                        selectionBox: _boxFrom != null && _boxTo != null
+                            ? Rect.fromPoints(_boxFrom!, _boxTo!)
+                            : null,
                         selectedWireKey: _selectedWireKey,
                         pendingPinId: ref.watch(pendingPinProvider),
                         highlightedNetId: _highlightedNetId,
@@ -435,9 +576,40 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
         icon: Icons.redo,
         onPressed: history.canRedo ? _redo : null,
       ),
+      CanvasAction(
+        label: _boxSelecting ? 'Done' : 'Select',
+        icon: _boxSelecting ? Icons.check : Icons.highlight_alt,
+        onPressed: _toggleBoxSelect,
+      ),
     ];
 
     var title = '';
+
+    final group = scene.units
+        .where((u) => _selectedUnitIds.contains(u.unit.id))
+        .toList();
+    if (group.isNotEmpty) {
+      actions.add(
+        CanvasAction(
+          label: 'Delete',
+          icon: Icons.delete_outline,
+          danger: true,
+          onPressed: () => _deleteGroup(group),
+        ),
+      );
+      return CanvasActionBar(
+        title: _hint ?? '${group.length} selected',
+        hinting: _hint != null,
+        actions: actions,
+      );
+    }
+    if (_boxSelecting) {
+      return CanvasActionBar(
+        title: _hint ?? 'Drag a box round parts',
+        hinting: true,
+        actions: actions,
+      );
+    }
 
     if (pendingPinId != null) {
       final pin = scene.pins.where((p) => p.id == pendingPinId).firstOrNull;
@@ -691,6 +863,53 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       onPressed: () => _delete(unit),
     ),
   ];
+
+  void _toggleBoxSelect() {
+    setState(() {
+      _boxSelecting = !_boxSelecting;
+      _selectedUnitIds = const {};
+      _selectedUnitId = null;
+      _selectedWireKey = null;
+      _selectedLabelNetId = null;
+      _boxFrom = null;
+      _boxTo = null;
+    });
+    if (_boxSelecting) {
+      _notify('Drag to box parts in, then drag one to move them all');
+    }
+  }
+
+  /// Deletes every part with a unit in [group], as one undoable step.
+  Future<void> _deleteGroup(List<PlacedUnit> group) async {
+    final repository = ref.read(partRepositoryProvider);
+    final partIds = {for (final unit in group) unit.part.id}.toList();
+
+    // Every snapshot first. Deleting one part tidies away a net it shared
+    // with another, and a snapshot taken after that would have lost it.
+    final snapshots = <PartSnapshot>[];
+    for (final id in partIds) {
+      final snapshot = await repository.capturePart(id);
+      if (snapshot != null) snapshots.add(snapshot);
+    }
+    for (final id in partIds) {
+      await repository.deletePart(id);
+    }
+    if (!mounted) return;
+    setState(() => _selectedUnitIds = const {});
+    _record(
+      'Delete ${partIds.length} parts',
+      undo: () async {
+        for (final snapshot in snapshots) {
+          await repository.restorePart(snapshot);
+        }
+      },
+      redo: () async {
+        for (final id in partIds) {
+          await repository.deletePart(id);
+        }
+      },
+    );
+  }
 
   Future<void> _undo() async {
     await ref.read(editHistoryProvider.notifier).undo();
@@ -1017,6 +1236,22 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
 
     final sheet = viewport.toSheet(local);
     _lastTapSheet = sheet;
+
+    // Selecting, a tap adds a part to the group or takes it back out.
+    if (_boxSelecting || _selectedUnitIds.isNotEmpty) {
+      final unit = scene.unitAt(sheet);
+      setState(() {
+        if (unit == null) {
+          _selectedUnitIds = const {};
+        } else {
+          final id = unit.unit.id;
+          _selectedUnitIds = _selectedUnitIds.contains(id)
+              ? ({..._selectedUnitIds}..remove(id))
+              : {..._selectedUnitIds, id};
+        }
+      });
+      return;
+    }
     final result = scene.resolveTap(
       sheet,
       toleranceMm: _hitToleranceMm(viewport),
@@ -1320,6 +1555,26 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       }
 
       final unit = scene.unitAt(sheet);
+
+      // A drag on any part of a group moves the whole group.
+      if (unit != null && _selectedUnitIds.contains(unit.unit.id)) {
+        _candidateUnitId = unit.unit.id;
+        _dragStartSheet = sheet;
+        _dragOriginalPosition = Offset(unit.unit.x, unit.unit.y);
+        _dragOriginals = {
+          for (final member in scene.units)
+            if (_selectedUnitIds.contains(member.unit.id))
+              member.unit.id: Offset(member.unit.x, member.unit.y),
+        };
+        return;
+      }
+
+      // Anywhere else, in Select mode, sweeps a box.
+      if (_boxSelecting) {
+        _boxFrom = sheet;
+        return;
+      }
+
       final hit = scene.wireHandleNear(sheet, _wireToleranceMm(viewport));
 
       // Nearer wins, the same way a tap resolves. A symbol's hit box
@@ -1337,6 +1592,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
         _candidateUnitId = unit.unit.id;
         _dragStartSheet = sheet;
         _dragOriginalPosition = Offset(unit.unit.x, unit.unit.y);
+        _dragOriginals = {unit.unit.id: _dragOriginalPosition};
         return;
       }
 
@@ -1372,6 +1628,11 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   void _onScaleUpdate(SchematicScene scene, ScaleUpdateDetails details) {
     final start = _gestureStartViewport;
     if (start == null) return;
+
+    if (_boxFrom != null && details.pointerCount == 1) {
+      setState(() => _boxTo = start.toSheet(details.localFocalPoint));
+      return;
+    }
 
     final label = _candidateLabel;
     if (label != null && details.pointerCount == 1) {
@@ -1419,17 +1680,22 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       if (!_isDraggingUnit && travelled > _dragSlopPx) {
         setState(() {
           _isDraggingUnit = true;
-          _selectedUnitId = candidateId;
+          if (_selectedUnitIds.isEmpty) _selectedUnitId = candidateId;
         });
       }
       if (_isDraggingUnit) {
         final sheet = start.toSheet(details.localFocalPoint);
         final delta = sheet - _dragStartSheet;
-        final moved = _snapToGrid(_dragOriginalPosition + delta);
-        final unit = scene.units
-            .where((u) => u.unit.id == candidateId)
-            .firstOrNull;
-        if (unit != null) unawaitedMove(unit.unit, moved);
+        // The grabbed part snaps and the rest keep their places relative to
+        // it, rather than each snapping on its own and shuffling.
+        final shift =
+            _snapToGrid(_dragOriginalPosition + delta) - _dragOriginalPosition;
+        setState(() {
+          _draggingUnits = {
+            for (final entry in _dragOriginals.entries)
+              entry.key: entry.value + shift,
+          };
+        });
         return;
       }
       // Below the threshold this is still a tap in progress; fall through to
@@ -1454,6 +1720,34 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   }
 
   void _onScaleEnd() {
+    final boxFrom = _boxFrom;
+    final boxTo = _boxTo;
+    if (boxFrom != null) {
+      _boxFrom = null;
+      _boxTo = null;
+      _gestureStartViewport = null;
+      final scene = _scene;
+      if (boxTo == null || scene == null) {
+        setState(() {});
+        return;
+      }
+      // Wholly inside, the same as the board's box: a part the box only
+      // clips was not what was being swept up.
+      final box = Rect.fromPoints(boxFrom, boxTo).inflate(1e-6);
+      // The hint said how to do this; now it is done, the count says more.
+      _hintTimer?.cancel();
+      setState(() {
+        _hint = null;
+        _selectedUnitIds = {
+          for (final unit in scene.units)
+            if (box.contains(scene.boundsOf(unit).topLeft) &&
+                box.contains(scene.boundsOf(unit).bottomRight))
+              unit.unit.id,
+        };
+      });
+      return;
+    }
+
     final movedUnitId = _isDraggingUnit ? _candidateUnitId : null;
     final nudgedWire = _isDraggingUnit ? _candidateWire : null;
     final movedLabel = _isDraggingUnit ? _candidateLabel : null;
@@ -1471,7 +1765,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     // drag to be mistaken for a tap.
     _isDraggingUnit = false;
 
-    if (movedUnitId != null) _recordMove(movedUnitId);
+    if (movedUnitId != null) _commitMove();
     if (nudgedWire != null) _recordNudge(nudgedWire);
     if (movedLabel != null) _recordLabelMove(movedLabel);
   }
@@ -1494,33 +1788,58 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     );
   }
 
-  /// Records a completed drag as one undoable step, rather than the hundreds
-  /// of intermediate positions the gesture actually wrote.
-  void _recordMove(String unitId) {
+  /// Writes a finished drag, once, as one undoable step.
+  Future<void> _commitMove() async {
+    final live = _draggingUnits;
+    final originals = _dragOriginals;
+    if (live == null) return;
     final repository = ref.read(partRepositoryProvider);
     final parts = ref.read(projectPartsProvider(widget.project.id)).value;
-    if (parts == null) return;
+    if (parts == null) {
+      setState(() => _draggingUnits = null);
+      return;
+    }
 
+    final before = <PartUnit>[];
+    final after = <PartUnit>[];
+    String? reference;
     for (final part in parts) {
       for (final unit in part.units) {
-        if (unit.id != unitId) continue;
-        final before = unit.copyWith(
-          x: _dragOriginalPosition.dx,
-          y: _dragOriginalPosition.dy,
-        );
-        if ((before.x - unit.x).abs() < 1e-6 &&
-            (before.y - unit.y).abs() < 1e-6) {
-          return;
-        }
-        final after = unit;
-        _record(
-          'Move ${part.part.reference}',
-          undo: () => repository.updateUnitPlacement(before),
-          redo: () => repository.updateUnitPlacement(after),
-        );
-        return;
+        final at = live[unit.id];
+        final was = originals[unit.id];
+        if (at == null || was == null) continue;
+        before.add(unit.copyWith(x: was.dx, y: was.dy));
+        after.add(unit.copyWith(x: at.dx, y: at.dy, placed: true));
+        reference = part.part.reference;
       }
     }
+
+    final moved = after.isNotEmpty &&
+        (Offset(after.first.x, after.first.y) -
+                    Offset(before.first.x, before.first.y))
+                .distance >
+            1e-6;
+    if (moved) {
+      for (final unit in after) {
+        await repository.updateUnitPlacement(unit);
+      }
+    }
+    // Let go of the live positions only once the database holds them, so
+    // the part does not flick back to where it started for a frame.
+    if (mounted) setState(() => _draggingUnits = null);
+    if (!moved) return;
+
+    Future<void> write(List<PartUnit> units) async {
+      for (final unit in units) {
+        await repository.updateUnitPlacement(unit);
+      }
+    }
+
+    _record(
+      after.length == 1 ? 'Move $reference' : 'Move ${after.length} parts',
+      undo: () => write(before),
+      redo: () => write(after),
+    );
   }
 
   /// The stored offsets with one entry displaced by [shift].
@@ -1587,12 +1906,4 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     (sheet.dx / 1.27).round() * 1.27,
     (sheet.dy / 1.27).round() * 1.27,
   );
-
-  void unawaitedMove(PartUnit unit, Offset position) {
-    ref
-        .read(partRepositoryProvider)
-        .updateUnitPlacement(
-          unit.copyWith(x: position.dx, y: position.dy, placed: true),
-        );
-  }
 }

@@ -9,6 +9,7 @@ import 'package:hintpcb/domain/models/models.dart';
 import 'package:hintpcb/domain/pcb/pcb.dart';
 import 'package:hintpcb/features/board/board_painter.dart';
 import 'package:hintpcb/features/board/crosshair.dart';
+import 'package:hintpcb/features/board/footprint_sidebar.dart';
 import 'package:hintpcb/features/board/precision_board_panel.dart';
 
 import '../helpers/fixtures.dart';
@@ -385,13 +386,15 @@ void main() {
     await settleApp(tester);
     expect(find.text('DROP'), findsOneWidget);
 
-    await _aimAt(tester, const Offset(34, 41));
+    // Clear of the board's centre lines and edges, which a carried part
+    // snaps to.
+    await _aimAt(tester, const Offset(34, 46));
     await tester.tap(find.text('DROP'));
     await settleApp(tester);
 
     final placed = await boards.getFootprints(project.id);
     final moved = placed.firstWhere((p) => (p.y - 35).abs() > 1);
-    expect((moved.y - 41).abs(), lessThanOrEqualTo(0.5));
+    expect((moved.y - 46).abs(), lessThanOrEqualTo(0.5));
   });
 
   group('an area you sweep', () {
@@ -636,5 +639,713 @@ void main() {
     await settleApp(tester);
 
     expect(await boards.getVias(project.id), isEmpty);
+  });
+
+  group('routing the way KiCad routes', () {
+    testAppWithStorage('pad to pad comes out on legal angles, not a diagonal', (
+      tester,
+      db,
+      storage,
+    ) async {
+      // "when I try to connect to another pad, it just connects straight
+      // from pad a to pad b." Pads sit at whatever millimetre they sit at,
+      // so a direct line between two of them is almost never at 45 or 90.
+      final footprintStorage = InMemoryLibraryStorageFor();
+      final (project, boards) = await _board(db, footprintStorage);
+      // Offset in both axes, so the straight line between them is a stray
+      // angle and two segments are needed.
+      final placements = await boards.getFootprints(project.id);
+      await boards.updatePlacement(
+        placements.last.copyWith(x: 45, y: 41, placed: true),
+      );
+
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+
+      await tester.tap(find.byIcon(Icons.timeline).first);
+      await settleApp(tester);
+
+      final scene = _painter(tester).scene;
+      final line = scene.ratsnest.first;
+      final from = scene.padNear(line.from, 0.4)!;
+      final to = scene.padNear(line.to, 0.4)!;
+
+      await _aimAt(tester, from.position);
+      await tester.tap(find.text('START'));
+      await settleApp(tester);
+      await _aimAt(tester, to.position);
+      await tester.tap(find.textContaining(RegExp('CORNER|START')));
+      await settleApp(tester);
+
+      final tracks = await boards.getTracks(project.id);
+      expect(tracks.length, greaterThanOrEqualTo(2),
+          reason: 'a stray-angle target needs a run and a 45');
+
+      for (final track in tracks) {
+        final dx = track.endX - track.startX;
+        final dy = track.endY - track.startY;
+        expect(
+          isLegalBearing(dx, dy, TrackAngleLock.deg45),
+          isTrue,
+          reason: 'a segment came out at a stray angle: $dx, $dy',
+        );
+      }
+    });
+
+    testAppWithStorage('a route can begin on an existing track', (
+      tester,
+      db,
+      storage,
+    ) async {
+      // "on kicad you can also start routing from the already existing
+      // routed trace" — otherwise a third part has to be joined by going
+      // back to a pad that is already wired.
+      final footprintStorage = InMemoryLibraryStorageFor();
+      final (project, boards) = await _board(db, footprintStorage);
+      final nets = await NetRepository(db).getNets(project.id);
+      await boards.addTrack(
+        projectId: project.id,
+        layer: CopperLayer.front,
+        startX: 32,
+        startY: 30,
+        endX: 40,
+        endY: 30,
+        width: 0.25,
+        netId: nets.first.net.id,
+      );
+
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+
+      await tester.tap(find.byIcon(Icons.timeline).first);
+      await settleApp(tester);
+
+      // The middle of that run — not an end, not a pad.
+      await _aimAt(tester, const Offset(36, 30));
+      expect(find.text('track'), findsOneWidget);
+
+      await tester.tap(find.text('START'));
+      await settleApp(tester);
+      await _aimAt(tester, const Offset(36, 36));
+      await tester.tap(find.text('CORNER'));
+      await settleApp(tester);
+      await tester.tap(find.text('Finish'));
+      await settleApp(tester);
+
+      final tracks = await boards.getTracks(project.id);
+      expect(tracks.length, greaterThan(1));
+      // The branch inherited the net it grew out of, rather than being
+      // drawn as unconnected copper.
+      final branch = tracks.firstWhere((t) => t.startY != 30 || t.endY != 30);
+      expect(branch.netId, nets.first.net.id);
+    });
+
+    testAppWithStorage('the crosshair is magnetic along a whole track', (
+      tester,
+      db,
+      storage,
+    ) async {
+      final footprintStorage = InMemoryLibraryStorageFor();
+      final (project, boards) = await _board(db, footprintStorage);
+      await boards.addTrack(
+        projectId: project.id,
+        layer: CopperLayer.front,
+        startX: 32,
+        startY: 30,
+        endX: 40,
+        endY: 30,
+        width: 0.25,
+      );
+
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+
+      // Just off the run: it catches, and says what it caught.
+      await _aimAt(tester, const Offset(37, 30.1));
+      expect(find.text('track'), findsOneWidget);
+
+      // An end wins over the middle, because continuing from a corner is
+      // what you usually want.
+      await _aimAt(tester, const Offset(40, 30));
+      expect(find.text('corner'), findsOneWidget);
+    });
+  });
+
+  testAppWithStorage('a placed track can be slid, and stays joined up', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final footprintStorage = InMemoryLibraryStorageFor();
+    final (project, boards) = await _board(db, footprintStorage);
+    // A 45 out, a straight run, a 45 back in — the shape routing leaves.
+    await boards.addTrack(
+      projectId: project.id,
+      layer: CopperLayer.front,
+      startX: 31,
+      startY: 35,
+      endX: 34,
+      endY: 32,
+      width: 0.25,
+    );
+    await boards.addTrack(
+      projectId: project.id,
+      layer: CopperLayer.front,
+      startX: 34,
+      startY: 32,
+      endX: 41,
+      endY: 32,
+      width: 0.25,
+    );
+    await boards.addTrack(
+      projectId: project.id,
+      layer: CopperLayer.front,
+      startX: 41,
+      startY: 32,
+      endX: 44,
+      endY: 35,
+      width: 0.25,
+    );
+
+    await pumpApp(
+      tester,
+      Scaffold(body: PrecisionBoardPanel(project: project)),
+      database: db,
+      footprintStorage: footprintStorage,
+    );
+
+    final painter = _painter(tester);
+    final rect = tester.getRect(find.byType(PrecisionBoardPanel));
+    await tester.tapAt(
+      rect.topLeft + painter.viewport.toScreen(const Offset(37.5, 32)),
+    );
+    await settleApp(tester);
+    expect(find.text('Slide'), findsOneWidget);
+
+    await tester.tap(find.text('Slide'));
+    await settleApp(tester);
+    expect(find.text('DROP'), findsOneWidget);
+
+    await _aimAt(tester, const Offset(37.5, 29.5));
+    await tester.tap(find.text('DROP'));
+    await settleApp(tester);
+
+    final tracks = await boards.getTracks(project.id);
+    final run = tracks.firstWhere((t) => t.startY == t.endY);
+    // It moved.
+    expect(run.startY, lessThan(32));
+
+    // Every piece of copper left behind is on a legal angle — the whole
+    // point, and what the old slide could not promise.
+    for (final track in tracks) {
+      final dx = track.endX - track.startX;
+      final dy = track.endY - track.startY;
+      if (dx.abs() < 1e-6 && dy.abs() < 1e-6) continue;
+      expect(
+        isLegalBearing(dx, dy, TrackAngleLock.deg45),
+        isTrue,
+        reason: 'a segment came out at a stray angle',
+      );
+    }
+
+    // And both ends of the original route are still reached by copper.
+    for (final end in const [Offset(31, 35), Offset(44, 35)]) {
+      expect(
+        tracks.any(
+          (t) =>
+              (Offset(t.startX, t.startY) - end).distance < 1e-4 ||
+              (Offset(t.endX, t.endY) - end).distance < 1e-4,
+        ),
+        isTrue,
+        reason: 'nothing reaches $end any more',
+      );
+    }
+  });
+
+  group('getting parts onto the board in the first place', () {
+    /// A project whose parts name a footprint but have never been near the
+    /// board — which is every project, the first time you open it.
+    Future<Project> fresh(dynamic db, dynamic storage) async {
+      final project = await ProjectRepository(db).create(name: 'Fresh');
+      final parts = PartRepository(db);
+      await FootprintLibraryRepository(
+        db,
+        storage,
+      ).import(nickname: 'Test', sources: twoPadFootprintSources());
+      await parts.addPart(project.id, resistorSpec(footprint: 'Test:TwoPad'));
+      await parts.addPart(project.id, capacitorSpec(footprint: 'Test:TwoPad'));
+      // A power symbol, which never goes on a board.
+      await parts.addPart(project.id, groundSpec());
+      return project;
+    }
+
+    testAppWithStorage('the board says how many parts are waiting', (
+      tester,
+      db,
+      storage,
+    ) async {
+      final footprintStorage = InMemoryLibraryStorageFor();
+      final project = await fresh(db, footprintStorage);
+
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+
+      // Two, not three: the power symbol is not a board part.
+      expect(find.text('2 to place'), findsOneWidget);
+    });
+
+    testAppWithStorage('they can be assigned and placed without a board yet', (
+      tester,
+      db,
+      storage,
+    ) async {
+      // The hole this closes: every way into the footprint chooser used to
+      // need an already-placed footprint to select, so a board with nothing
+      // on it offered no way to put anything on it.
+      final footprintStorage = InMemoryLibraryStorageFor();
+      final project = await fresh(db, footprintStorage);
+      final boards = BoardRepository(db);
+
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+
+      await tester.tap(find.text('2 to place'));
+      await settleApp(tester);
+      expect(find.text('R1  10k'), findsOneWidget);
+
+      await tester.tap(find.text('ASSIGN 2'));
+      await settleApp(tester);
+      expect(await boards.getFootprints(project.id), hasLength(2));
+
+      // And each is then placed by carrying it on the crosshair.
+      await tester.tap(find.text('2 to place'));
+      await settleApp(tester);
+      await tester.tap(find.text('PLACE').first);
+      await settleApp(tester);
+      expect(find.text('DROP'), findsOneWidget);
+
+      await _aimAt(tester, const Offset(34, 33));
+      await tester.tap(find.text('DROP'));
+      await settleApp(tester);
+
+      final placed = await boards.getFootprints(project.id);
+      expect(placed.where((p) => p.placed), hasLength(1));
+      final one = placed.firstWhere((p) => p.placed);
+      expect((one.x - 34).abs(), lessThanOrEqualTo(0.5));
+      expect((one.y - 33).abs(), lessThanOrEqualTo(0.5));
+    });
+
+    testAppWithStorage('the chip goes once everything is down, but Parts stays',
+        (tester, db, storage) async {
+      // A button that can only tell you there is nothing to do is a button
+      // taking up room on a strip that has none to spare — but changing a
+      // footprint afterwards still has to be possible.
+      final footprintStorage = InMemoryLibraryStorageFor();
+      final project = await ProjectRepository(db).create(name: 'Done');
+      final parts = PartRepository(db);
+      final boards = BoardRepository(db);
+      await FootprintLibraryRepository(
+        db,
+        footprintStorage,
+      ).import(nickname: 'Test', sources: twoPadFootprintSources());
+
+      final r1 = await parts.addPart(
+        project.id,
+        resistorSpec(footprint: 'Test:TwoPad'),
+      );
+      final ref = await boards.assignFootprint(
+        projectId: project.id,
+        partId: r1.part.id,
+        libId: 'Test:TwoPad',
+      );
+      await boards.updatePlacement(ref.copyWith(x: 35, y: 35, placed: true));
+
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+
+      expect(find.textContaining('to place'), findsNothing);
+
+      // Still reachable, with the footprint still changeable.
+      await tester.tap(find.byTooltip('More'));
+      await settleApp(tester);
+      expect(find.text('Parts and footprints'), findsOneWidget);
+      expect(find.text('All placed — change a footprint here'), findsOneWidget);
+
+      await tester.tap(find.text('Parts and footprints'));
+      await settleApp(tester);
+      expect(find.text('R1  10k'), findsOneWidget);
+      expect(find.text('SHOW'), findsOneWidget);
+    });
+
+    testAppWithStorage('a new component makes the chip come back', (
+      tester,
+      db,
+      storage,
+    ) async {
+      final footprintStorage = InMemoryLibraryStorageFor();
+      final project = await ProjectRepository(db).create(name: 'Grow');
+      final parts = PartRepository(db);
+      final boards = BoardRepository(db);
+      await FootprintLibraryRepository(
+        db,
+        footprintStorage,
+      ).import(nickname: 'Test', sources: twoPadFootprintSources());
+
+      final r1 = await parts.addPart(
+        project.id,
+        resistorSpec(footprint: 'Test:TwoPad'),
+      );
+      final ref = await boards.assignFootprint(
+        projectId: project.id,
+        partId: r1.part.id,
+        libId: 'Test:TwoPad',
+      );
+      await boards.updatePlacement(ref.copyWith(x: 35, y: 35, placed: true));
+
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+      expect(find.textContaining('to place'), findsNothing);
+
+      // The schematic gains a part while the board is open.
+      await parts.addPart(project.id, capacitorSpec(footprint: 'Test:TwoPad'));
+      await settleApp(tester);
+
+      expect(find.text('1 to place'), findsOneWidget);
+    });
+
+    testAppWithStorage('a part with no footprint offers to choose one', (
+      tester,
+      db,
+      storage,
+    ) async {
+      final footprintStorage = InMemoryLibraryStorageFor();
+      final project = await ProjectRepository(db).create(name: 'Bare');
+      await FootprintLibraryRepository(
+        db,
+        footprintStorage,
+      ).import(nickname: 'Test', sources: twoPadFootprintSources());
+      // Names nothing the library has.
+      await PartRepository(db).addPart(
+        project.id,
+        resistorSpec(footprint: ''),
+      );
+
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+
+      await tester.tap(find.text('1 to place'));
+      await settleApp(tester);
+      // Nothing to assign automatically, so it asks.
+      expect(find.textContaining('ASSIGN'), findsNothing);
+      expect(find.text('No footprint yet'), findsOneWidget);
+
+      await tester.tap(find.text('FOOTPRINT'));
+      await settleApp(tester);
+      expect(find.byType(FootprintSidebar), findsOneWidget);
+    });
+  });
+
+  testAppWithStorage('reported: dropping a slide keeps the whole route moved', (
+    tester,
+    db,
+    storage,
+  ) async {
+    // "when you finish moving it, everything goes back to its original
+    // position EXCEPT the trace piece that you were initially moving." DROP
+    // was handed the preview, which already had the slide applied, and
+    // worked it out a second time from there: the real diagonals were never
+    // deleted and stayed exactly where they started.
+    final footprintStorage = InMemoryLibraryStorageFor();
+    final (project, boards) = await _board(db, footprintStorage);
+    for (final (x1, y1, x2, y2) in const [
+      (31.0, 35.0, 34.0, 32.0),
+      (34.0, 32.0, 41.0, 32.0),
+      (41.0, 32.0, 44.0, 35.0),
+    ]) {
+      await boards.addTrack(
+        projectId: project.id,
+        layer: CopperLayer.front,
+        startX: x1,
+        startY: y1,
+        endX: x2,
+        endY: y2,
+        width: 0.25,
+      );
+    }
+
+    await pumpApp(
+      tester,
+      Scaffold(body: PrecisionBoardPanel(project: project)),
+      database: db,
+      footprintStorage: footprintStorage,
+    );
+
+    // Pick the run up from on the run, so the drag is exactly 2.5 mm.
+    await _aimAt(tester, const Offset(37.5, 32));
+    final painter = _painter(tester);
+    final rect = tester.getRect(find.byType(PrecisionBoardPanel));
+    await tester.tapAt(
+      rect.topLeft + painter.viewport.toScreen(const Offset(37.5, 32)),
+    );
+    await settleApp(tester);
+    await tester.tap(find.text('Slide'));
+    await settleApp(tester);
+    await _aimAt(tester, const Offset(37.5, 29.5));
+    await tester.tap(find.text('DROP'));
+    await settleApp(tester);
+
+    final tracks = await boards.getTracks(project.id);
+    bool at(Offset p) => tracks.any(
+      (t) =>
+          (Offset(t.startX, t.startY) - p).distance < 1e-3 ||
+          (Offset(t.endX, t.endY) - p).distance < 1e-3,
+    );
+
+    // The old corners are gone: nothing still meets at (34,32) or (41,32).
+    expect(at(const Offset(34, 32)), isFalse, reason: 'old diagonal survived');
+    expect(at(const Offset(41, 32)), isFalse, reason: 'old diagonal survived');
+
+    // What replaced them: a 45 off each pad onto a run that got shorter.
+    expect(tracks, hasLength(3));
+    expect(at(const Offset(36.5, 29.5)), isTrue);
+    expect(at(const Offset(38.5, 29.5)), isTrue);
+  });
+
+  group('silkscreen', () {
+    testAppWithStorage('text can be added, moved and deleted', (
+      tester,
+      db,
+      storage,
+    ) async {
+      final footprintStorage = InMemoryLibraryStorageFor();
+      final (project, boards) = await _board(db, footprintStorage);
+
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+
+      await tester.tap(find.byIcon(Icons.text_fields).first);
+      await settleApp(tester);
+      await _aimAt(tester, const Offset(33, 45));
+      await tester.tap(find.text('TEXT'));
+      await settleApp(tester);
+      expect(find.text('Add silkscreen text'), findsOneWidget);
+
+      await tester.enterText(find.widgetWithText(TextField, 'Text'), 'HINTPCB');
+      await tester.pump();
+      await tester.tap(find.text('SAVE'));
+      await settleApp(tester);
+      expect(find.text('Add silkscreen text'), findsNothing);
+
+      var texts = await boards.getTexts(project.id);
+      expect(texts.single.content, 'HINTPCB');
+      expect((texts.single.position - const Offset(33, 45)).distance,
+          lessThanOrEqualTo(0.5));
+
+      // Selected on adding, so it can be moved straight away.
+      await tester.tap(find.text('Move'));
+      await settleApp(tester);
+      await _aimAt(tester, const Offset(36, 47));
+      await tester.tap(find.text('DROP'));
+      await settleApp(tester);
+
+      texts = await boards.getTexts(project.id);
+      expect((texts.single.position - const Offset(36, 47)).distance,
+          lessThanOrEqualTo(0.5));
+
+      await tester.tap(find.text('Delete'));
+      await settleApp(tester);
+      expect(await boards.getTexts(project.id), isEmpty);
+    });
+
+    testAppWithStorage('a designator can be hidden', (tester, db, storage) async {
+      final footprintStorage = InMemoryLibraryStorageFor();
+      final (project, boards) = await _board(db, footprintStorage);
+
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+
+      final painter = _painter(tester);
+      final rect = tester.getRect(find.byType(PrecisionBoardPanel));
+      await tester.tapAt(
+        rect.topLeft + painter.viewport.toScreen(const Offset(30, 35)),
+      );
+      await settleApp(tester);
+      await tester.tap(find.text('Label'));
+      await settleApp(tester);
+
+      await tester.tap(find.text('Print the designator'));
+      await settleApp(tester);
+      await tester.tap(find.text('SAVE'));
+      await settleApp(tester);
+
+      final placed = await boards.getFootprints(project.id);
+      expect(placed.firstWhere((p) => p.x == 30).labelHidden, isTrue);
+    });
+
+    testAppWithStorage('a designator can be picked up and moved', (
+      tester,
+      db,
+      storage,
+    ) async {
+      final footprintStorage = InMemoryLibraryStorageFor();
+      final (project, boards) = await _board(db, footprintStorage);
+
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+
+      final painter = _painter(tester);
+      final rect = tester.getRect(find.byType(PrecisionBoardPanel));
+      final r1 = painter.scene.footprints.firstWhere((f) => f.ref.x == 30);
+      await tester.tapAt(
+        rect.topLeft + painter.viewport.toScreen(r1.labelPosition),
+      );
+      await settleApp(tester);
+      expect(find.text('Hide'), findsOneWidget);
+
+      await tester.tap(find.text('Move'));
+      await settleApp(tester);
+      await _aimAt(tester, const Offset(30, 30));
+      await tester.tap(find.text('DROP'));
+      await settleApp(tester);
+
+      final moved = (await boards.getFootprints(project.id))
+          .firstWhere((p) => p.x == 30);
+      expect(moved.labelOffset, isNotNull);
+      final lands = FootprintPlacement.of(moved)
+          .apply(moved.labelOffset!.dx, moved.labelOffset!.dy);
+      expect((lands - const Offset(30, 30)).distance, lessThanOrEqualTo(0.5));
+    });
+  });
+
+  // "PCB section needs the edge cut outline to be able to be moved. It can
+  // also be sized, like the MAIN board outline"
+  testAppWithStorage('the board outline can be resized from a corner', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final footprintStorage = InMemoryLibraryStorageFor();
+    final (project, boards) = await _board(db, footprintStorage);
+    final board = await boards.ensureBoard(project.id);
+
+    await pumpApp(
+      tester,
+      Scaffold(body: PrecisionBoardPanel(project: project)),
+      database: db,
+      footprintStorage: footprintStorage,
+    );
+
+    final painter = _painter(tester);
+    final rect = tester.getRect(find.byType(PrecisionBoardPanel));
+    await tester.tapAt(
+      rect.topLeft +
+          painter.viewport.toScreen(
+            Offset(board.outlineX, board.outlineY + board.outlineHeight / 2),
+          ),
+    );
+    await settleApp(tester);
+
+    // Aim at the bottom-right corner, take hold of it, and pull it out.
+    await _aimAt(tester, Offset(board.right, board.bottom));
+    await tester.tap(find.text('Resize'));
+    await settleApp(tester);
+    await _aimAt(tester, Offset(board.right + 10, board.bottom + 5));
+    await tester.tap(find.text('DROP'));
+    await settleApp(tester);
+
+    final resized = (await boards.getBoard(project.id))!;
+    // The opposite corner stays where it was.
+    expect(resized.outlineX, closeTo(board.outlineX, 1e-6));
+    expect(resized.outlineY, closeTo(board.outlineY, 1e-6));
+    expect(resized.outlineWidth, closeTo(board.outlineWidth + 10, 0.51));
+    expect(resized.outlineHeight, closeTo(board.outlineHeight + 5, 0.51));
+  });
+
+  // "choose the centre of the MCU, and choose the centre of the board, and
+  // set the relative properties of X and Y to 0 and 0"
+  testAppWithStorage('a part can be centred on the board by its middle', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final footprintStorage = InMemoryLibraryStorageFor();
+    final (project, boards) = await _board(db, footprintStorage);
+
+    await pumpApp(
+      tester,
+      Scaffold(body: PrecisionBoardPanel(project: project)),
+      database: db,
+      footprintStorage: footprintStorage,
+    );
+
+    final painter = _painter(tester);
+    final tapped = painter.scene.footprints.firstWhere((f) => f.ref.x == 30);
+    final rect = tester.getRect(find.byType(PrecisionBoardPanel));
+    await tester.tapAt(
+      rect.topLeft + painter.viewport.toScreen(const Offset(30, 35)),
+    );
+    await settleApp(tester);
+    await tester.tap(find.text('Properties'));
+    await settleApp(tester);
+    await tester.tap(find.text('Centre on board'));
+    await settleApp(tester);
+    await tester.tap(find.text('SAVE'));
+    await settleApp(tester);
+
+    final scene = _painter(tester).scene;
+    final part = scene.footprints.firstWhere((f) => f.ref.id == tapped.ref.id);
+    final placed = (await boards.getFootprints(project.id))
+        .firstWhere((p) => p.id == part.ref.id);
+    final middle = FootprintPlacement.of(placed)
+        .apply(
+          footprintBounds(part.definition!).center.dx,
+          footprintBounds(part.definition!).center.dy,
+        );
+    final centre = scene.outline.bounds.center;
+    expect((middle - centre).distance, lessThan(1e-6));
   });
 }

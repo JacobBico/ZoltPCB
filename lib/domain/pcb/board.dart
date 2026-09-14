@@ -231,11 +231,24 @@ class PlacedFootprintRef {
     this.rotation = 0,
     this.flipped = false,
     this.placed = false,
+    this.labelOffset,
+    this.labelSize = 1.0,
+    this.labelHidden = false,
   });
 
   final String id;
   final String projectId;
   final String partId;
+
+  /// Where the reference designator sits once moved, in the footprint's own
+  /// frame. Null leaves it where the library put it.
+  final Offset? labelOffset;
+
+  /// Designator character height, in millimetres.
+  final double labelSize;
+
+  /// Left off the silkscreen.
+  final bool labelHidden;
 
   /// `Resistor_SMD:R_0805_2012Metric`.
   final String libId;
@@ -262,6 +275,10 @@ class PlacedFootprintRef {
     double? rotation,
     bool? flipped,
     bool? placed,
+    Offset? labelOffset,
+    bool clearLabelOffset = false,
+    double? labelSize,
+    bool? labelHidden,
   }) => PlacedFootprintRef(
     id: id,
     projectId: projectId,
@@ -272,6 +289,9 @@ class PlacedFootprintRef {
     rotation: rotation ?? this.rotation,
     flipped: flipped ?? this.flipped,
     placed: placed ?? this.placed,
+    labelOffset: clearLabelOffset ? null : (labelOffset ?? this.labelOffset),
+    labelSize: labelSize ?? this.labelSize,
+    labelHidden: labelHidden ?? this.labelHidden,
   );
 }
 

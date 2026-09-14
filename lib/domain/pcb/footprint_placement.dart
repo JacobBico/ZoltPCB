@@ -59,6 +59,25 @@ class FootprintPlacement {
 
   Offset applyPoint(FootprintPoint point) => apply(point.x, point.y);
 
+  /// Maps a point on the board back into footprint space — the inverse of
+  /// [apply], for storing something the user placed on the board in the
+  /// frame it has to be written in.
+  Offset invert(Offset board) {
+    final rx = board.dx - x;
+    final ry = board.dy - y;
+
+    final radians = rotation * math.pi / 180;
+    final cos = math.cos(radians);
+    final sin = math.sin(radians);
+
+    // The rotation in [apply] is orthonormal, so its inverse is its
+    // transpose.
+    final mx = rx * cos - ry * sin;
+    final fy = rx * sin + ry * cos;
+
+    return Offset(flipped ? -mx : mx, fy);
+  }
+
   /// A pad's own rotation once the footprint's is taken into account.
   double padAngle(double padAngle) {
     final flippedAngle = flipped ? -padAngle : padAngle;

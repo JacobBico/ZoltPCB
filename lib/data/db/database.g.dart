@@ -7478,6 +7478,51 @@ class $BoardFootprintsTable extends BoardFootprints
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _labelXMeta = const VerificationMeta('labelX');
+  @override
+  late final GeneratedColumn<double> labelX = GeneratedColumn<double>(
+    'label_x',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _labelYMeta = const VerificationMeta('labelY');
+  @override
+  late final GeneratedColumn<double> labelY = GeneratedColumn<double>(
+    'label_y',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _labelSizeMeta = const VerificationMeta(
+    'labelSize',
+  );
+  @override
+  late final GeneratedColumn<double> labelSize = GeneratedColumn<double>(
+    'label_size',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1.0),
+  );
+  static const VerificationMeta _labelHiddenMeta = const VerificationMeta(
+    'labelHidden',
+  );
+  @override
+  late final GeneratedColumn<bool> labelHidden = GeneratedColumn<bool>(
+    'label_hidden',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("label_hidden" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -7489,6 +7534,10 @@ class $BoardFootprintsTable extends BoardFootprints
     rotation,
     flipped,
     placed,
+    labelX,
+    labelY,
+    labelSize,
+    labelHidden,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -7555,6 +7604,33 @@ class $BoardFootprintsTable extends BoardFootprints
         placed.isAcceptableOrUnknown(data['placed']!, _placedMeta),
       );
     }
+    if (data.containsKey('label_x')) {
+      context.handle(
+        _labelXMeta,
+        labelX.isAcceptableOrUnknown(data['label_x']!, _labelXMeta),
+      );
+    }
+    if (data.containsKey('label_y')) {
+      context.handle(
+        _labelYMeta,
+        labelY.isAcceptableOrUnknown(data['label_y']!, _labelYMeta),
+      );
+    }
+    if (data.containsKey('label_size')) {
+      context.handle(
+        _labelSizeMeta,
+        labelSize.isAcceptableOrUnknown(data['label_size']!, _labelSizeMeta),
+      );
+    }
+    if (data.containsKey('label_hidden')) {
+      context.handle(
+        _labelHiddenMeta,
+        labelHidden.isAcceptableOrUnknown(
+          data['label_hidden']!,
+          _labelHiddenMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -7604,6 +7680,22 @@ class $BoardFootprintsTable extends BoardFootprints
         DriftSqlType.bool,
         data['${effectivePrefix}placed'],
       )!,
+      labelX: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}label_x'],
+      ),
+      labelY: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}label_y'],
+      ),
+      labelSize: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}label_size'],
+      )!,
+      labelHidden: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}label_hidden'],
+      )!,
     );
   }
 
@@ -7628,6 +7720,20 @@ class BoardFootprintRow extends DataClass
   /// True when the component is mounted on the back of the board.
   final bool flipped;
   final bool placed;
+
+  /// Where the reference designator sits once it has been moved, in the
+  /// footprint's own frame — the frame KiCad writes it in, so it survives
+  /// the part being rotated or flipped afterwards. Null leaves it where the
+  /// footprint library put it.
+  final double? labelX;
+  final double? labelY;
+
+  /// Designator text height, in millimetres.
+  final double labelSize;
+
+  /// Taken off the silkscreen. The part keeps its reference; the board just
+  /// does not print it.
+  final bool labelHidden;
   const BoardFootprintRow({
     required this.id,
     required this.projectId,
@@ -7638,6 +7744,10 @@ class BoardFootprintRow extends DataClass
     required this.rotation,
     required this.flipped,
     required this.placed,
+    this.labelX,
+    this.labelY,
+    required this.labelSize,
+    required this.labelHidden,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -7651,6 +7761,14 @@ class BoardFootprintRow extends DataClass
     map['rotation'] = Variable<double>(rotation);
     map['flipped'] = Variable<bool>(flipped);
     map['placed'] = Variable<bool>(placed);
+    if (!nullToAbsent || labelX != null) {
+      map['label_x'] = Variable<double>(labelX);
+    }
+    if (!nullToAbsent || labelY != null) {
+      map['label_y'] = Variable<double>(labelY);
+    }
+    map['label_size'] = Variable<double>(labelSize);
+    map['label_hidden'] = Variable<bool>(labelHidden);
     return map;
   }
 
@@ -7665,6 +7783,14 @@ class BoardFootprintRow extends DataClass
       rotation: Value(rotation),
       flipped: Value(flipped),
       placed: Value(placed),
+      labelX: labelX == null && nullToAbsent
+          ? const Value.absent()
+          : Value(labelX),
+      labelY: labelY == null && nullToAbsent
+          ? const Value.absent()
+          : Value(labelY),
+      labelSize: Value(labelSize),
+      labelHidden: Value(labelHidden),
     );
   }
 
@@ -7683,6 +7809,10 @@ class BoardFootprintRow extends DataClass
       rotation: serializer.fromJson<double>(json['rotation']),
       flipped: serializer.fromJson<bool>(json['flipped']),
       placed: serializer.fromJson<bool>(json['placed']),
+      labelX: serializer.fromJson<double?>(json['labelX']),
+      labelY: serializer.fromJson<double?>(json['labelY']),
+      labelSize: serializer.fromJson<double>(json['labelSize']),
+      labelHidden: serializer.fromJson<bool>(json['labelHidden']),
     );
   }
   @override
@@ -7698,6 +7828,10 @@ class BoardFootprintRow extends DataClass
       'rotation': serializer.toJson<double>(rotation),
       'flipped': serializer.toJson<bool>(flipped),
       'placed': serializer.toJson<bool>(placed),
+      'labelX': serializer.toJson<double?>(labelX),
+      'labelY': serializer.toJson<double?>(labelY),
+      'labelSize': serializer.toJson<double>(labelSize),
+      'labelHidden': serializer.toJson<bool>(labelHidden),
     };
   }
 
@@ -7711,6 +7845,10 @@ class BoardFootprintRow extends DataClass
     double? rotation,
     bool? flipped,
     bool? placed,
+    Value<double?> labelX = const Value.absent(),
+    Value<double?> labelY = const Value.absent(),
+    double? labelSize,
+    bool? labelHidden,
   }) => BoardFootprintRow(
     id: id ?? this.id,
     projectId: projectId ?? this.projectId,
@@ -7721,6 +7859,10 @@ class BoardFootprintRow extends DataClass
     rotation: rotation ?? this.rotation,
     flipped: flipped ?? this.flipped,
     placed: placed ?? this.placed,
+    labelX: labelX.present ? labelX.value : this.labelX,
+    labelY: labelY.present ? labelY.value : this.labelY,
+    labelSize: labelSize ?? this.labelSize,
+    labelHidden: labelHidden ?? this.labelHidden,
   );
   BoardFootprintRow copyWithCompanion(BoardFootprintsCompanion data) {
     return BoardFootprintRow(
@@ -7733,6 +7875,12 @@ class BoardFootprintRow extends DataClass
       rotation: data.rotation.present ? data.rotation.value : this.rotation,
       flipped: data.flipped.present ? data.flipped.value : this.flipped,
       placed: data.placed.present ? data.placed.value : this.placed,
+      labelX: data.labelX.present ? data.labelX.value : this.labelX,
+      labelY: data.labelY.present ? data.labelY.value : this.labelY,
+      labelSize: data.labelSize.present ? data.labelSize.value : this.labelSize,
+      labelHidden: data.labelHidden.present
+          ? data.labelHidden.value
+          : this.labelHidden,
     );
   }
 
@@ -7747,7 +7895,11 @@ class BoardFootprintRow extends DataClass
           ..write('y: $y, ')
           ..write('rotation: $rotation, ')
           ..write('flipped: $flipped, ')
-          ..write('placed: $placed')
+          ..write('placed: $placed, ')
+          ..write('labelX: $labelX, ')
+          ..write('labelY: $labelY, ')
+          ..write('labelSize: $labelSize, ')
+          ..write('labelHidden: $labelHidden')
           ..write(')'))
         .toString();
   }
@@ -7763,6 +7915,10 @@ class BoardFootprintRow extends DataClass
     rotation,
     flipped,
     placed,
+    labelX,
+    labelY,
+    labelSize,
+    labelHidden,
   );
   @override
   bool operator ==(Object other) =>
@@ -7776,7 +7932,11 @@ class BoardFootprintRow extends DataClass
           other.y == this.y &&
           other.rotation == this.rotation &&
           other.flipped == this.flipped &&
-          other.placed == this.placed);
+          other.placed == this.placed &&
+          other.labelX == this.labelX &&
+          other.labelY == this.labelY &&
+          other.labelSize == this.labelSize &&
+          other.labelHidden == this.labelHidden);
 }
 
 class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
@@ -7789,6 +7949,10 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
   final Value<double> rotation;
   final Value<bool> flipped;
   final Value<bool> placed;
+  final Value<double?> labelX;
+  final Value<double?> labelY;
+  final Value<double> labelSize;
+  final Value<bool> labelHidden;
   final Value<int> rowid;
   const BoardFootprintsCompanion({
     this.id = const Value.absent(),
@@ -7800,6 +7964,10 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
     this.rotation = const Value.absent(),
     this.flipped = const Value.absent(),
     this.placed = const Value.absent(),
+    this.labelX = const Value.absent(),
+    this.labelY = const Value.absent(),
+    this.labelSize = const Value.absent(),
+    this.labelHidden = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   BoardFootprintsCompanion.insert({
@@ -7812,6 +7980,10 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
     this.rotation = const Value.absent(),
     this.flipped = const Value.absent(),
     this.placed = const Value.absent(),
+    this.labelX = const Value.absent(),
+    this.labelY = const Value.absent(),
+    this.labelSize = const Value.absent(),
+    this.labelHidden = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        projectId = Value(projectId),
@@ -7827,6 +7999,10 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
     Expression<double>? rotation,
     Expression<bool>? flipped,
     Expression<bool>? placed,
+    Expression<double>? labelX,
+    Expression<double>? labelY,
+    Expression<double>? labelSize,
+    Expression<bool>? labelHidden,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -7839,6 +8015,10 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
       if (rotation != null) 'rotation': rotation,
       if (flipped != null) 'flipped': flipped,
       if (placed != null) 'placed': placed,
+      if (labelX != null) 'label_x': labelX,
+      if (labelY != null) 'label_y': labelY,
+      if (labelSize != null) 'label_size': labelSize,
+      if (labelHidden != null) 'label_hidden': labelHidden,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -7853,6 +8033,10 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
     Value<double>? rotation,
     Value<bool>? flipped,
     Value<bool>? placed,
+    Value<double?>? labelX,
+    Value<double?>? labelY,
+    Value<double>? labelSize,
+    Value<bool>? labelHidden,
     Value<int>? rowid,
   }) {
     return BoardFootprintsCompanion(
@@ -7865,6 +8049,10 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
       rotation: rotation ?? this.rotation,
       flipped: flipped ?? this.flipped,
       placed: placed ?? this.placed,
+      labelX: labelX ?? this.labelX,
+      labelY: labelY ?? this.labelY,
+      labelSize: labelSize ?? this.labelSize,
+      labelHidden: labelHidden ?? this.labelHidden,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -7899,6 +8087,18 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
     if (placed.present) {
       map['placed'] = Variable<bool>(placed.value);
     }
+    if (labelX.present) {
+      map['label_x'] = Variable<double>(labelX.value);
+    }
+    if (labelY.present) {
+      map['label_y'] = Variable<double>(labelY.value);
+    }
+    if (labelSize.present) {
+      map['label_size'] = Variable<double>(labelSize.value);
+    }
+    if (labelHidden.present) {
+      map['label_hidden'] = Variable<bool>(labelHidden.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -7917,6 +8117,10 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
           ..write('rotation: $rotation, ')
           ..write('flipped: $flipped, ')
           ..write('placed: $placed, ')
+          ..write('labelX: $labelX, ')
+          ..write('labelY: $labelY, ')
+          ..write('labelSize: $labelSize, ')
+          ..write('labelHidden: $labelHidden, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -9898,6 +10102,553 @@ class BoardZonesCompanion extends UpdateCompanion<BoardZoneRow> {
   }
 }
 
+class $BoardTextsTable extends BoardTexts
+    with TableInfo<$BoardTextsTable, BoardTextRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $BoardTextsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _projectIdMeta = const VerificationMeta(
+    'projectId',
+  );
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+    'project_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES projects (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _contentMeta = const VerificationMeta(
+    'content',
+  );
+  @override
+  late final GeneratedColumn<String> content = GeneratedColumn<String>(
+    'content',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _xMeta = const VerificationMeta('x');
+  @override
+  late final GeneratedColumn<double> x = GeneratedColumn<double>(
+    'x',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _yMeta = const VerificationMeta('y');
+  @override
+  late final GeneratedColumn<double> y = GeneratedColumn<double>(
+    'y',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _rotationMeta = const VerificationMeta(
+    'rotation',
+  );
+  @override
+  late final GeneratedColumn<double> rotation = GeneratedColumn<double>(
+    'rotation',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _sizeMeta = const VerificationMeta('size');
+  @override
+  late final GeneratedColumn<double> size = GeneratedColumn<double>(
+    'size',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1.0),
+  );
+  static const VerificationMeta _layerMeta = const VerificationMeta('layer');
+  @override
+  late final GeneratedColumn<String> layer = GeneratedColumn<String>(
+    'layer',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    projectId,
+    content,
+    x,
+    y,
+    rotation,
+    size,
+    layer,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'board_texts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<BoardTextRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('project_id')) {
+      context.handle(
+        _projectIdMeta,
+        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_projectIdMeta);
+    }
+    if (data.containsKey('content')) {
+      context.handle(
+        _contentMeta,
+        content.isAcceptableOrUnknown(data['content']!, _contentMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_contentMeta);
+    }
+    if (data.containsKey('x')) {
+      context.handle(_xMeta, x.isAcceptableOrUnknown(data['x']!, _xMeta));
+    } else if (isInserting) {
+      context.missing(_xMeta);
+    }
+    if (data.containsKey('y')) {
+      context.handle(_yMeta, y.isAcceptableOrUnknown(data['y']!, _yMeta));
+    } else if (isInserting) {
+      context.missing(_yMeta);
+    }
+    if (data.containsKey('rotation')) {
+      context.handle(
+        _rotationMeta,
+        rotation.isAcceptableOrUnknown(data['rotation']!, _rotationMeta),
+      );
+    }
+    if (data.containsKey('size')) {
+      context.handle(
+        _sizeMeta,
+        size.isAcceptableOrUnknown(data['size']!, _sizeMeta),
+      );
+    }
+    if (data.containsKey('layer')) {
+      context.handle(
+        _layerMeta,
+        layer.isAcceptableOrUnknown(data['layer']!, _layerMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_layerMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  BoardTextRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return BoardTextRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      projectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_id'],
+      )!,
+      content: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}content'],
+      )!,
+      x: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}x'],
+      )!,
+      y: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}y'],
+      )!,
+      rotation: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}rotation'],
+      )!,
+      size: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}size'],
+      )!,
+      layer: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}layer'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $BoardTextsTable createAlias(String alias) {
+    return $BoardTextsTable(attachedDatabase, alias);
+  }
+}
+
+class BoardTextRow extends DataClass implements Insertable<BoardTextRow> {
+  final String id;
+  final String projectId;
+  final String content;
+  final double x;
+  final double y;
+  final double rotation;
+  final double size;
+
+  /// `F.SilkS` or `B.SilkS`.
+  final String layer;
+  final DateTime createdAt;
+  const BoardTextRow({
+    required this.id,
+    required this.projectId,
+    required this.content,
+    required this.x,
+    required this.y,
+    required this.rotation,
+    required this.size,
+    required this.layer,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['project_id'] = Variable<String>(projectId);
+    map['content'] = Variable<String>(content);
+    map['x'] = Variable<double>(x);
+    map['y'] = Variable<double>(y);
+    map['rotation'] = Variable<double>(rotation);
+    map['size'] = Variable<double>(size);
+    map['layer'] = Variable<String>(layer);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  BoardTextsCompanion toCompanion(bool nullToAbsent) {
+    return BoardTextsCompanion(
+      id: Value(id),
+      projectId: Value(projectId),
+      content: Value(content),
+      x: Value(x),
+      y: Value(y),
+      rotation: Value(rotation),
+      size: Value(size),
+      layer: Value(layer),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory BoardTextRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return BoardTextRow(
+      id: serializer.fromJson<String>(json['id']),
+      projectId: serializer.fromJson<String>(json['projectId']),
+      content: serializer.fromJson<String>(json['content']),
+      x: serializer.fromJson<double>(json['x']),
+      y: serializer.fromJson<double>(json['y']),
+      rotation: serializer.fromJson<double>(json['rotation']),
+      size: serializer.fromJson<double>(json['size']),
+      layer: serializer.fromJson<String>(json['layer']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'projectId': serializer.toJson<String>(projectId),
+      'content': serializer.toJson<String>(content),
+      'x': serializer.toJson<double>(x),
+      'y': serializer.toJson<double>(y),
+      'rotation': serializer.toJson<double>(rotation),
+      'size': serializer.toJson<double>(size),
+      'layer': serializer.toJson<String>(layer),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  BoardTextRow copyWith({
+    String? id,
+    String? projectId,
+    String? content,
+    double? x,
+    double? y,
+    double? rotation,
+    double? size,
+    String? layer,
+    DateTime? createdAt,
+  }) => BoardTextRow(
+    id: id ?? this.id,
+    projectId: projectId ?? this.projectId,
+    content: content ?? this.content,
+    x: x ?? this.x,
+    y: y ?? this.y,
+    rotation: rotation ?? this.rotation,
+    size: size ?? this.size,
+    layer: layer ?? this.layer,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  BoardTextRow copyWithCompanion(BoardTextsCompanion data) {
+    return BoardTextRow(
+      id: data.id.present ? data.id.value : this.id,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      content: data.content.present ? data.content.value : this.content,
+      x: data.x.present ? data.x.value : this.x,
+      y: data.y.present ? data.y.value : this.y,
+      rotation: data.rotation.present ? data.rotation.value : this.rotation,
+      size: data.size.present ? data.size.value : this.size,
+      layer: data.layer.present ? data.layer.value : this.layer,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BoardTextRow(')
+          ..write('id: $id, ')
+          ..write('projectId: $projectId, ')
+          ..write('content: $content, ')
+          ..write('x: $x, ')
+          ..write('y: $y, ')
+          ..write('rotation: $rotation, ')
+          ..write('size: $size, ')
+          ..write('layer: $layer, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    projectId,
+    content,
+    x,
+    y,
+    rotation,
+    size,
+    layer,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is BoardTextRow &&
+          other.id == this.id &&
+          other.projectId == this.projectId &&
+          other.content == this.content &&
+          other.x == this.x &&
+          other.y == this.y &&
+          other.rotation == this.rotation &&
+          other.size == this.size &&
+          other.layer == this.layer &&
+          other.createdAt == this.createdAt);
+}
+
+class BoardTextsCompanion extends UpdateCompanion<BoardTextRow> {
+  final Value<String> id;
+  final Value<String> projectId;
+  final Value<String> content;
+  final Value<double> x;
+  final Value<double> y;
+  final Value<double> rotation;
+  final Value<double> size;
+  final Value<String> layer;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const BoardTextsCompanion({
+    this.id = const Value.absent(),
+    this.projectId = const Value.absent(),
+    this.content = const Value.absent(),
+    this.x = const Value.absent(),
+    this.y = const Value.absent(),
+    this.rotation = const Value.absent(),
+    this.size = const Value.absent(),
+    this.layer = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  BoardTextsCompanion.insert({
+    required String id,
+    required String projectId,
+    required String content,
+    required double x,
+    required double y,
+    this.rotation = const Value.absent(),
+    this.size = const Value.absent(),
+    required String layer,
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       projectId = Value(projectId),
+       content = Value(content),
+       x = Value(x),
+       y = Value(y),
+       layer = Value(layer),
+       createdAt = Value(createdAt);
+  static Insertable<BoardTextRow> custom({
+    Expression<String>? id,
+    Expression<String>? projectId,
+    Expression<String>? content,
+    Expression<double>? x,
+    Expression<double>? y,
+    Expression<double>? rotation,
+    Expression<double>? size,
+    Expression<String>? layer,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (projectId != null) 'project_id': projectId,
+      if (content != null) 'content': content,
+      if (x != null) 'x': x,
+      if (y != null) 'y': y,
+      if (rotation != null) 'rotation': rotation,
+      if (size != null) 'size': size,
+      if (layer != null) 'layer': layer,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  BoardTextsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? projectId,
+    Value<String>? content,
+    Value<double>? x,
+    Value<double>? y,
+    Value<double>? rotation,
+    Value<double>? size,
+    Value<String>? layer,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return BoardTextsCompanion(
+      id: id ?? this.id,
+      projectId: projectId ?? this.projectId,
+      content: content ?? this.content,
+      x: x ?? this.x,
+      y: y ?? this.y,
+      rotation: rotation ?? this.rotation,
+      size: size ?? this.size,
+      layer: layer ?? this.layer,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
+    if (content.present) {
+      map['content'] = Variable<String>(content.value);
+    }
+    if (x.present) {
+      map['x'] = Variable<double>(x.value);
+    }
+    if (y.present) {
+      map['y'] = Variable<double>(y.value);
+    }
+    if (rotation.present) {
+      map['rotation'] = Variable<double>(rotation.value);
+    }
+    if (size.present) {
+      map['size'] = Variable<double>(size.value);
+    }
+    if (layer.present) {
+      map['layer'] = Variable<String>(layer.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BoardTextsCompanion(')
+          ..write('id: $id, ')
+          ..write('projectId: $projectId, ')
+          ..write('content: $content, ')
+          ..write('x: $x, ')
+          ..write('y: $y, ')
+          ..write('rotation: $rotation, ')
+          ..write('size: $size, ')
+          ..write('layer: $layer, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $AppSettingsTable extends AppSettings
     with TableInfo<$AppSettingsTable, AppSettingRow> {
   @override
@@ -10133,6 +10884,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $BoardViasTable boardVias = $BoardViasTable(this);
   late final $BoardEdgesTable boardEdges = $BoardEdgesTable(this);
   late final $BoardZonesTable boardZones = $BoardZonesTable(this);
+  late final $BoardTextsTable boardTexts = $BoardTextsTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
   late final Index idxPartsProject = Index(
     'idx_parts_project',
@@ -10194,6 +10946,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'idx_board_zones_project',
     'CREATE INDEX idx_board_zones_project ON board_zones (project_id)',
   );
+  late final Index idxBoardTextsProject = Index(
+    'idx_board_texts_project',
+    'CREATE INDEX idx_board_texts_project ON board_texts (project_id)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -10216,6 +10972,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     boardVias,
     boardEdges,
     boardZones,
+    boardTexts,
     appSettings,
     idxPartsProject,
     idxPartUnitsPart,
@@ -10232,6 +10989,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     idxViasProject,
     idxBoardEdgesProject,
     idxBoardZonesProject,
+    idxBoardTextsProject,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -10381,6 +11139,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('board_zones', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'projects',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('board_texts', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -10579,6 +11344,24 @@ final class $$ProjectsTableReferences
     ).filter((f) => f.projectId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_boardZonesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$BoardTextsTable, List<BoardTextRow>>
+  _boardTextsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.boardTexts,
+    aliasName: $_aliasNameGenerator(db.projects.id, db.boardTexts.projectId),
+  );
+
+  $$BoardTextsTableProcessedTableManager get boardTextsRefs {
+    final manager = $$BoardTextsTableTableManager(
+      $_db,
+      $_db.boardTexts,
+    ).filter((f) => f.projectId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_boardTextsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -10851,6 +11634,31 @@ class $$ProjectsTableFilterComposer
           }) => $$BoardZonesTableFilterComposer(
             $db: $db,
             $table: $db.boardZones,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> boardTextsRefs(
+    Expression<bool> Function($$BoardTextsTableFilterComposer f) f,
+  ) {
+    final $$BoardTextsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.boardTexts,
+      getReferencedColumn: (t) => t.projectId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BoardTextsTableFilterComposer(
+            $db: $db,
+            $table: $db.boardTexts,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -11172,6 +11980,31 @@ class $$ProjectsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> boardTextsRefs<T extends Object>(
+    Expression<T> Function($$BoardTextsTableAnnotationComposer a) f,
+  ) {
+    final $$BoardTextsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.boardTexts,
+      getReferencedColumn: (t) => t.projectId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BoardTextsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.boardTexts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$ProjectsTableTableManager
@@ -11197,6 +12030,7 @@ class $$ProjectsTableTableManager
             bool boardViasRefs,
             bool boardEdgesRefs,
             bool boardZonesRefs,
+            bool boardTextsRefs,
           })
         > {
   $$ProjectsTableTableManager(_$AppDatabase db, $ProjectsTable table)
@@ -11273,6 +12107,7 @@ class $$ProjectsTableTableManager
                 boardViasRefs = false,
                 boardEdgesRefs = false,
                 boardZonesRefs = false,
+                boardTextsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -11286,6 +12121,7 @@ class $$ProjectsTableTableManager
                     if (boardViasRefs) db.boardVias,
                     if (boardEdgesRefs) db.boardEdges,
                     if (boardZonesRefs) db.boardZones,
+                    if (boardTextsRefs) db.boardTexts,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -11475,6 +12311,27 @@ class $$ProjectsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (boardTextsRefs)
+                        await $_getPrefetchedData<
+                          ProjectRow,
+                          $ProjectsTable,
+                          BoardTextRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProjectsTableReferences
+                              ._boardTextsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProjectsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).boardTextsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.projectId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -11505,6 +12362,7 @@ typedef $$ProjectsTableProcessedTableManager =
         bool boardViasRefs,
         bool boardEdgesRefs,
         bool boardZonesRefs,
+        bool boardTextsRefs,
       })
     >;
 typedef $$PartsTableCreateCompanionBuilder =
@@ -17232,6 +18090,10 @@ typedef $$BoardFootprintsTableCreateCompanionBuilder =
       Value<double> rotation,
       Value<bool> flipped,
       Value<bool> placed,
+      Value<double?> labelX,
+      Value<double?> labelY,
+      Value<double> labelSize,
+      Value<bool> labelHidden,
       Value<int> rowid,
     });
 typedef $$BoardFootprintsTableUpdateCompanionBuilder =
@@ -17245,6 +18107,10 @@ typedef $$BoardFootprintsTableUpdateCompanionBuilder =
       Value<double> rotation,
       Value<bool> flipped,
       Value<bool> placed,
+      Value<double?> labelX,
+      Value<double?> labelY,
+      Value<double> labelSize,
+      Value<bool> labelHidden,
       Value<int> rowid,
     });
 
@@ -17343,6 +18209,26 @@ class $$BoardFootprintsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<double> get labelX => $composableBuilder(
+    column: $table.labelX,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get labelY => $composableBuilder(
+    column: $table.labelY,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get labelSize => $composableBuilder(
+    column: $table.labelSize,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get labelHidden => $composableBuilder(
+    column: $table.labelHidden,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$ProjectsTableFilterComposer get projectId {
     final $$ProjectsTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -17434,6 +18320,26 @@ class $$BoardFootprintsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get labelX => $composableBuilder(
+    column: $table.labelX,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get labelY => $composableBuilder(
+    column: $table.labelY,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get labelSize => $composableBuilder(
+    column: $table.labelSize,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get labelHidden => $composableBuilder(
+    column: $table.labelHidden,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$ProjectsTableOrderingComposer get projectId {
     final $$ProjectsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -17510,6 +18416,20 @@ class $$BoardFootprintsTableAnnotationComposer
 
   GeneratedColumn<bool> get placed =>
       $composableBuilder(column: $table.placed, builder: (column) => column);
+
+  GeneratedColumn<double> get labelX =>
+      $composableBuilder(column: $table.labelX, builder: (column) => column);
+
+  GeneratedColumn<double> get labelY =>
+      $composableBuilder(column: $table.labelY, builder: (column) => column);
+
+  GeneratedColumn<double> get labelSize =>
+      $composableBuilder(column: $table.labelSize, builder: (column) => column);
+
+  GeneratedColumn<bool> get labelHidden => $composableBuilder(
+    column: $table.labelHidden,
+    builder: (column) => column,
+  );
 
   $$ProjectsTableAnnotationComposer get projectId {
     final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
@@ -17597,6 +18517,10 @@ class $$BoardFootprintsTableTableManager
                 Value<double> rotation = const Value.absent(),
                 Value<bool> flipped = const Value.absent(),
                 Value<bool> placed = const Value.absent(),
+                Value<double?> labelX = const Value.absent(),
+                Value<double?> labelY = const Value.absent(),
+                Value<double> labelSize = const Value.absent(),
+                Value<bool> labelHidden = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BoardFootprintsCompanion(
                 id: id,
@@ -17608,6 +18532,10 @@ class $$BoardFootprintsTableTableManager
                 rotation: rotation,
                 flipped: flipped,
                 placed: placed,
+                labelX: labelX,
+                labelY: labelY,
+                labelSize: labelSize,
+                labelHidden: labelHidden,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -17621,6 +18549,10 @@ class $$BoardFootprintsTableTableManager
                 Value<double> rotation = const Value.absent(),
                 Value<bool> flipped = const Value.absent(),
                 Value<bool> placed = const Value.absent(),
+                Value<double?> labelX = const Value.absent(),
+                Value<double?> labelY = const Value.absent(),
+                Value<double> labelSize = const Value.absent(),
+                Value<bool> labelHidden = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BoardFootprintsCompanion.insert(
                 id: id,
@@ -17632,6 +18564,10 @@ class $$BoardFootprintsTableTableManager
                 rotation: rotation,
                 flipped: flipped,
                 placed: placed,
+                labelX: labelX,
+                labelY: labelY,
+                labelSize: labelSize,
+                labelHidden: labelHidden,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -19465,6 +20401,401 @@ typedef $$BoardZonesTableProcessedTableManager =
       BoardZoneRow,
       PrefetchHooks Function({bool projectId, bool netId})
     >;
+typedef $$BoardTextsTableCreateCompanionBuilder =
+    BoardTextsCompanion Function({
+      required String id,
+      required String projectId,
+      required String content,
+      required double x,
+      required double y,
+      Value<double> rotation,
+      Value<double> size,
+      required String layer,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$BoardTextsTableUpdateCompanionBuilder =
+    BoardTextsCompanion Function({
+      Value<String> id,
+      Value<String> projectId,
+      Value<String> content,
+      Value<double> x,
+      Value<double> y,
+      Value<double> rotation,
+      Value<double> size,
+      Value<String> layer,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$BoardTextsTableReferences
+    extends BaseReferences<_$AppDatabase, $BoardTextsTable, BoardTextRow> {
+  $$BoardTextsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $ProjectsTable _projectIdTable(_$AppDatabase db) =>
+      db.projects.createAlias(
+        $_aliasNameGenerator(db.boardTexts.projectId, db.projects.id),
+      );
+
+  $$ProjectsTableProcessedTableManager get projectId {
+    final $_column = $_itemColumn<String>('project_id')!;
+
+    final manager = $$ProjectsTableTableManager(
+      $_db,
+      $_db.projects,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_projectIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$BoardTextsTableFilterComposer
+    extends Composer<_$AppDatabase, $BoardTextsTable> {
+  $$BoardTextsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get content => $composableBuilder(
+    column: $table.content,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get x => $composableBuilder(
+    column: $table.x,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get y => $composableBuilder(
+    column: $table.y,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get rotation => $composableBuilder(
+    column: $table.rotation,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get size => $composableBuilder(
+    column: $table.size,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get layer => $composableBuilder(
+    column: $table.layer,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ProjectsTableFilterComposer get projectId {
+    final $$ProjectsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableFilterComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$BoardTextsTableOrderingComposer
+    extends Composer<_$AppDatabase, $BoardTextsTable> {
+  $$BoardTextsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get content => $composableBuilder(
+    column: $table.content,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get x => $composableBuilder(
+    column: $table.x,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get y => $composableBuilder(
+    column: $table.y,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get rotation => $composableBuilder(
+    column: $table.rotation,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get size => $composableBuilder(
+    column: $table.size,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get layer => $composableBuilder(
+    column: $table.layer,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ProjectsTableOrderingComposer get projectId {
+    final $$ProjectsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableOrderingComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$BoardTextsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $BoardTextsTable> {
+  $$BoardTextsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get content =>
+      $composableBuilder(column: $table.content, builder: (column) => column);
+
+  GeneratedColumn<double> get x =>
+      $composableBuilder(column: $table.x, builder: (column) => column);
+
+  GeneratedColumn<double> get y =>
+      $composableBuilder(column: $table.y, builder: (column) => column);
+
+  GeneratedColumn<double> get rotation =>
+      $composableBuilder(column: $table.rotation, builder: (column) => column);
+
+  GeneratedColumn<double> get size =>
+      $composableBuilder(column: $table.size, builder: (column) => column);
+
+  GeneratedColumn<String> get layer =>
+      $composableBuilder(column: $table.layer, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$ProjectsTableAnnotationComposer get projectId {
+    final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$BoardTextsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $BoardTextsTable,
+          BoardTextRow,
+          $$BoardTextsTableFilterComposer,
+          $$BoardTextsTableOrderingComposer,
+          $$BoardTextsTableAnnotationComposer,
+          $$BoardTextsTableCreateCompanionBuilder,
+          $$BoardTextsTableUpdateCompanionBuilder,
+          (BoardTextRow, $$BoardTextsTableReferences),
+          BoardTextRow,
+          PrefetchHooks Function({bool projectId})
+        > {
+  $$BoardTextsTableTableManager(_$AppDatabase db, $BoardTextsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$BoardTextsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$BoardTextsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$BoardTextsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> projectId = const Value.absent(),
+                Value<String> content = const Value.absent(),
+                Value<double> x = const Value.absent(),
+                Value<double> y = const Value.absent(),
+                Value<double> rotation = const Value.absent(),
+                Value<double> size = const Value.absent(),
+                Value<String> layer = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => BoardTextsCompanion(
+                id: id,
+                projectId: projectId,
+                content: content,
+                x: x,
+                y: y,
+                rotation: rotation,
+                size: size,
+                layer: layer,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String projectId,
+                required String content,
+                required double x,
+                required double y,
+                Value<double> rotation = const Value.absent(),
+                Value<double> size = const Value.absent(),
+                required String layer,
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => BoardTextsCompanion.insert(
+                id: id,
+                projectId: projectId,
+                content: content,
+                x: x,
+                y: y,
+                rotation: rotation,
+                size: size,
+                layer: layer,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$BoardTextsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({projectId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (projectId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.projectId,
+                                referencedTable: $$BoardTextsTableReferences
+                                    ._projectIdTable(db),
+                                referencedColumn: $$BoardTextsTableReferences
+                                    ._projectIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$BoardTextsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $BoardTextsTable,
+      BoardTextRow,
+      $$BoardTextsTableFilterComposer,
+      $$BoardTextsTableOrderingComposer,
+      $$BoardTextsTableAnnotationComposer,
+      $$BoardTextsTableCreateCompanionBuilder,
+      $$BoardTextsTableUpdateCompanionBuilder,
+      (BoardTextRow, $$BoardTextsTableReferences),
+      BoardTextRow,
+      PrefetchHooks Function({bool projectId})
+    >;
 typedef $$AppSettingsTableCreateCompanionBuilder =
     AppSettingsCompanion Function({
       required String key,
@@ -19641,6 +20972,8 @@ class $AppDatabaseManager {
       $$BoardEdgesTableTableManager(_db, _db.boardEdges);
   $$BoardZonesTableTableManager get boardZones =>
       $$BoardZonesTableTableManager(_db, _db.boardZones);
+  $$BoardTextsTableTableManager get boardTexts =>
+      $$BoardTextsTableTableManager(_db, _db.boardTexts);
   $$AppSettingsTableTableManager get appSettings =>
       $$AppSettingsTableTableManager(_db, _db.appSettings);
 }

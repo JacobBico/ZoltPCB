@@ -30,25 +30,65 @@ Future<PropertiesResult<PlacedFootprintRef>?> showFootprintProperties(
   required PlacedFootprintRef placement,
   required String reference,
   required String value,
+  Rect? board,
+  Offset localCentre = Offset.zero,
 }) => showDialog<PropertiesResult<PlacedFootprintRef>>(
   context: context,
   builder: (context) => _FootprintProperties(
     placement: placement,
     reference: reference,
     value: value,
+    board: board,
+    localCentre: localCentre,
   ),
 );
+
+/// What a part's position is measured from.
+///
+/// KiCad's position-relative tool, cut to what a board on a phone needs:
+/// the landmarks a connector or a chip is actually lined up against.
+enum PositionAnchor {
+  origin('Board origin'),
+  centre('Board centre'),
+  topLeft('Top-left corner'),
+  left('Left edge'),
+  right('Right edge'),
+  top('Top edge'),
+  bottom('Bottom edge');
+
+  const PositionAnchor(this.label);
+  final String label;
+
+  Offset pointOn(Rect board) => switch (this) {
+    PositionAnchor.origin => Offset.zero,
+    PositionAnchor.centre => board.center,
+    PositionAnchor.topLeft => board.topLeft,
+    PositionAnchor.left => board.centerLeft,
+    PositionAnchor.right => board.centerRight,
+    PositionAnchor.top => board.topCenter,
+    PositionAnchor.bottom => board.bottomCenter,
+  };
+}
 
 class _FootprintProperties extends StatefulWidget {
   const _FootprintProperties({
     required this.placement,
     required this.reference,
     required this.value,
+    required this.board,
+    required this.localCentre,
   });
 
   final PlacedFootprintRef placement;
   final String reference;
   final String value;
+
+  /// The board's extent, for measuring from its landmarks. Null offers
+  /// absolute coordinates only.
+  final Rect? board;
+
+  /// The middle of the part in its own frame.
+  final Offset localCentre;
 
   @override
   State<_FootprintProperties> createState() => _FootprintPropertiesState();
@@ -59,6 +99,11 @@ class _FootprintPropertiesState extends State<_FootprintProperties> {
   late final TextEditingController _y;
   late final TextEditingController _rotation;
   late bool _flipped;
+
+  PositionAnchor _anchor = PositionAnchor.origin;
+
+  /// Measure the part's centre rather than its origin.
+  bool _fromCentre = false;
 
   @override
   void initState() {
@@ -87,59 +132,164 @@ class _FootprintPropertiesState extends State<_FootprintProperties> {
     return null;
   }
 
+  /// Where the part's centre sits relative to its origin, as turned now.
+  Offset get _centreOffset => _fromCentre
+      ? FootprintPlacement(
+          x: 0,
+          y: 0,
+          rotation: _rotationValue ?? widget.placement.rotation,
+          flipped: _flipped,
+        ).apply(widget.localCentre.dx, widget.localCentre.dy)
+      : Offset.zero;
+
+  Offset get _anchorPoint {
+    final board = widget.board;
+    return board == null ? Offset.zero : _anchor.pointOn(board);
+  }
+
+  /// The origin the fields describe, in board coordinates.
+  Offset? get _absolute {
+    final x = _xValue;
+    final y = _yValue;
+    if (x == null || y == null) return null;
+    return _anchorPoint + Offset(x, y) - _centreOffset;
+  }
+
+  /// Changes what the fields are measured from without moving the part.
+  void _remeasure(void Function() change) {
+    final absolute = _absolute;
+    setState(change);
+    if (absolute == null) return;
+    final relative = absolute + _centreOffset - _anchorPoint;
+    _x.text = _mm(relative.dx);
+    _y.text = _mm(relative.dy);
+  }
+
   @override
   Widget build(BuildContext context) {
     final problem = _problem;
+    final board = widget.board;
     return AlertDialog(
       title: Text('${widget.reference}  ${widget.value}'),
       contentPadding: const EdgeInsets.fromLTRB(24, 22, 24, 0),
       content: SizedBox(
         width: 520,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(child: _NumberField(controller: _x, label: 'X mm')),
-                const SizedBox(width: 10),
-                Expanded(child: _NumberField(controller: _y, label: 'Y mm')),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _NumberField(
-                    controller: _rotation,
-                    label: 'Rotation °',
-                  ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (board != null) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<PositionAnchor>(
+                        initialValue: _anchor,
+                        isDense: true,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Relative to',
+                          isDense: true,
+                        ),
+                        items: [
+                          for (final anchor in PositionAnchor.values)
+                            DropdownMenuItem(
+                              value: anchor,
+                              child: Text(anchor.label),
+                            ),
+                        ],
+                        onChanged: (anchor) {
+                          if (anchor != null) {
+                            _remeasure(() => _anchor = anchor);
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: DropdownButtonFormField<bool>(
+                        initialValue: _fromCentre,
+                        isDense: true,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Measure from',
+                          isDense: true,
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: false,
+                            child: Text('Part origin'),
+                          ),
+                          DropdownMenuItem(
+                            value: true,
+                            child: Text('Part centre'),
+                          ),
+                        ],
+                        onChanged: (centre) {
+                          if (centre != null) {
+                            _remeasure(() => _fromCentre = centre);
+                          }
+                        },
+                      ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 12),
               ],
-            ),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 6,
-              children: [
-                for (final angle in const [0, 45, 90, 135, 180, 270])
-                  ActionChip(
-                    label: Text('$angle°'),
-                    onPressed: () =>
-                        setState(() => _rotation.text = '$angle'),
+              Row(
+                children: [
+                  Expanded(child: _NumberField(controller: _x, label: 'X mm')),
+                  const SizedBox(width: 10),
+                  Expanded(child: _NumberField(controller: _y, label: 'Y mm')),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _NumberField(
+                      controller: _rotation,
+                      label: 'Rotation °',
+                    ),
                   ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            CheckboxListTile(
-              value: _flipped,
-              onChanged: (value) => setState(() => _flipped = value ?? false),
-              controlAffinity: ListTileControlAffinity.leading,
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-              title: const Text('On the back of the board'),
-            ),
-            if (problem != null)
-              Text(
-                problem,
-                style: TextStyle(color: KicadPalette.error, fontSize: 12),
+                ],
               ),
-          ],
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                children: [
+                  if (board != null)
+                    ActionChip(
+                      avatar: const Icon(Icons.center_focus_strong, size: 16),
+                      label: const Text('Centre on board'),
+                      onPressed: () => setState(() {
+                        _anchor = PositionAnchor.centre;
+                        _fromCentre = true;
+                        _x.text = '0';
+                        _y.text = '0';
+                      }),
+                    ),
+                  for (final angle in const [0, 45, 90, 135, 180, 270])
+                    ActionChip(
+                      label: Text('$angle°'),
+                      onPressed: () =>
+                          setState(() => _rotation.text = '$angle'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              CheckboxListTile(
+                value: _flipped,
+                onChanged: (value) =>
+                    setState(() => _flipped = value ?? false),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: const Text('On the back of the board'),
+              ),
+              if (problem != null)
+                Text(
+                  problem,
+                  style: TextStyle(color: KicadPalette.error, fontSize: 12),
+                ),
+            ],
+          ),
         ),
       ),
       actions: [
@@ -159,17 +309,20 @@ class _FootprintPropertiesState extends State<_FootprintProperties> {
         FilledButton(
           onPressed: problem != null
               ? null
-              : () => Navigator.of(context).pop(
-                  PropertiesSaved(
-                    widget.placement.copyWith(
-                      x: _xValue,
-                      y: _yValue,
-                      rotation: _rotationValue,
-                      flipped: _flipped,
-                      placed: true,
+              : () {
+                  final at = _absolute!;
+                  Navigator.of(context).pop(
+                    PropertiesSaved(
+                      widget.placement.copyWith(
+                        x: at.dx,
+                        y: at.dy,
+                        rotation: _rotationValue,
+                        flipped: _flipped,
+                        placed: true,
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
           child: const Text('SAVE'),
         ),
       ],

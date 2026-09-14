@@ -16,8 +16,12 @@ class ComponentSidebar extends ConsumerStatefulWidget {
     super.key,
     required this.onAdd,
     required this.onClose,
+    this.onStarter,
     this.width = 340,
   });
+
+  /// Adds a microcontroller with its supporting parts. Null hides the tab.
+  final void Function(SymbolIndexEntry entry)? onStarter;
 
   final void Function(SymbolIndexEntry entry) onAdd;
   final VoidCallback onClose;
@@ -31,6 +35,9 @@ class _ComponentSidebarState extends ConsumerState<ComponentSidebar> {
   final _controller = TextEditingController();
   String _query = '';
   String? _libraryId;
+
+  /// Showing microcontrollers to build a starter circuit round.
+  bool _starter = false;
 
   @override
   void dispose() {
@@ -74,8 +81,12 @@ class _ComponentSidebarState extends ConsumerState<ComponentSidebar> {
             Expanded(
               child: FutureBuilder<List<SymbolIndexEntry>>(
                 // Keyed by query and category so a change re-runs the search.
-                key: ValueKey('$_query|$_libraryId|${libraries.length}'),
-                future: repository.search(_query, libraryId: _libraryId),
+                key: ValueKey(
+                  '$_query|$_libraryId|$_starter|${libraries.length}',
+                ),
+                future: _starter
+                    ? repository.search(_query, microcontrollersOnly: true)
+                    : repository.search(_query, libraryId: _libraryId),
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
                     return _message('Search failed: ${snapshot.error}');
@@ -86,6 +97,9 @@ class _ComponentSidebarState extends ConsumerState<ComponentSidebar> {
                     return _message(
                       libraries.isEmpty
                           ? 'Import a .kicad_sym library first.'
+                          : _starter
+                          ? 'No microcontrollers. Import one of KiCad\'s '
+                                'MCU_ libraries.'
                           : 'Nothing matches.',
                     );
                   }
@@ -96,7 +110,9 @@ class _ComponentSidebarState extends ConsumerState<ComponentSidebar> {
                         Divider(height: 1, color: KicadPalette.border),
                     itemBuilder: (context, index) => _ResultRow(
                       entry: results[index],
-                      onTap: () => widget.onAdd(results[index]),
+                      onTap: () => _starter
+                          ? widget.onStarter!(results[index])
+                          : widget.onAdd(results[index]),
                     ),
                   );
                 },
@@ -140,16 +156,28 @@ class _ComponentSidebarState extends ConsumerState<ComponentSidebar> {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 8),
         children: [
+          if (widget.onStarter != null)
+            _CategoryChip(
+              label: 'Starter circuits',
+              selected: _starter,
+              onTap: () => setState(() => _starter = true),
+            ),
           _CategoryChip(
             label: 'All',
-            selected: _libraryId == null,
-            onTap: () => setState(() => _libraryId = null),
+            selected: !_starter && _libraryId == null,
+            onTap: () => setState(() {
+              _starter = false;
+              _libraryId = null;
+            }),
           ),
           for (final library in libraries)
             _CategoryChip(
               label: library.nickname,
-              selected: _libraryId == library.id,
-              onTap: () => setState(() => _libraryId = library.id),
+              selected: !_starter && _libraryId == library.id,
+              onTap: () => setState(() {
+                _starter = false;
+                _libraryId = library.id;
+              }),
             ),
         ],
       ),

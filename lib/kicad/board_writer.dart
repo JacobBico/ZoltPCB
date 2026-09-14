@@ -59,6 +59,7 @@ class BoardWriter {
       ..._segments(document, netNumbers),
       ..._vias(document, netNumbers),
       ..._zones(document, netNumbers),
+      ..._texts(document),
     ]);
   }
 
@@ -211,7 +212,9 @@ class BoardWriter {
       if (item is SList && item.head == 'property') {
         final name = item.atom(1);
         if (name == 'Reference') {
-          placed.add(_withValue(item, footprint.part.reference));
+          placed.add(
+            _asDesignator(_withValue(item, footprint.part.reference), ref),
+          );
           continue;
         }
         if (name == 'Value') {
@@ -281,6 +284,93 @@ class BoardWriter {
           item,
     ]);
   }
+
+  /// The designator as the user left it: where they moved it, how big, and
+  /// whether it is printed at all.
+  ///
+  /// Only what was changed is rewritten. A designator nobody touched keeps
+  /// the library's own position and size, which is what a footprint's
+  /// author chose and what KiCad would show.
+  SList _asDesignator(SList property, PlacedFootprintRef ref) {
+    final offset = ref.labelOffset;
+    final items = <SExpr>[];
+    for (final item in property.items) {
+      if (item is SList && item.head == 'at' && offset != null) {
+        // The angle is kept: KiCad writes it already combined with the
+        // footprint's own rotation, and the position is all that moved.
+        final angle = item.items.length > 3 ? item.items[3] : SAtom('0');
+        items.add(
+          SList([
+            SAtom('at'),
+            SAtom(_number(offset.dx)),
+            SAtom(_number(offset.dy)),
+            angle,
+          ]),
+        );
+        continue;
+      }
+      // Replaced below, so the property never ends up with two.
+      if (item is SList && item.head == 'hide') continue;
+      if (item is SList && item.head == 'effects') {
+        items.add(_withFontSize(item, ref.labelSize));
+        continue;
+      }
+      items.add(item);
+    }
+    if (ref.labelHidden) items.add(S.flag('hide', true));
+    return SList(items);
+  }
+
+  /// An `effects` node with its font set to [size], and a stroke in the
+  /// proportion KiCad's own defaults use.
+  SList _withFontSize(SList effects, double size) => SList([
+    for (final item in effects.items)
+      if (item is SList && item.head == 'font')
+        SList([
+          for (final part in item.items)
+            if (part is SList && part.head == 'size')
+              S.of('size', [size, size])
+            else if (part is SList && part.head == 'thickness')
+              S.of('thickness', [_stroke(size)])
+            else
+              part,
+        ])
+      else
+        item,
+  ]);
+
+  static double _stroke(double size) =>
+      double.parse((size * 0.15).toStringAsFixed(4));
+
+  static String _number(double value) {
+    final text = value.toStringAsFixed(4);
+    return text.contains('.')
+        ? text.replaceFirst(RegExp(r'\.?0+$'), '')
+        : text;
+  }
+
+  /// Free silkscreen text.
+  ///
+  /// Text on the back carries `mirror`: it is read through the board, and
+  /// KiCad's DRC reports unmirrored back-side text as an error — which is
+  /// how the footprint flip learned to add it.
+  List<SList> _texts(BoardDocument document) => [
+    for (final text in document.scene.texts)
+      if (text.content.trim().isNotEmpty)
+        S.list('gr_text', [
+          S.text(text.content),
+          S.of('at', [text.position.dx, text.position.dy, text.rotation]),
+          SList([SAtom('layer'), S.text(text.layer.token)]),
+          SList([SAtom('uuid'), S.text(derivedId('text:${text.id}'))]),
+          S.list('effects', [
+            S.list('font', [
+              S.of('size', [text.size, text.size]),
+              S.of('thickness', [_stroke(text.size)]),
+            ]),
+            if (text.back) SList([SAtom('justify'), SAtom('mirror')]),
+          ]),
+        ]),
+  ];
 
   SList _withValue(SList property, String value) => SList([
     property.items.first,

@@ -248,6 +248,7 @@ final boardSceneProvider = FutureProvider.family<BoardScene, String>((
   final vias = await ref.watch(boardViasProvider(projectId).future);
   final edges = await ref.watch(boardEdgesProvider(projectId).future);
   final zones = await ref.watch(boardZonesProvider(projectId).future);
+  final texts = await ref.watch(boardTextsProvider(projectId).future);
 
   return BoardScene.build(
     board: board,
@@ -259,8 +260,16 @@ final boardSceneProvider = FutureProvider.family<BoardScene, String>((
     vias: vias,
     edges: edges,
     zones: zones,
+    texts: texts,
   );
 }, isAutoDispose: true);
+
+/// Free silkscreen text on the board.
+final boardTextsProvider = StreamProvider.family<List<BoardText>, String>(
+  (ref, projectId) =>
+      ref.watch(boardRepositoryProvider).watchTexts(projectId),
+  isAutoDispose: true,
+);
 
 /// The extra shapes on the board's Edge.Cuts layer.
 final boardEdgesProvider = StreamProvider.family<List<BoardEdge>, String>(

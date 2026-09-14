@@ -19,6 +19,7 @@ import 'design_rules_dialog.dart';
 import 'drc_sheet.dart';
 import 'footprint_sidebar.dart';
 import 'object_properties.dart';
+import 'silkscreen_dialogs.dart';
 import 'track_sizes_dialog.dart';
 import 'zone_editor.dart';
 
@@ -34,7 +35,8 @@ enum AimTool {
   zone('Pour', Icons.format_color_fill_outlined, 'Place the corners of a pour'),
   edge('Edge cut', Icons.content_cut, 'Place the corners of a cut'),
   via('Via', Icons.adjust, 'Aim where the via goes'),
-  measure('Measure', Icons.straighten, 'Aim at the first point');
+  measure('Measure', Icons.straighten, 'Aim at the first point'),
+  text('Text', Icons.text_fields, 'Aim where the text goes');
 
   const AimTool(this.label, this.icon, this.hint);
 
@@ -93,7 +95,11 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   /// same delta rather than jumping its anchor to the crosshair.
   Offset? _carryAnchor;
   String? _carryingEdgeId;
+  String? _slidingTrackId;
   bool _carryingOutline = false;
+
+  /// The outline corner, or a circle's edge, riding on the crosshair.
+  int? _carryingOutlineHandle;
 
   // Selection.
   String? _selectedFootprintId;
@@ -106,6 +112,14 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   /// The board edge itself, which is as much a drawn object as the cuts
   /// added to it and was the one thing that could not be picked up.
   bool _outlineSelected = false;
+
+  /// The free text, and the part whose designator, the user has hold of.
+  String? _selectedTextId;
+  String? _selectedLabelId;
+
+  /// Silkscreen riding on the crosshair: a text, or a part's designator.
+  String? _carryingTextId;
+  String? _carryingLabelId;
 
   // Whatever is being drawn, corner by corner.
   final List<Offset> _points = [];
@@ -222,11 +236,17 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                       selectedTrackId: _selectedTrackId,
                       selectedEdgeId: _selectedEdgeId,
                       selectedZoneId: _selectedZoneId,
+                      selectedTextId: _carryingTextId ?? _selectedTextId,
+                      selectedLabelId: _carryingLabelId ?? _selectedLabelId,
                       highlightedNetId: _highlightedNetId,
                       pendingRoute: _pendingPath(snap.at),
                       pendingLayer: _routeLayer,
                       showRatsnest: _showRatsnest,
-                      showOutlineGrips: false,
+                      showOutlineGrips:
+                          _outlineSelected || _carryingOutlineHandle != null,
+                      draggingOutline:
+                          _carryingOutline || _carryingOutlineHandle != null,
+                      selectedOutlineHandle: _carryingOutlineHandle,
                       fabPreview: _fabPreview,
                       fabBack: _fabBack,
                     ),
@@ -268,12 +288,17 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                   armed: _tool.places || _carryingId != null,
                 ),
               ),
-            Positioned(left: 0, right: 0, top: 0, child: _topStrip(scene)),
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              child: _topStrip(scene, parts),
+            ),
             Positioned(
               left: 10,
               right: 10,
               bottom: 10,
-              child: _bottomBar(scene, parts, snap),
+              child: _bottomBar(scene, committed, parts, snap),
             ),
           ],
         );
@@ -285,9 +310,39 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   BoardScene _withCarried(BoardScene committed, Offset at) {
     final delta = _carryAnchor == null ? Offset.zero : at - _carryAnchor!;
 
+    if (_carryingTextId != null || _carryingLabelId != null) {
+      return _withSilkMoved(committed, at);
+    }
+
+    final handle = _carryingOutlineHandle;
+    if (handle != null) {
+      return _withBoard(
+        committed,
+        committed.board.withOutline(_resizedOutline(committed, handle, at)),
+      );
+    }
+
     // An edge cut, the board outline, or a whole swept area all move the
     // same way: everything shifts by the same delta, so the shape being
     // carried keeps its proportions instead of collapsing onto the sight.
+    // A segment being slid is not translated wholesale: its neighbours
+    // absorb the movement, so the whole run has to be recomputed.
+    final slidingId = _slidingTrackId;
+    if (slidingId != null) {
+      final track = committed.tracks
+          .where((t) => t.id == slidingId)
+          .firstOrNull;
+      if (track == null) return committed;
+      final slide = slideTrack(
+        track: track,
+        others: committed.tracks,
+        delta: delta,
+        anchors: [for (final pad in committed.pads) pad.position],
+        lock: _angleLock,
+      );
+      return _withTracks(committed, slide);
+    }
+
     if (_carryingEdgeId != null || _carryingOutline || _carryingSelection) {
       return _shifted(committed, delta);
     }
@@ -311,6 +366,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     }
 
     return BoardScene.build(
+      texts: committed.texts,
       board: committed.board,
       parts: parts,
       nets: nets,
@@ -329,7 +385,59 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     );
   }
 
-  bool get _carryingSelection => _carryAnchor != null && !_selected.isEmpty;
+  bool get _carryingSelection =>
+      _carryAnchor != null && _slidingTrackId == null && !_selected.isEmpty;
+
+  /// The scene with a slide applied, for showing it before it is written.
+  BoardScene _withTracks(BoardScene committed, TrackSlide slide) {
+    final changed = {for (final track in slide.moved) track.id: track};
+
+    final parts = ref.watch(projectPartsProvider(widget.project.id)).value;
+    final nets = ref.watch(projectNetsProvider(widget.project.id)).value;
+    final placements = ref
+        .watch(boardFootprintsProvider(widget.project.id))
+        .value;
+    final definitions = ref
+        .watch(projectFootprintsProvider(widget.project.id))
+        .value;
+    if (parts == null ||
+        nets == null ||
+        placements == null ||
+        definitions == null) {
+      return committed;
+    }
+
+    final sample = slide.moved.firstOrNull;
+    return BoardScene.build(
+      texts: committed.texts,
+      board: committed.board,
+      parts: parts,
+      nets: nets,
+      placements: placements,
+      definitions: definitions,
+      tracks: [
+        for (final track in committed.tracks)
+          if (!slide.removed.contains(track.id)) changed[track.id] ?? track,
+        // The copper that reconnects it, shown exactly as it will be laid.
+        if (sample != null)
+          for (var i = 0; i < slide.added.length; i++)
+            Track(
+              id: 'slide-join-$i',
+              projectId: widget.project.id,
+              layer: sample.layer,
+              startX: slide.added[i].from.dx,
+              startY: slide.added[i].from.dy,
+              endX: slide.added[i].to.dx,
+              endY: slide.added[i].to.dy,
+              width: sample.width,
+              netId: sample.netId,
+            ),
+      ],
+      vias: committed.vias,
+      edges: committed.edges,
+      zones: committed.zones,
+    );
+  }
 
   /// The scene with everything being carried moved by [delta].
   BoardScene _shifted(BoardScene committed, Offset delta) {
@@ -354,6 +462,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     final edgeId = _carryingEdgeId;
 
     return BoardScene.build(
+      texts: committed.texts,
       board: _carryingOutline
           ? committed.board.withOutline(
               _shiftOutline(committed.outline, delta),
@@ -433,6 +542,35 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     final centre = viewport.toSheet(
       Offset(size.width / 2, size.height / 2),
     );
+    final carriedId = _carryingId;
+    if (carriedId != null) {
+      final footprint = scene.footprints
+          .where((f) => f.ref.id == carriedId)
+          .firstOrNull;
+      // By the part's middle, not its origin: what lines up with the middle
+      // of the board is the middle of the chip.
+      final definition = footprint?.definition;
+      final middle = definition == null
+          ? Offset.zero
+          : footprintBounds(definition).center;
+      final reference = footprint == null
+          ? Offset.zero
+          : FootprintPlacement(
+              x: 0,
+              y: 0,
+              rotation: footprint.ref.rotation,
+              flipped: footprint.ref.flipped,
+            ).apply(middle.dx, middle.dy);
+      final guided = boardGuideSnap(
+        at: centre,
+        board: scene.outline.bounds,
+        toleranceMm: snapToleranceMm(viewport),
+        reference: reference,
+        gridMm: _snap ? _grid : 0,
+      );
+      if (guided != null) return guided;
+    }
+
     return resolveSnap(
       at: centre,
       scene: scene,
@@ -441,7 +579,10 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       toleranceMm: snapToleranceMm(viewport),
       // Only copper on the layer being routed is worth catching on.
       layer: _tool == AimTool.route ? ref.read(activeLayerProvider) : null,
-      snapToObjects: _tool != AimTool.region,
+      // Nor, while carrying something, on anything: the drop is worked out
+      // against the board as it was, so the thing being moved would catch
+      // its own old position and the drag would measure from there.
+      snapToObjects: _tool != AimTool.region && !_isCarrying,
     );
   }
 
@@ -451,7 +592,8 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   /// is the line that lands.
   List<Offset> _pendingPath(Offset at) {
     if (_points.isEmpty) return const [];
-    return [..._points, _tool == AimTool.route ? _constrained(at) : at];
+    if (_tool != AimTool.route) return [..._points, at];
+    return [..._points, ..._legalTo(at)];
   }
 
   void _onPanZoom(ScaleUpdateDetails details) {
@@ -473,8 +615,9 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
   // --- the bars --------------------------------------------------------
 
-  Widget _topStrip(BoardScene scene) {
+  Widget _topStrip(BoardScene scene, List<PartWithDetails> parts) {
     final layer = ref.watch(activeLayerProvider);
+    final waiting = _waiting(scene, parts).length;
 
     return Material(
       color: KicadPalette.surface.withValues(alpha: 0.94),
@@ -485,6 +628,19 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           child: Row(
             children: [
               const SizedBox(width: 4),
+              // Only while there is something to do about it. Getting
+              // parts onto the board is the first thing anyone does here,
+              // so it earns a place on the strip — but once they are all
+              // down it is just a button taking up room, and changing a
+              // footprint later is a More sort of job. It comes back on
+              // its own the moment the schematic gains a part.
+              if (waiting > 0)
+                _StripChip(
+                  label: '$waiting to place',
+                  icon: Icons.inbox_outlined,
+                  colour: KicadPalette.warning,
+                  onTap: () => _showParts(scene, parts),
+                ),
               Expanded(
                 child: ListView(
                   scrollDirection: Axis.horizontal,
@@ -552,7 +708,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
               IconButton(
                 tooltip: 'More',
                 icon: const Icon(Icons.more_horiz, size: 18),
-                onPressed: () => _showMore(scene),
+                onPressed: () => _showMore(scene, parts),
               ),
               const SizedBox(width: 2),
             ],
@@ -564,6 +720,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
   Widget _bottomBar(
     BoardScene scene,
+    BoardScene committed,
     List<PartWithDetails> parts,
     SnapTarget snap,
   ) {
@@ -603,7 +760,11 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         AimBar(
           snap: snap,
           placeLabel: _placeLabel,
-          onPlace: _canPlace ? () => _place(scene, snap) : null,
+          // The committed scene, never the preview. The preview already has
+          // the carried thing moved; handing it to DROP applied the move a
+          // second time, so a slid track's neighbours were written from
+          // geometry that did not exist and snapped back to where they were.
+          onPlace: _canPlace ? () => _place(committed, snap) : null,
         ),
       ],
     );
@@ -618,6 +779,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       AimTool.via => 'VIA',
       AimTool.measure => _measureFrom == null ? 'FROM' : 'TO',
       AimTool.region => _regionFrom == null ? 'CORNER' : 'FINISH',
+      AimTool.text => 'TEXT',
     };
   }
 
@@ -627,6 +789,10 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   bool get _isCarrying =>
       _carryingId != null ||
       _carryingEdgeId != null ||
+      _slidingTrackId != null ||
+      _carryingTextId != null ||
+      _carryingLabelId != null ||
+      _carryingOutlineHandle != null ||
       _carryingOutline ||
       _carryingSelection;
 
@@ -655,16 +821,18 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       ];
     }
 
-    if (_carryingEdgeId != null || _carryingOutline || _carryingSelection) {
+    if (_carryingEdgeId != null ||
+        _slidingTrackId != null ||
+        _carryingTextId != null ||
+        _carryingLabelId != null ||
+        _carryingOutlineHandle != null ||
+        _carryingOutline ||
+        _carryingSelection) {
       return [
         _Chip(
           icon: Icons.close,
           label: 'Cancel',
-          onPressed: () => setState(() {
-            _carryAnchor = null;
-            _carryingEdgeId = null;
-            _carryingOutline = false;
-          }),
+          onPressed: () => setState(_stopCarrying),
         ),
       ];
     }
@@ -722,6 +890,61 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       ];
     }
 
+    final selectedText = scene.texts
+        .where((t) => t.id == _selectedTextId)
+        .firstOrNull;
+    if (selectedText != null) {
+      return [
+        _Chip(
+          icon: Icons.open_with,
+          label: 'Move',
+          onPressed: () => setState(() {
+            _carryingTextId = selectedText.id;
+            _carryAnchor = null;
+          }),
+        ),
+        _Chip(
+          icon: Icons.edit_outlined,
+          label: 'Edit',
+          onPressed: () => _editText(selectedText),
+        ),
+        _Chip(
+          icon: Icons.delete_outline,
+          label: 'Delete',
+          danger: true,
+          onPressed: () => _deleteText(selectedText),
+        ),
+      ];
+    }
+
+    final labelled = scene.footprints
+        .where((f) => f.ref.id == _selectedLabelId)
+        .firstOrNull;
+    if (labelled != null) {
+      return [
+        _Chip(
+          icon: Icons.open_with,
+          label: 'Move',
+          onPressed: () => setState(() {
+            _carryingLabelId = labelled.ref.id;
+            _carryAnchor = null;
+          }),
+        ),
+        _Chip(
+          icon: Icons.tune,
+          label: 'Edit',
+          onPressed: () => _editDesignator(labelled),
+        ),
+        _Chip(
+          icon: labelled.ref.labelHidden
+              ? Icons.visibility_outlined
+              : Icons.visibility_off_outlined,
+          label: labelled.ref.labelHidden ? 'Show' : 'Hide',
+          onPressed: () => _toggleLabel(labelled),
+        ),
+      ];
+    }
+
     final footprint = scene.footprints
         .where((f) => f.ref.id == _selectedFootprintId)
         .firstOrNull;
@@ -733,9 +956,14 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           onPressed: () => _carry(footprint),
         ),
         _Chip(
+          icon: Icons.text_fields,
+          label: 'Label',
+          onPressed: () => _editDesignator(footprint),
+        ),
+        _Chip(
           icon: Icons.tune,
           label: 'Properties',
-          onPressed: () => _footprintProperties(footprint),
+          onPressed: () => _footprintProperties(scene, footprint),
         ),
         _Chip(
           icon: Icons.flip,
@@ -756,6 +984,11 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         .firstOrNull;
     if (track != null) {
       return [
+        _Chip(
+          icon: Icons.swap_horiz,
+          label: 'Slide',
+          onPressed: () => _slide(track),
+        ),
         _Chip(
           icon: Icons.tune,
           label: 'Properties',
@@ -820,6 +1053,11 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           onPressed: () => _carryOutline(scene),
         ),
         _Chip(
+          icon: Icons.open_in_full,
+          label: 'Resize',
+          onPressed: () => _grabOutlineHandle(scene),
+        ),
+        _Chip(
           icon: Icons.tune,
           label: 'Dimensions',
           onPressed: () => _chooseShape(scene),
@@ -860,12 +1098,6 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         label: 'Redo',
         onPressed: history.canRedo ? _redo : null,
       ),
-      if (scene.unplaced.isNotEmpty)
-        _Chip(
-          icon: Icons.inbox_outlined,
-          label: '${scene.unplaced.length} to place',
-          onPressed: () => _placeNext(scene),
-        ),
       // Deletes whatever the sight is over, without selecting it first.
       _Chip(
         icon: Icons.backspace_outlined,
@@ -902,10 +1134,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   Future<void> _place(BoardScene scene, SnapTarget snap) async {
     final at = snap.at;
 
-    if (_carryingId != null ||
-        _carryingEdgeId != null ||
-        _carryingOutline ||
-        _carryingSelection) {
+    if (_isCarrying) {
       await _drop(scene, at);
       return;
     }
@@ -926,6 +1155,10 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         if (_measureTo != null) {
           _notify('${_mm((_measureTo! - _measureFrom!).distance)} mm');
         }
+        return;
+
+      case AimTool.text:
+        await _addText(at);
         return;
 
       case AimTool.via:
@@ -964,23 +1197,27 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
   void _placeRouteCorner(BoardScene scene, Offset at, SnapTarget snap) {
     if (_points.isEmpty) {
+      // A track may begin on a pad, on an existing run, or on a via — the
+      // last two being how a third part gets joined to copper that is
+      // already there without going back to a pad to start from.
       final pad = scene.padNear(at, 0.01);
-      if (pad == null) {
-        _notify('A track has to start on a pad');
+      if (pad == null && !snap.isCopper) {
+        _notify('Start on a pad, a track or a via');
         return;
       }
       HapticFeedback.selectionClick();
       setState(() {
         _clearSelection();
-        _routeNetId = pad.netId;
-        _routeLayer = _layerFor(pad);
-        _points.add(pad.position);
+        _routeNetId = pad?.netId ?? snap.netId;
+        _routeLayer = pad != null
+            ? _layerFor(pad)
+            : (snap.layer ?? ref.read(activeLayerProvider));
+        _points.add(pad?.position ?? at);
       });
       return;
     }
 
-    // Landing on a pad of the same net ends the track there, which is the
-    // only way a track is ever actually finished.
+    // Landing on a pad of the same net ends the track there.
     final pad = scene.padNear(at, 0.01);
     if (pad != null && (pad.position - _points.first).distance > 1e-6) {
       if (_routeNetId != null &&
@@ -989,26 +1226,30 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         _notify('${pad.label} is on a different net');
         return;
       }
-      setState(() => _points.add(pad.position));
+      // Through the same angle machinery as every other corner. Going
+      // straight to the pad is what produced a bare diagonal from one pad
+      // to the other, at whatever angle the two happened to sit at.
+      setState(() => _points.addAll(_legalTo(pad.position)));
       unawaited(_finish(scene));
       return;
     }
 
     HapticFeedback.selectionClick();
-    setState(() => _points.add(_constrained(at)));
+    setState(() => _points.addAll(_legalTo(at)));
   }
 
-  /// A point moved onto an allowed angle from the corner before it.
-  Offset _constrained(Offset at) {
-    if (_points.isEmpty) return at;
-    final constrained = _angleLock.constrain(_points.last, at);
-    // Still on the grid afterwards, when there is one: an angle lock that
-    // throws away the grid is two settings fighting.
-    if (!_snap || _grid <= 0) return constrained;
-    return Offset(
-      (constrained.dx / _grid).round() * _grid,
-      (constrained.dy / _grid).round() * _grid,
-    );
+  /// The corners that reach [at] from the end of the route on legal angles.
+  ///
+  /// Not "the target moved onto a legal bearing": that cannot reach a pad
+  /// which is not already on one, which is most of them. KiCad's answer is
+  /// two segments — a straight run and a 45 — and so is this.
+  ///
+  /// The point is deliberately not re-snapped to the grid afterwards. A pad
+  /// sits at 30.9125 mm, never on a 0.5 mm grid, and rounding the corner
+  /// after computing it is exactly what turned a clean 45 into 23°.
+  List<Offset> _legalTo(Offset at) {
+    if (_points.isEmpty) return [at];
+    return legalCorners(_points.last, at, _angleLock);
   }
 
   void _undoPoint() => setState(() {
@@ -1038,6 +1279,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       case AimTool.via:
       case AimTool.measure:
       case AimTool.region:
+      case AimTool.text:
         setState(_clearDrawing);
     }
   }
@@ -1279,12 +1521,26 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   /// Puts down whatever was picked up, wherever it was picked up from.
   Future<void> _drop(BoardScene scene, Offset at) async {
     final anchor = _carryAnchor;
+    if (_carryingTextId != null || _carryingLabelId != null) {
+      await _dropSilk(scene, at);
+      return;
+    }
+    if (_carryingOutlineHandle != null) {
+      await _dropOutlineHandle(scene, at);
+      return;
+    }
     if (_carryingId != null) {
       await _dropCarried(scene, at);
       return;
     }
     if (anchor == null) return;
     final delta = at - anchor;
+
+    final slidingId = _slidingTrackId;
+    if (slidingId != null) {
+      await _dropSlide(scene, slidingId, delta);
+      return;
+    }
 
     final edgeId = _carryingEdgeId;
     final outline = _carryingOutline;
@@ -1380,6 +1636,74 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     );
   }
 
+  Future<void> _dropSlide(
+    BoardScene scene,
+    String trackId,
+    Offset delta,
+  ) async {
+    final track = scene.tracks.where((t) => t.id == trackId).firstOrNull;
+    setState(_stopCarrying);
+    if (track == null) return;
+
+    final slide = slideTrack(
+      track: track,
+      others: scene.tracks,
+      delta: delta,
+      anchors: [for (final pad in scene.pads) pad.position],
+      lock: _angleLock,
+    );
+    if (slide.isEmpty) return;
+
+    final repository = ref.read(boardRepositoryProvider);
+    final before = [
+      for (final moved in slide.moved)
+        scene.tracks.firstWhere((t) => t.id == moved.id),
+      for (final id in slide.removed)
+        scene.tracks.firstWhere((t) => t.id == id),
+    ];
+
+    for (final moved in slide.moved) {
+      await repository.updateTrack(moved);
+    }
+    // The old connections go, and legal copper replaces them.
+    await repository.deleteTracks(slide.removed);
+    final laid = <String>[];
+    for (final segment in slide.added) {
+      laid.add(
+        await repository.addTrack(
+          projectId: widget.project.id,
+          layer: track.layer,
+          startX: segment.from.dx,
+          startY: segment.from.dy,
+          endX: segment.to.dx,
+          endY: segment.to.dy,
+          width: track.width,
+          netId: track.netId,
+        ),
+      );
+    }
+
+    HapticFeedback.lightImpact();
+    _record(
+      'Slide a track',
+      undo: () async {
+        await repository.deleteTracks(laid);
+        await repository.restoreCopper(
+          tracks: [
+            for (final original in before)
+              if (slide.removed.contains(original.id)) original,
+          ],
+          vias: const [],
+        );
+        for (final original in before) {
+          if (slide.removed.contains(original.id)) continue;
+          await repository.updateTrack(original);
+        }
+      },
+      redo: () async {},
+    );
+  }
+
   Future<void> _dropCarried(BoardScene scene, Offset at) async {
     final id = _carryingId;
     if (id == null) return;
@@ -1390,7 +1714,8 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       _carryingId = null;
       _carryAnchor = null;
     });
-    if (footprint == null) return;
+    // A part coming off the Parts list is not on the board yet, so it is
+    // not among the placed footprints; it still drops.
 
     final repository = ref.read(boardRepositoryProvider);
     final placements =
@@ -1402,7 +1727,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     await repository.updatePlacement(after);
     HapticFeedback.lightImpact();
     _record(
-      'Move ${footprint.part.reference}',
+      footprint == null ? 'Place part' : 'Move ${footprint.part.reference}',
       undo: () => repository.updatePlacement(before),
       redo: () => repository.updatePlacement(after),
     );
@@ -1420,6 +1745,285 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         .updatePlacement(before.copyWith(rotation: (before.rotation + 90) % 360));
   }
 
+  // --- silkscreen ------------------------------------------------------
+
+  /// The scene with the carried text or designator following the crosshair.
+  BoardScene _withSilkMoved(BoardScene committed, Offset at) => BoardScene(
+    board: committed.board,
+    footprints: [
+      for (final footprint in committed.footprints)
+        if (footprint.ref.id == _carryingLabelId)
+          PlacedFootprint(
+            ref: footprint.ref.copyWith(
+              labelOffset: footprint.placement.invert(at),
+            ),
+            part: footprint.part,
+            placement: footprint.placement,
+            pads: footprint.pads,
+            definition: footprint.definition,
+          )
+        else
+          footprint,
+    ],
+    pads: committed.pads,
+    tracks: committed.tracks,
+    vias: committed.vias,
+    ratsnest: committed.ratsnest,
+    unplaced: committed.unplaced,
+    edges: committed.edges,
+    zones: committed.zones,
+    texts: [
+      for (final text in committed.texts)
+        text.id == _carryingTextId ? text.copyWith(position: at) : text,
+    ],
+    staleTrackIds: committed.staleTrackIds,
+    staleViaIds: committed.staleViaIds,
+  );
+
+  Future<void> _dropSilk(BoardScene scene, Offset at) async {
+    final textId = _carryingTextId;
+    final labelId = _carryingLabelId;
+    setState(() {
+      _carryingTextId = null;
+      _carryingLabelId = null;
+    });
+    final repository = ref.read(boardRepositoryProvider);
+
+    if (textId != null) {
+      final before = scene.texts.where((t) => t.id == textId).firstOrNull;
+      if (before == null) return;
+      final after = before.copyWith(position: at);
+      await repository.updateText(after);
+      HapticFeedback.lightImpact();
+      _record(
+        'Move text',
+        undo: () => repository.updateText(before),
+        redo: () => repository.updateText(after),
+      );
+      return;
+    }
+
+    final footprint = scene.footprints
+        .where((f) => f.ref.id == labelId)
+        .firstOrNull;
+    if (footprint == null) return;
+    // Stored in the part's own frame, so the label turns and flips with
+    // the part afterwards instead of being left behind on the board.
+    final before = footprint.ref;
+    final after = before.copyWith(
+      labelOffset: footprint.placement.invert(at),
+    );
+    await repository.updatePlacement(after);
+    HapticFeedback.lightImpact();
+    _record(
+      'Move ${footprint.part.reference} label',
+      undo: () => repository.updatePlacement(before),
+      redo: () => repository.updatePlacement(after),
+    );
+  }
+
+  Future<void> _addText(Offset at) async {
+    final result = await showSilkscreenTextDialog(
+      context,
+      // On whichever side is being worked on, which is nearly always the
+      // side the text was meant for.
+      back: ref.read(activeLayerProvider) == CopperLayer.back,
+    );
+    if (result == null || result.deleted || !mounted) return;
+
+    final repository = ref.read(boardRepositoryProvider);
+    final added = await repository.addText(
+      projectId: widget.project.id,
+      content: result.content,
+      position: at,
+      rotation: result.rotation,
+      size: result.size,
+      back: result.back,
+    );
+    if (!mounted) return;
+    setState(() {
+      _clearSelection();
+      _selectedTextId = added.id;
+    });
+    _record(
+      'Add text',
+      undo: () => repository.deleteText(added.id),
+      redo: () => repository.restoreText(added),
+    );
+  }
+
+  Future<void> _editText(BoardText text) async {
+    final result = await showSilkscreenTextDialog(
+      context,
+      content: text.content,
+      size: text.size,
+      rotation: text.rotation,
+      back: text.back,
+      existing: true,
+    );
+    if (result == null || !mounted) return;
+    if (result.deleted) {
+      await _deleteText(text);
+      return;
+    }
+
+    final repository = ref.read(boardRepositoryProvider);
+    final after = text.copyWith(
+      content: result.content,
+      size: result.size,
+      rotation: result.rotation,
+      back: result.back,
+    );
+    await repository.updateText(after);
+    _record(
+      'Edit text',
+      undo: () => repository.updateText(text),
+      redo: () => repository.updateText(after),
+    );
+  }
+
+  Future<void> _deleteText(BoardText text) async {
+    final repository = ref.read(boardRepositoryProvider);
+    await repository.deleteText(text.id);
+    if (mounted) setState(() => _selectedTextId = null);
+    _record(
+      'Delete text',
+      undo: () => repository.restoreText(text),
+      redo: () => repository.deleteText(text.id),
+    );
+  }
+
+  Future<void> _editDesignator(PlacedFootprint footprint) async {
+    final result = await showDesignatorDialog(
+      context,
+      reference: footprint.part.reference,
+      size: footprint.ref.labelSize,
+      hidden: footprint.ref.labelHidden,
+      moved: footprint.ref.labelOffset != null,
+    );
+    if (result == null || !mounted) return;
+
+    final repository = ref.read(boardRepositoryProvider);
+    final before = footprint.ref;
+    final after = before.copyWith(
+      labelSize: result.size,
+      labelHidden: result.hidden,
+      clearLabelOffset: result.resetPosition,
+    );
+    await repository.updatePlacement(after);
+    _record(
+      '${footprint.part.reference} label',
+      undo: () => repository.updatePlacement(before),
+      redo: () => repository.updatePlacement(after),
+    );
+  }
+
+  Future<void> _toggleLabel(PlacedFootprint footprint) async {
+    final repository = ref.read(boardRepositoryProvider);
+    final before = footprint.ref;
+    final after = before.copyWith(labelHidden: !before.labelHidden);
+    await repository.updatePlacement(after);
+    _record(
+      after.labelHidden
+          ? 'Hide ${footprint.part.reference} label'
+          : 'Show ${footprint.part.reference} label',
+      undo: () => repository.updatePlacement(before),
+      redo: () => repository.updatePlacement(after),
+    );
+  }
+
+  /// The text whose printed box [board] falls in.
+  BoardText? _nearestText(BoardScene scene, Offset board, double tolerance) {
+    for (final text in scene.texts.reversed) {
+      if (_inTextBox(
+        board,
+        centre: text.position,
+        characters: text.content.length,
+        size: text.size,
+        rotation: text.rotation,
+        // No slack: silkscreen sits over parts and tracks, and a generous
+        // box would steal the taps meant for them.
+        slack: 0,
+      )) {
+        return text;
+      }
+    }
+    return null;
+  }
+
+  /// The part whose printed designator [board] falls on. A hidden one is
+  /// not there to be tapped; it comes back through the part's Label.
+  PlacedFootprint? _nearestLabel(
+    BoardScene scene,
+    Offset board,
+    double tolerance,
+  ) {
+    for (final footprint in scene.footprints.reversed) {
+      if (footprint.ref.labelHidden) continue;
+      if (_inTextBox(
+        board,
+        centre: footprint.labelPosition,
+        characters: footprint.part.reference.length,
+        size: footprint.ref.labelSize,
+        rotation: 0,
+        // No slack: silkscreen sits over parts and tracks, and a generous
+        // box would steal the taps meant for them.
+        slack: 0,
+      )) {
+        return footprint;
+      }
+    }
+    return null;
+  }
+
+  static bool _inTextBox(
+    Offset point, {
+    required Offset centre,
+    required int characters,
+    required double size,
+    required double rotation,
+    required double slack,
+  }) {
+    var halfWidth = characters * size * 0.3 + slack;
+    var halfHeight = size * 0.6 + slack;
+    final quarter = (rotation % 180 + 180) % 180;
+    if (quarter > 45 && quarter < 135) {
+      final swap = halfWidth;
+      halfWidth = halfHeight;
+      halfHeight = swap;
+    }
+    final d = point - centre;
+    return d.dx.abs() <= halfWidth && d.dy.abs() <= halfHeight;
+  }
+
+  /// Picks a placed segment up so it can be slid sideways.
+  ///
+  /// The run stays a run: the neighbours either side keep their own angles
+  /// and their far ends, and only the corners between them travel. An end
+  /// with nothing to absorb the movement grows a stub rather than coming
+  /// off the pad it was on.
+  void _slide(Track track) {
+    setState(() {
+      _slidingTrackId = track.id;
+      _selectedTrackId = track.id;
+      // Measured from the track's own line, not from wherever the crosshair
+      // happened to be: the run goes through the crosshair, so a track picked
+      // with a tap does not leap by the distance to the crosshair.
+      _carryAnchor = Offset(track.startX, track.startY);
+    });
+    _notify('Pan to slide the track, then DROP');
+  }
+
+  void _stopCarrying() {
+    _carryAnchor = null;
+    _carryingEdgeId = null;
+    _slidingTrackId = null;
+    _carryingTextId = null;
+    _carryingLabelId = null;
+    _carryingOutline = false;
+    _carryingOutlineHandle = null;
+  }
+
   void _carryEdge(BoardEdge edge) {
     setState(() {
       _carryAnchor = _lastSnap;
@@ -1435,6 +2039,78 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     });
     _notify('Pan to move the board, then DROP');
   }
+
+  /// Picks up the outline corner nearest the crosshair, so the board can be
+  /// resized by aiming at where that corner should go.
+  void _grabOutlineHandle(BoardScene scene) {
+    final outline = scene.outline;
+    final handles = outline.handles;
+    final aim = _lastSnap;
+    var best = -1;
+    var bestDistance = double.infinity;
+    for (var i = 0; i < handles.length; i++) {
+      // A circle's first handle is its centre, which moves it rather than
+      // sizing it; Move outline already does that.
+      if (outline.kind == BoardOutlineKind.circle && i == 0) continue;
+      final distance = (handles[i] - aim).distance;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = i;
+      }
+    }
+    if (best < 0) return;
+    setState(() {
+      _carryingOutlineHandle = best;
+      _carryAnchor = aim;
+    });
+    _notify(
+      outline.kind == BoardOutlineKind.circle
+          ? 'Pan to size the board, then DROP'
+          : 'Pan to where that corner goes, then DROP',
+    );
+  }
+
+  BoardOutline _resizedOutline(BoardScene scene, int handle, Offset at) =>
+      scene.outline.withHandleAt(
+        handle,
+        at,
+        minimum: math.max(scene.board.gridMm * 2, 0.2),
+      );
+
+  Future<void> _dropOutlineHandle(BoardScene scene, Offset at) async {
+    final handle = _carryingOutlineHandle;
+    setState(() {
+      _carryingOutlineHandle = null;
+      _carryAnchor = null;
+    });
+    if (handle == null) return;
+    final repository = ref.read(boardRepositoryProvider);
+    final before = scene.board;
+    final after = before.withOutline(_resizedOutline(scene, handle, at));
+    await repository.updateBoard(after);
+    HapticFeedback.lightImpact();
+    _record(
+      'Resize board',
+      undo: () => repository.updateBoard(before),
+      redo: () => repository.updateBoard(after),
+    );
+  }
+
+  /// The scene with a different board under it.
+  BoardScene _withBoard(BoardScene committed, Board board) => BoardScene(
+    board: board,
+    footprints: committed.footprints,
+    pads: committed.pads,
+    tracks: committed.tracks,
+    vias: committed.vias,
+    ratsnest: committed.ratsnest,
+    unplaced: committed.unplaced,
+    edges: committed.edges,
+    zones: committed.zones,
+    texts: committed.texts,
+    staleTrackIds: committed.staleTrackIds,
+    staleViaIds: committed.staleViaIds,
+  );
 
   void _carryRegion() {
     setState(() {
@@ -1516,6 +2192,8 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     if (viewport == null) return null;
     final tolerance = math.max(0.3, 16 / viewport.pixelsPerMm);
 
+    final text = _nearestText(scene, at, tolerance);
+    if (text != null) return text;
     final via = _nearestVia(scene, at, tolerance);
     if (via != null) return via;
     final edge = _nearestEdge(scene, at, tolerance);
@@ -1529,6 +2207,8 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
   Future<void> _deleteUnderCrosshair(BoardScene scene) async {
     switch (_underCrosshair(scene)) {
+      case final BoardText text:
+        await _deleteText(text);
       case final Via via:
         await _deleteVia(via);
       case final BoardEdge edge:
@@ -1543,15 +2223,213 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     HapticFeedback.mediumImpact();
   }
 
-  /// Picks up the next part waiting to go on the board.
-  void _placeNext(BoardScene scene) {
-    final next = scene.unplaced.firstOrNull;
-    if (next == null) return;
+  /// The parts that belong on the board but are not on it yet.
+  ///
+  /// Power symbols are not among them: `#PWR` is a label with a shape, and
+  /// KiCad keeps it off the board for the same reason.
+  List<PartWithDetails> _waiting(
+    BoardScene scene,
+    List<PartWithDetails> parts,
+  ) {
+    final placed = {for (final f in scene.footprints) f.part.id};
+    return [
+      for (final part in parts)
+        if (part.part.onBoard && !placed.contains(part.part.id)) part,
+    ];
+  }
+
+  /// Every part and where it stands, with the verb that moves it on.
+  void _showParts(BoardScene scene, List<PartWithDetails> parts) {
+    final onBoard = [for (final p in parts) if (p.part.onBoard) p];
+    final placed = {for (final f in scene.footprints) f.part.id};
+    final assigned = {
+      for (final ref_ in scene.unplaced) ref_.partId: ref_,
+    };
+
+    final resolvable = [
+      for (final part in onBoard)
+        if (!placed.contains(part.part.id) &&
+            !assigned.containsKey(part.part.id) &&
+            part.part.footprint.trim().contains(':'))
+          part,
+    ];
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: KicadPalette.surface,
+      builder: (sheet) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 10, 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Parts',
+                      style: Theme.of(sheet).textTheme.titleMedium,
+                    ),
+                  ),
+                  // Most parts already name their own footprint — it came
+                  // from the symbol library — so there is no reason to ask
+                  // for it again one at a time.
+                  if (resolvable.isNotEmpty)
+                    FilledButton.icon(
+                      onPressed: () {
+                        Navigator.of(sheet).pop();
+                        _autoAssign(resolvable);
+                      },
+                      icon: const Icon(Icons.auto_fix_high, size: 16),
+                      label: Text('ASSIGN ${resolvable.length}'),
+                    ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  if (onBoard.isEmpty)
+                    const ListTile(
+                      dense: true,
+                      title: Text('Nothing in this project goes on a board'),
+                    ),
+                  for (final part in onBoard)
+                    () {
+                      final isPlaced = placed.contains(part.part.id);
+                      final ref_ = assigned[part.part.id];
+                      final footprint = part.part.footprint.trim();
+
+                      return ListTile(
+                        dense: true,
+                        leading: Icon(
+                          isPlaced
+                              ? Icons.check_circle
+                              : (ref_ != null
+                                    ? Icons.inbox_outlined
+                                    : Icons.help_outline),
+                          size: 18,
+                          color: isPlaced
+                              ? KicadPalette.success
+                              : KicadPalette.warning,
+                        ),
+                        title: Text(
+                          '${part.part.reference}  ${part.part.value}',
+                        ),
+                        subtitle: Text(
+                          isPlaced
+                              ? 'On the board'
+                              : (ref_ != null
+                                    ? 'Ready to place'
+                                    : (footprint.contains(':')
+                                          ? footprint
+                                          : 'No footprint yet')),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: TextButton(
+                          onPressed: () {
+                            Navigator.of(sheet).pop();
+                            if (isPlaced) {
+                              _selectPlaced(part.part.id);
+                            } else if (ref_ != null) {
+                              _pickUp(ref_.id, part.part.reference);
+                            } else {
+                              setState(
+                                () => _assigningPartId = part.part.id,
+                              );
+                            }
+                          },
+                          child: Text(
+                            isPlaced
+                                ? 'SHOW'
+                                : (ref_ != null ? 'PLACE' : 'FOOTPRINT'),
+                          ),
+                        ),
+                      );
+                    }(),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Gives every part that names an installed footprint its own, so the
+  /// only ones left to answer for are the genuinely ambiguous.
+  Future<void> _autoAssign(List<PartWithDetails> parts) async {
+    final repository = ref.read(boardRepositoryProvider);
+    final library = ref.read(footprintLibraryRepositoryProvider);
+
+    var assigned = 0;
+    var missing = 0;
+    for (final part in parts) {
+      final libId = part.part.footprint.trim();
+      // Only if the library is actually installed: a footprint that cannot
+      // be loaded puts a part on the board with no pads, which is worse
+      // than saying so.
+      if (await library.loadFootprint(libId) == null) {
+        missing++;
+        continue;
+      }
+      await repository.assignFootprint(
+        projectId: widget.project.id,
+        partId: part.part.id,
+        libId: libId,
+      );
+      assigned++;
+    }
+
+    if (!mounted) return;
+    _notify(
+      missing == 0
+          ? '$assigned ready to place'
+          : '$assigned ready · $missing need a library importing',
+    );
+  }
+
+  void _selectPlaced(String partId) {
+    final scene = ref.read(boardSceneProvider(widget.project.id)).value;
+    final footprint = scene?.footprints
+        .where((f) => f.part.id == partId)
+        .firstOrNull;
+    if (footprint == null) return;
+
     setState(() {
-      _carryingId = next.id;
+      _clearSelection();
       _tool = AimTool.select;
+      _selectedFootprintId = footprint.ref.id;
     });
-    _notify('Pan to where it goes, then DROP');
+    _centreOn(Offset(footprint.ref.x, footprint.ref.y));
+  }
+
+  /// Puts a part on the crosshair, ready to be panned into place.
+  void _pickUp(String placementId, String reference) {
+    setState(() {
+      _clearSelection();
+      _tool = AimTool.select;
+      _carryingId = placementId;
+      _carryAnchor = null;
+    });
+    _notify('Pan to where $reference goes, then DROP');
+  }
+
+  void _centreOn(Offset board) {
+    final viewport = _viewport;
+    if (viewport == null || _canvasSize.isEmpty) return;
+    setState(() {
+      _viewport = viewport.copyWith(
+        origin: Offset(
+          _canvasSize.width / 2 - board.dx * viewport.pixelsPerMm,
+          _canvasSize.height / 2 - board.dy * viewport.pixelsPerMm,
+        ),
+      );
+    });
   }
 
   // --- selection -------------------------------------------------------
@@ -1568,6 +2446,25 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     // While drawing, a tap is not a selection — it would only get in the
     // way of the thing being drawn.
     if (_points.isNotEmpty) return;
+
+    // Silkscreen first. Text is small and sits on top of everything, so it
+    // has first claim on a tap that lands on both it and what is beneath.
+    final text = _nearestText(scene, board, tolerance);
+    if (text != null) {
+      setState(() {
+        _clearSelection();
+        _selectedTextId = text.id;
+      });
+      return;
+    }
+    final labelled = _nearestLabel(scene, board, tolerance);
+    if (labelled != null) {
+      setState(() {
+        _clearSelection();
+        _selectedLabelId = labelled.ref.id;
+      });
+      return;
+    }
 
     final via = _nearestVia(scene, board, tolerance);
     if (via != null) {
@@ -1664,6 +2561,8 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     _selectedZoneId = null;
     _highlightedNetId = null;
     _outlineSelected = false;
+    _selectedTextId = null;
+    _selectedLabelId = null;
     _region = null;
     _regionFrom = null;
     _selected = const _Selection.empty();
@@ -1857,7 +2756,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
   // --- the rest --------------------------------------------------------
 
-  void _showMore(BoardScene scene) {
+  void _showMore(BoardScene scene, List<PartWithDetails> parts) {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: KicadPalette.surface,
@@ -1885,6 +2784,17 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 8),
+                item(
+                  Icons.inventory_2_outlined,
+                  'Parts and footprints',
+                  () => _showParts(scene, parts),
+                  subtitle: () {
+                    final waiting = _waiting(scene, parts).length;
+                    return waiting == 0
+                        ? 'All placed — change a footprint here'
+                        : '$waiting still to place';
+                  }(),
+                ),
                 item(
                   Icons.crop_square,
                   'Board outline',
@@ -1939,12 +2849,20 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     if (mounted) setState(() => _assigningPartId = null);
   }
 
-  Future<void> _footprintProperties(PlacedFootprint footprint) async {
+  Future<void> _footprintProperties(
+    BoardScene scene,
+    PlacedFootprint footprint,
+  ) async {
     final result = await showFootprintProperties(
       context,
       placement: footprint.ref,
       reference: footprint.part.reference,
       value: footprint.part.value,
+      board: scene.outline.bounds,
+      // In the part's own frame: the dialog turns it with the rotation.
+      localCentre: footprint.definition == null
+          ? Offset.zero
+          : footprintBounds(footprint.definition!).center,
     );
     if (result == null || !mounted) return;
     final repository = ref.read(boardRepositoryProvider);

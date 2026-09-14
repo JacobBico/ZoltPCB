@@ -32,6 +32,8 @@ class BoardPainter extends CustomPainter {
     this.selectedOutlineHandle,
     this.selectedEdgeId,
     this.selectedZoneId,
+    this.selectedTextId,
+    this.selectedLabelId,
     this.fabPreview = false,
     this.fabBack = false,
   }) : palette = KicadPalette.current;
@@ -41,6 +43,12 @@ class BoardPainter extends CustomPainter {
 
   /// The copper pour the user has hold of, if any.
   final String? selectedZoneId;
+
+  /// The free silkscreen text the user has hold of, if any.
+  final String? selectedTextId;
+
+  /// The footprint whose designator the user has hold of, if any.
+  final String? selectedLabelId;
 
   /// Draw the board as it will come back from the fabricator rather than as
   /// an editor draws it. See [_paintFabPreview].
@@ -110,6 +118,7 @@ class BoardPainter extends CustomPainter {
     _paintVias(canvas);
 
     _paintFootprints(canvas);
+    _paintTexts(canvas);
     if (showRatsnest) _paintRatsnest(canvas);
     _paintPendingRoute(canvas);
   }
@@ -192,22 +201,51 @@ class BoardPainter extends CustomPainter {
     // Silkscreen for the side being looked at.
     for (final footprint in scene.footprints) {
       final definition = footprint.definition;
-      if (definition == null) continue;
-      for (final graphic in definition.graphics) {
-        if (footprint.placement.layerOf(graphic.layer) != silkLayer) continue;
-        _paintFabGraphic(canvas, footprint, graphic);
-      }
-      if (footprint.ref.side == side) {
-        final bounds = footprint.bounds;
-        if (viewport.lengthToScreen(bounds.width) >= 18) {
-          _paintFabText(
-            canvas,
-            footprint.part.reference,
-            viewport.toScreen(Offset(bounds.center.dx, bounds.top)) -
-                const Offset(0, 7),
-          );
+      if (definition != null) {
+        for (final graphic in definition.graphics) {
+          if (footprint.placement.layerOf(graphic.layer) != silkLayer) {
+            continue;
+          }
+          _paintFabGraphic(canvas, footprint, graphic);
         }
       }
+
+      // The designator, as it will be printed. It used to be drawn only
+      // when the part happened to be wide enough on screen, which at any
+      // ordinary zoom meant a finished board with no R1 or C1 on it.
+      final ref = footprint.ref;
+      if (ref.side != side || ref.labelHidden) continue;
+      final height = viewport.lengthToScreen(ref.labelSize);
+      if (height < 2) continue;
+      _paintSilkText(
+        canvas,
+        footprint.part.reference,
+        viewport.toScreen(footprint.labelPosition),
+        height: height,
+        rotation: 0,
+        color: _silk,
+        weight: FontWeight.w700,
+        // The canvas is already turned over for the underside, so back-side
+        // text is un-mirrored here to read the right way round, the way it
+        // does when you turn the real board over.
+        mirror: fabBack,
+      );
+    }
+
+    for (final text in scene.texts) {
+      if (text.back != fabBack) continue;
+      final height = viewport.lengthToScreen(text.size);
+      if (height < 2) continue;
+      _paintSilkText(
+        canvas,
+        text.content,
+        viewport.toScreen(text.position),
+        height: height,
+        rotation: text.rotation,
+        color: _silk,
+        weight: FontWeight.w700,
+        mirror: fabBack,
+      );
     }
     canvas.restore();
 
@@ -359,26 +397,6 @@ class BoardPainter extends CustomPainter {
         }
         canvas.drawPath(path..close(), paint);
     }
-  }
-
-  void _paintFabText(Canvas canvas, String text, Offset centre) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: const TextStyle(
-          color: _silk,
-          fontSize: 9,
-          fontFamily: 'monospace',
-          fontWeight: FontWeight.w600,
-          height: 1,
-        ),
-      ),
-      textDirection: ui.TextDirection.ltr,
-    )..layout();
-    painter.paint(
-      canvas,
-      centre - Offset(painter.width / 2, painter.height / 2),
-    );
   }
 
   // --- background ------------------------------------------------------
@@ -870,17 +888,112 @@ class BoardPainter extends CustomPainter {
     PlacedFootprint footprint, {
     required bool selected,
   }) {
-    final bounds = footprint.bounds;
-    if (viewport.lengthToScreen(bounds.width) < 18) return;
+    final ref = footprint.ref;
+    final labelSelected = ref.id == selectedLabelId;
 
-    _paintText(
+    // A hidden designator is not printed, but it has to stay findable to be
+    // shown again: faintly, and only while its part or it is selected.
+    if (ref.labelHidden && !selected && !labelSelected) return;
+
+    // Sized in board millimetres like everything else on the board, so a
+    // label grows and shrinks with the zoom instead of floating at a fixed
+    // pixel size over parts it no longer fits.
+    final height = viewport.lengthToScreen(ref.labelSize);
+    if (height < 3) return;
+
+    final base = ref.flipped
+        ? KicadPalette.silkscreen.withValues(alpha: 0.45)
+        : KicadPalette.silkscreen;
+    final color = labelSelected || selected
+        ? KicadPalette.highlight
+        : base;
+
+    _paintSilkText(
       canvas,
       footprint.part.reference,
-      viewport.toScreen(Offset(bounds.center.dx, bounds.top)) -
-          const Offset(0, 8),
-      color: selected ? KicadPalette.highlight : KicadPalette.silkscreen,
-      size: 9,
+      viewport.toScreen(footprint.labelPosition),
+      height: height,
+      rotation: 0,
+      color: ref.labelHidden ? color.withValues(alpha: 0.35) : color,
+      mirror: ref.flipped,
+      boxed: labelSelected,
     );
+  }
+
+  /// Free silkscreen text.
+  void _paintTexts(Canvas canvas) {
+    for (final text in scene.texts) {
+      final height = viewport.lengthToScreen(text.size);
+      if (height < 3) continue;
+      final selected = text.id == selectedTextId;
+      _paintSilkText(
+        canvas,
+        text.content,
+        viewport.toScreen(text.position),
+        height: height,
+        rotation: text.rotation,
+        color: selected
+            ? KicadPalette.highlight
+            : KicadPalette.silkscreen.withValues(
+                alpha: text.back ? 0.45 : 0.95,
+              ),
+        mirror: text.back,
+        boxed: selected,
+      );
+    }
+  }
+
+  /// Text as silkscreen draws it: centred, turned by [rotation], and
+  /// mirrored when it is on the back and being looked at through the board.
+  void _paintSilkText(
+    Canvas canvas,
+    String text,
+    Offset centre, {
+    required double height,
+    required double rotation,
+    required Color color,
+    bool mirror = false,
+    bool boxed = false,
+    FontWeight weight = FontWeight.w500,
+  }) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: color,
+          fontSize: height,
+          fontFamily: 'monospace',
+          fontWeight: weight,
+          height: 1,
+        ),
+      ),
+      textDirection: ui.TextDirection.ltr,
+    )..layout();
+
+    canvas
+      ..save()
+      ..translate(centre.dx, centre.dy)
+      // Board space is Y-down, so counter-clockwise is a negative turn.
+      ..rotate(-rotation * math.pi / 180);
+    if (mirror) canvas.scale(-1, 1);
+
+    final box = Rect.fromCenter(
+      center: Offset.zero,
+      width: painter.width,
+      height: painter.height,
+    );
+    painter.paint(canvas, box.topLeft);
+    if (boxed) {
+      canvas.drawRect(
+        box.inflate(2),
+        Paint()
+          ..color = KicadPalette.highlight
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1,
+      );
+    }
+    canvas.restore();
+    painter.dispose();
   }
 
   // --- overlays --------------------------------------------------------
@@ -989,5 +1102,7 @@ class BoardPainter extends CustomPainter {
       old.fabBack != fabBack ||
       old.selectedOutlineHandle != selectedOutlineHandle ||
       old.selectedEdgeId != selectedEdgeId ||
-      old.selectedZoneId != selectedZoneId;
+      old.selectedZoneId != selectedZoneId ||
+      old.selectedTextId != selectedTextId ||
+      old.selectedLabelId != selectedLabelId;
 }

@@ -29,6 +29,7 @@ part 'database.g.dart';
     BoardVias,
     BoardEdges,
     BoardZones,
+    BoardTexts,
     AppSettings,
   ],
 )
@@ -54,7 +55,7 @@ class AppDatabase extends _$AppDatabase {
       const DriftDatabaseOptions(storeDateTimeAsText: true);
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -143,6 +144,19 @@ class AppDatabase extends _$AppDatabase {
       if (from >= 5 && from < 11) {
         await m.addColumn(boards, boards.trackWidths);
         await m.addColumn(boards, boards.viaSizes);
+      }
+      // v12 adds the silkscreen: where each designator sits and whether it
+      // is printed, and free board text. A board from before has neither
+      // moved a label nor written any text, which the defaults say.
+      if (from >= 5 && from < 12) {
+        await m.addColumn(boardFootprints, boardFootprints.labelX);
+        await m.addColumn(boardFootprints, boardFootprints.labelY);
+        await m.addColumn(boardFootprints, boardFootprints.labelSize);
+        await m.addColumn(boardFootprints, boardFootprints.labelHidden);
+      }
+      if (from < 12) {
+        await m.createTable(boardTexts);
+        await m.createIndex(idxBoardTextsProject);
       }
     },
     beforeOpen: (details) async {

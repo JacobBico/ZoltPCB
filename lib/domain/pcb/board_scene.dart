@@ -6,6 +6,7 @@ import 'board.dart';
 import 'board_edge.dart';
 import 'board_layer.dart';
 import 'board_outline.dart';
+import 'board_text.dart';
 import 'board_zone.dart';
 import 'footprint.dart';
 import 'footprint_placement.dart';
@@ -98,6 +99,19 @@ class PlacedFootprint {
 
   bool get isResolved => definition != null;
 
+  /// Where the reference designator is drawn, in board millimetres.
+  ///
+  /// Where the user put it when they have moved it — stored in the part's
+  /// own frame so it rotates and flips with the part — and otherwise just
+  /// above the body, clear of the pads. Shared by the painter and by
+  /// hit-testing, so a label is picked up exactly where it is drawn.
+  Offset get labelPosition {
+    final offset = ref.labelOffset;
+    if (offset != null) return placement.apply(offset.dx, offset.dy);
+    final box = bounds;
+    return Offset(box.center.dx, box.top - ref.labelSize * 0.9);
+  }
+
   /// The footprint's extent on the board.
   Rect get bounds {
     final definition = this.definition;
@@ -164,6 +178,7 @@ class BoardScene {
     required this.unplaced,
     this.edges = const [],
     this.zones = const [],
+    this.texts = const [],
     this.staleTrackIds = const {},
     this.staleViaIds = const {},
   });
@@ -178,6 +193,7 @@ class BoardScene {
     List<Via> vias = const [],
     List<BoardEdge> edges = const [],
     List<BoardZone> zones = const [],
+    List<BoardText> texts = const [],
   }) {
     final partsById = {for (final part in parts) part.part.id: part};
 
@@ -265,6 +281,7 @@ class BoardScene {
       unplaced: unplaced,
       edges: edges,
       zones: zones,
+      texts: texts,
       staleTrackIds: resolved.staleTracks,
       staleViaIds: resolved.staleVias,
     );
@@ -277,6 +294,9 @@ class BoardScene {
 
   /// Copper pours, drawn under the tracks and exported as zone outlines.
   final List<BoardZone> zones;
+
+  /// Free text on the silkscreen, front and back.
+  final List<BoardText> texts;
 
   final List<PlacedFootprint> footprints;
   final List<PlacedPad> pads;

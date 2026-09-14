@@ -387,6 +387,20 @@ class BoardFootprints extends Table {
   BoolColumn get flipped => boolean().withDefault(const Constant(false))();
   BoolColumn get placed => boolean().withDefault(const Constant(false))();
 
+  /// Where the reference designator sits once it has been moved, in the
+  /// footprint's own frame — the frame KiCad writes it in, so it survives
+  /// the part being rotated or flipped afterwards. Null leaves it where the
+  /// footprint library put it.
+  RealColumn get labelX => real().nullable()();
+  RealColumn get labelY => real().nullable()();
+
+  /// Designator text height, in millimetres.
+  RealColumn get labelSize => real().withDefault(const Constant(1.0))();
+
+  /// Taken off the silkscreen. The part keeps its reference; the board just
+  /// does not print it.
+  BoolColumn get labelHidden => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 
@@ -478,6 +492,27 @@ class BoardZones extends Table {
 
   RealColumn get clearance => real().withDefault(const Constant(0.5))();
   RealColumn get minThickness => real().withDefault(const Constant(0.25))();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// Free text on the silkscreen: a board name, a version, a pin-1 note.
+@TableIndex(name: 'idx_board_texts_project', columns: {#projectId})
+@DataClassName('BoardTextRow')
+class BoardTexts extends Table {
+  TextColumn get id => text()();
+  TextColumn get projectId =>
+      text().references(Projects, #id, onDelete: KeyAction.cascade)();
+  TextColumn get content => text()();
+  RealColumn get x => real()();
+  RealColumn get y => real()();
+  RealColumn get rotation => real().withDefault(const Constant(0))();
+  RealColumn get size => real().withDefault(const Constant(1.0))();
+
+  /// `F.SilkS` or `B.SilkS`.
+  TextColumn get layer => text()();
   DateTimeColumn get createdAt => dateTime()();
 
   @override

@@ -151,6 +151,7 @@ class ProjectExporter {
       vias: await boards.getVias(projectId),
       edges: await boards.getEdges(projectId),
       zones: await boards.getZones(projectId),
+      texts: await boards.getTexts(projectId),
     );
 
     return BoardDocument(

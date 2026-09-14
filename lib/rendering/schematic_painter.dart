@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/rendering.dart';
@@ -16,6 +17,8 @@ class SchematicPainter extends CustomPainter {
     required this.viewport,
     required this.colors,
     this.selectedUnitId,
+    this.selectedUnitIds = const {},
+    this.selectionBox,
     this.selectedWireKey,
     this.pendingPinId,
     this.highlightedNetId,
@@ -44,6 +47,12 @@ class SchematicPainter extends CustomPainter {
   final SchematicColors colors;
   final String? selectedUnitId;
 
+  /// Parts swept up together with a selection box.
+  final Set<String> selectedUnitIds;
+
+  /// The box being swept, in sheet millimetres.
+  final Rect? selectionBox;
+
   /// The wire the user has hold of, if any. A selected wire is drawn
   /// heavier and shows a dot on each run that can be moved, so it is clear
   /// both that the wire is a thing you can grab and where to grab it.
@@ -61,6 +70,25 @@ class SchematicPainter extends CustomPainter {
     _paintConnections(canvas);
     _paintUnits(canvas);
     _paintNetLabels(canvas);
+    _paintSelectionBox(canvas);
+  }
+
+  void _paintSelectionBox(Canvas canvas) {
+    final box = selectionBox;
+    if (box == null) return;
+    final rect = _rectToScreen(box);
+    canvas
+      ..drawRect(
+        rect,
+        Paint()..color = KicadPalette.highlight.withValues(alpha: 0.12),
+      )
+      ..drawRect(
+        rect,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2
+          ..color = KicadPalette.highlight,
+      );
   }
 
   /// How tall a net label's text is drawn, in millimetres of sheet. Shared
@@ -207,7 +235,9 @@ class SchematicPainter extends CustomPainter {
     final renderer = SymbolRenderer(viewport: viewport, colors: colors);
 
     for (final unit in scene.units) {
-      final selected = unit.unit.id == selectedUnitId;
+      final selected =
+          unit.unit.id == selectedUnitId ||
+          selectedUnitIds.contains(unit.unit.id);
       final symbol = unit.symbol;
 
       if (symbol != null) {
@@ -446,6 +476,8 @@ class SchematicPainter extends CustomPainter {
       old.viewport.pixelsPerMm != viewport.pixelsPerMm ||
       old.viewport.origin != viewport.origin ||
       old.selectedUnitId != selectedUnitId ||
+      !setEquals(old.selectedUnitIds, selectedUnitIds) ||
+      old.selectionBox != selectionBox ||
       old.selectedWireKey != selectedWireKey ||
       old.pendingPinId != pendingPinId ||
       old.highlightedNetId != highlightedNetId ||

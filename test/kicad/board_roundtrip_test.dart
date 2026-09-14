@@ -147,6 +147,32 @@ void main() {
     // On the back, which is what makes the layer-flipping code matter.
     await place(c1, capacitorFootprint, 30, 40, flipped: true);
 
+    // The silkscreen, exercised the way it gets used: one designator moved
+    // and enlarged, one hidden, and free text on both sides — the back one
+    // being what KiCad's DRC checks is mirrored.
+    for (final ref in await boards.getFootprints(project.id)) {
+      if (ref.partId == r2.part.id) {
+        await boards.updatePlacement(
+          ref.copyWith(labelOffset: const Offset(0, -2.5), labelSize: 1.2),
+        );
+      }
+      if (ref.partId == r1.part.id) {
+        await boards.updatePlacement(ref.copyWith(labelHidden: true));
+      }
+    }
+    await boards.addText(
+      projectId: project.id,
+      content: 'HINTPCB',
+      position: const Offset(40, 46),
+      size: 1.5,
+    );
+    await boards.addText(
+      projectId: project.id,
+      content: 'REV A',
+      position: const Offset(40, 48),
+      back: true,
+    );
+
     // A short route on the front, and one that changes layer through a via.
     await boards.addTrack(
       projectId: project.id,
@@ -221,6 +247,7 @@ void main() {
       vias: await boards.getVias(project.id),
       edges: await boards.getEdges(project.id),
       zones: await boards.getZones(project.id),
+      texts: await boards.getTexts(project.id),
     );
 
     // The pads found their nets through the schematic before anything was
@@ -265,6 +292,14 @@ void main() {
     // The cutout goes out as a real circle, not the many-sided polygon the
     // screen draws it with: a board ordered from a 64-gon has 64 flats.
     expect(RegExp(r'\(gr_circle\b').allMatches(text).length, 1);
+
+    // The silkscreen as configured: the text, the hidden designator, and
+    // the moved one at its new spot and size.
+    expect(text, contains('(gr_text "HINTPCB"'));
+    expect(text, contains('(gr_text "REV A"'));
+    expect(text, contains('(hide yes)'));
+    expect(text, contains('(at 0 -2.5'));
+    expect(text, contains('(size 1.2 1.2)'));
 
     // And the pour, as an outline on a real net.
     expect(RegExp(r'\(zone\b').allMatches(text).length, 1);

@@ -139,6 +139,10 @@ class BoardRepository {
         rotation: Value(footprint.rotation),
         flipped: Value(footprint.flipped),
         placed: Value(footprint.placed),
+        labelX: Value(footprint.labelOffset?.dx),
+        labelY: Value(footprint.labelOffset?.dy),
+        labelSize: Value(footprint.labelSize),
+        labelHidden: Value(footprint.labelHidden),
       ),
     );
   }
@@ -422,6 +426,88 @@ class BoardRepository {
         );
   }
 
+  // --- silkscreen text -------------------------------------------------
+
+  Future<List<BoardText>> getTexts(String projectId) async {
+    final query = _db.select(_db.boardTexts)
+      ..where((t) => t.projectId.equals(projectId))
+      ..orderBy([(t) => OrderingTerm(expression: t.createdAt)]);
+    return (await query.get()).map(_toText).toList();
+  }
+
+  Stream<List<BoardText>> watchTexts(String projectId) =>
+      _db.watchAggregate({_db.boardTexts}, () => getTexts(projectId));
+
+  Future<BoardText> addText({
+    required String projectId,
+    required String content,
+    required Offset position,
+    double rotation = 0,
+    double size = 1.0,
+    bool back = false,
+  }) async {
+    final text = BoardText(
+      id: newId(),
+      projectId: projectId,
+      content: content,
+      position: position,
+      rotation: rotation,
+      size: size,
+      back: back,
+    );
+    await restoreText(text);
+    return text;
+  }
+
+  Future<void> updateText(BoardText text) async {
+    await (_db.update(_db.boardTexts)..where((t) => t.id.equals(text.id)))
+        .write(
+          BoardTextsCompanion(
+            content: Value(text.content),
+            x: Value(text.position.dx),
+            y: Value(text.position.dy),
+            rotation: Value(text.rotation),
+            size: Value(text.size),
+            layer: Value(text.layer.token),
+          ),
+        );
+  }
+
+  Future<void> deleteText(String id) async {
+    await (_db.delete(_db.boardTexts)..where((t) => t.id.equals(id))).go();
+  }
+
+  /// Writes a text exactly as given, for adding one and for undoing its
+  /// deletion alike.
+  Future<void> restoreText(BoardText text) async {
+    await _db
+        .into(_db.boardTexts)
+        .insert(
+          BoardTextsCompanion.insert(
+            id: text.id,
+            projectId: text.projectId,
+            content: text.content,
+            x: text.position.dx,
+            y: text.position.dy,
+            rotation: Value(text.rotation),
+            size: Value(text.size),
+            layer: text.layer.token,
+            createdAt: DateTime.now(),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+  }
+
+  static BoardText _toText(BoardTextRow row) => BoardText(
+    id: row.id,
+    projectId: row.projectId,
+    content: row.content,
+    position: Offset(row.x, row.y),
+    rotation: row.rotation,
+    size: row.size,
+    back: row.layer == BoardLayer.backSilk.token,
+  );
+
   // --- copper pours ----------------------------------------------------
 
   Future<List<BoardZone>> getZones(String projectId) async {
@@ -611,6 +697,11 @@ class BoardRepository {
         rotation: row.rotation,
         flipped: row.flipped,
         placed: row.placed,
+        labelOffset: row.labelX == null || row.labelY == null
+            ? null
+            : Offset(row.labelX!, row.labelY!),
+        labelSize: row.labelSize,
+        labelHidden: row.labelHidden,
       );
 
   static Track _toTrack(BoardTrackRow row) => Track(

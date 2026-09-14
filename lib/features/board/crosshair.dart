@@ -16,6 +16,8 @@ class SnapTarget {
     required this.at,
     required this.label,
     this.strong = false,
+    this.netId,
+    this.layer,
   });
 
   /// Where the point will actually land.
@@ -27,6 +29,18 @@ class SnapTarget {
   /// Something real on the board, as opposed to the grid. Drawn heavier,
   /// because landing exactly on a pad is the thing you most need to know.
   final bool strong;
+
+  /// The net of whatever was caught, so a track started here joins it
+  /// rather than being drawn as unconnected copper.
+  final String? netId;
+
+  /// The layer of the copper caught, so a route started on a back-side
+  /// track continues on the back.
+  final CopperLayer? layer;
+
+  /// Whether a route may begin here. Pads and existing copper qualify; a
+  /// grid intersection in the middle of nowhere does not.
+  bool get isCopper => strong;
 }
 
 /// Where a point would land, given everything on the board near it.
@@ -74,10 +88,15 @@ SnapTarget resolveSnap({
       at: bestPad.position,
       label: bestPad.label,
       strong: true,
+      netId: bestPad.netId,
     );
   }
 
+  // Corners and vias next. An end is what you most often want to continue
+  // from, so it wins over the middle of the same track.
   Offset? bestEnd;
+  String? endNet;
+  CopperLayer? endLayer;
   bestDistance = double.infinity;
   for (final track in scene.tracks) {
     for (final end in [
@@ -88,6 +107,8 @@ SnapTarget resolveSnap({
       if (distance < bestDistance) {
         bestDistance = distance;
         bestEnd = end;
+        endNet = track.netId;
+        endLayer = track.layer;
       }
     }
   }
@@ -96,10 +117,47 @@ SnapTarget resolveSnap({
     if (distance < bestDistance) {
       bestDistance = distance;
       bestEnd = Offset(via.x, via.y);
+      endNet = via.netId;
+      endLayer = null;
     }
   }
   if (bestEnd != null && bestDistance <= toleranceMm) {
-    return SnapTarget(at: bestEnd, label: 'copper', strong: true);
+    return SnapTarget(
+      at: bestEnd,
+      label: 'corner',
+      strong: true,
+      netId: endNet,
+      layer: endLayer,
+    );
+  }
+
+  // Then anywhere along a track. This is the magnetic feel: a new branch
+  // can leave an existing run at any point on it, the way it can in KiCad,
+  // rather than only where two segments happen to meet.
+  Offset? bestOn;
+  String? onNet;
+  CopperLayer? onLayer;
+  bestDistance = double.infinity;
+  for (final track in scene.tracks) {
+    final a = Offset(track.startX, track.startY);
+    final b = Offset(track.endX, track.endY);
+    final point = _closestOnSegment(at, a, b);
+    final distance = (point - at).distance;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestOn = point;
+      onNet = track.netId;
+      onLayer = track.layer;
+    }
+  }
+  if (bestOn != null && bestDistance <= toleranceMm) {
+    return SnapTarget(
+      at: bestOn,
+      label: 'track',
+      strong: true,
+      netId: onNet,
+      layer: onLayer,
+    );
   }
 
   if (snapToGrid && gridMm > 0) {
@@ -113,6 +171,85 @@ SnapTarget resolveSnap({
   }
 
   return SnapTarget(at: at, label: 'free');
+}
+
+/// Snaps something being carried onto the board's own landmarks.
+///
+/// [reference] is where, relative to the crosshair, the point that should
+/// land on a landmark sits — a part's centre rather than its origin, so an
+/// MCU snaps to the middle of the board by its middle. A landmark point
+/// (the centre, a corner, the middle of an edge) wins outright; failing
+/// that each axis lines up on its own with a centre line or an edge, the
+/// way KiCad's alignment guides do, and the other axis stays on the grid.
+SnapTarget? boardGuideSnap({
+  required Offset at,
+  required Rect board,
+  required double toleranceMm,
+  Offset reference = Offset.zero,
+  double gridMm = 0,
+}) {
+  if (board.isEmpty) return null;
+  final point = at + reference;
+
+  final landmarks = <(Offset, String)>[
+    (board.center, 'board centre'),
+    (board.topLeft, 'board corner'),
+    (board.topRight, 'board corner'),
+    (board.bottomLeft, 'board corner'),
+    (board.bottomRight, 'board corner'),
+    (board.centerLeft, 'left edge middle'),
+    (board.centerRight, 'right edge middle'),
+    (board.topCenter, 'top edge middle'),
+    (board.bottomCenter, 'bottom edge middle'),
+  ];
+  (Offset, String)? best;
+  var bestDistance = double.infinity;
+  for (final landmark in landmarks) {
+    final distance = (landmark.$1 - point).distance;
+    if (distance <= toleranceMm && distance < bestDistance) {
+      best = landmark;
+      bestDistance = distance;
+    }
+  }
+  if (best != null) {
+    return SnapTarget(at: best.$1 - reference, label: best.$2, strong: true);
+  }
+
+  (double, String)? nearest(double value, List<(double, String)> lines) {
+    (double, String)? found;
+    var distance = double.infinity;
+    for (final line in lines) {
+      final d = (line.$1 - value).abs();
+      if (d <= toleranceMm && d < distance) {
+        found = line;
+        distance = d;
+      }
+    }
+    return found;
+  }
+
+  final x = nearest(point.dx, [
+    (board.center.dx, 'centre line'),
+    (board.left, 'left edge'),
+    (board.right, 'right edge'),
+  ]);
+  final y = nearest(point.dy, [
+    (board.center.dy, 'centre line'),
+    (board.top, 'top edge'),
+    (board.bottom, 'bottom edge'),
+  ]);
+  if (x == null && y == null) return null;
+
+  double grid(double value) =>
+      gridMm > 0 ? (value / gridMm).round() * gridMm : value;
+  return SnapTarget(
+    at: Offset(
+      x != null ? x.$1 - reference.dx : grid(at.dx),
+      y != null ? y.$1 - reference.dy : grid(at.dy),
+    ),
+    label: {if (x != null) x.$2, if (y != null) y.$2}.join(' · '),
+    strong: true,
+  );
 }
 
 /// The fixed sight in the middle of the canvas.
@@ -298,6 +435,19 @@ class AimBar extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The point on segment a-b nearest [p].
+Offset _closestOnSegment(Offset p, Offset a, Offset b) {
+  final dx = b.dx - a.dx;
+  final dy = b.dy - a.dy;
+  final lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared < 1e-12) return a;
+  final t = (((p.dx - a.dx) * dx + (p.dy - a.dy) * dy) / lengthSquared).clamp(
+    0.0,
+    1.0,
+  );
+  return Offset(a.dx + t * dx, a.dy + t * dy);
 }
 
 String _mm(double value) {
