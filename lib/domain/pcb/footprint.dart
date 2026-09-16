@@ -52,8 +52,7 @@ enum PadType {
   bool get isPlated => this != PadType.npth;
 
   /// Whether this pad reaches both sides of a two-layer board.
-  bool get spansLayers =>
-      this == PadType.thruHole || this == PadType.npth;
+  bool get spansLayers => this == PadType.thruHole || this == PadType.npth;
 }
 
 /// The outline a pad is drawn with.

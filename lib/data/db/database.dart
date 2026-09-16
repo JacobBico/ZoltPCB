@@ -17,7 +17,9 @@ part 'database.g.dart';
     PartUnits,
     PartPins,
     Nets,
+    NetClasses,
     NetNodes,
+    SchematicWires,
     SymbolLibraries,
     SymbolIndexEntries,
     NetRouteHints,
@@ -42,8 +44,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// The app's persistent database, stored in the application support
   /// directory.
-  factory AppDatabase.open() =>
-      AppDatabase(driftDatabase(name: _databaseName));
+  factory AppDatabase.open() => AppDatabase(driftDatabase(name: _databaseName));
 
   static const _databaseName = 'hintpcb';
 
@@ -54,8 +55,47 @@ class AppDatabase extends _$AppDatabase {
   DriftDatabaseOptions get options =>
       const DriftDatabaseOptions(storeDateTimeAsText: true);
 
+  /// Merges nets that share a name within a project into the oldest of
+  /// them, carrying pins, copper and drawn wires across.
+  ///
+  /// Plain SQL, because it runs inside a migration, before any repository
+  /// can safely be used.
+  Future<void> joinSameNamedNets() async {
+    final groups = await customSelect(
+      "SELECT project_id, name FROM nets WHERE name IS NOT NULL AND name != '' "
+      'GROUP BY project_id, name HAVING COUNT(*) > 1',
+    ).get();
+    for (final group in groups) {
+      final ids = await customSelect(
+        'SELECT id FROM nets WHERE project_id = ? AND name = ? '
+        'ORDER BY created_at',
+        variables: [
+          Variable<String>(group.read<String>('project_id')),
+          Variable<String>(group.read<String>('name')),
+        ],
+      ).get();
+      final keep = ids.first.read<String>('id');
+      for (final row in ids.skip(1)) {
+        final lose = row.read<String>('id');
+        for (final table in const [
+          'net_nodes',
+          'board_tracks',
+          'board_vias',
+          'board_zones',
+          'schematic_wires',
+        ]) {
+          await customStatement(
+            'UPDATE $table SET net_id = ? WHERE net_id = ?',
+            [keep, lose],
+          );
+        }
+        await customStatement('DELETE FROM nets WHERE id = ?', [lose]);
+      }
+    }
+  }
+
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -157,6 +197,17 @@ class AppDatabase extends _$AppDatabase {
       if (from < 12) {
         await m.createTable(boardTexts);
         await m.createIndex(idxBoardTextsProject);
+      }
+      // v13 adds named net classes and drawn schematic wires, and makes a
+      // net's name its identity: two nets both called GND were always meant
+      // to be one, and from here on they are.
+      if (from < 13) {
+        await m.createTable(netClasses);
+        await m.createIndex(idxNetClassesProject);
+        await m.addColumn(nets, nets.netClassId);
+        await m.createTable(schematicWires);
+        await m.createIndex(idxSchematicWiresProject);
+        await joinSameNamedNets();
       }
     },
     beforeOpen: (details) async {

@@ -25,9 +25,8 @@ void main() {
     return part;
   }
 
-  String pin(String reference, String number) => added[reference]!.pins
-      .firstWhere((p) => p.number == number)
-      .id;
+  String pin(String reference, String number) =>
+      added[reference]!.pins.firstWhere((p) => p.number == number).id;
 
   setUp(() async {
     db = AppDatabase.memory();
@@ -53,19 +52,21 @@ void main() {
       expect(await nets.getNets(project.id), hasLength(1));
     });
 
-    test('a third pin joins the existing net rather than making a new one',
-        () async {
-      await addResistor();
-      await addResistor();
-      await addResistor();
+    test(
+      'a third pin joins the existing net rather than making a new one',
+      () async {
+        await addResistor();
+        await addResistor();
+        await addResistor();
 
-      final first = await nets.connectPins(pin('R1', '2'), pin('R2', '1'));
-      final second = await nets.connectPins(pin('R2', '1'), pin('R3', '1'));
+        final first = await nets.connectPins(pin('R1', '2'), pin('R2', '1'));
+        final second = await nets.connectPins(pin('R2', '1'), pin('R3', '1'));
 
-      expect(second.net.id, first.net.id);
-      expect(second.endpoints, hasLength(3));
-      expect(await nets.getNets(project.id), hasLength(1));
-    });
+        expect(second.net.id, first.net.id);
+        expect(second.endpoints, hasLength(3));
+        expect(await nets.getNets(project.id), hasLength(1));
+      },
+    );
 
     test('the new pin can be given first and still joins', () async {
       await addResistor();
@@ -79,18 +80,20 @@ void main() {
       expect(second.endpoints, hasLength(3));
     });
 
-    test('connecting two pins already on the same net changes nothing',
-        () async {
-      await addResistor();
-      await addResistor();
+    test(
+      'connecting two pins already on the same net changes nothing',
+      () async {
+        await addResistor();
+        await addResistor();
 
-      final first = await nets.connectPins(pin('R1', '2'), pin('R2', '1'));
-      final again = await nets.connectPins(pin('R1', '2'), pin('R2', '1'));
+        final first = await nets.connectPins(pin('R1', '2'), pin('R2', '1'));
+        final again = await nets.connectPins(pin('R1', '2'), pin('R2', '1'));
 
-      expect(again.net.id, first.net.id);
-      expect(again.endpoints, hasLength(2));
-      expect(await db.select(db.netNodes).get(), hasLength(2));
-    });
+        expect(again.net.id, first.net.id);
+        expect(again.endpoints, hasLength(2));
+        expect(await db.select(db.netNodes).get(), hasLength(2));
+      },
+    );
 
     test('a pin cannot connect to itself', () async {
       await addResistor();
@@ -154,17 +157,19 @@ void main() {
       expect(merged.net.id, a.net.id);
     });
 
-    test('a named net wins over an anonymous one, whichever side it is on',
-        () async {
-      final (_, b) = await twoNets();
-      await nets.renameNet(b.net.id, 'VCC');
+    test(
+      'a named net wins over an anonymous one, whichever side it is on',
+      () async {
+        final (_, b) = await twoNets();
+        await nets.renameNet(b.net.id, 'VCC');
 
-      final merged = await nets.connectPins(pin('R2', '1'), pin('R3', '1'));
+        final merged = await nets.connectPins(pin('R2', '1'), pin('R3', '1'));
 
-      expect(merged.net.id, b.net.id);
-      expect(merged.net.name, 'VCC');
-      expect(merged.endpoints, hasLength(4));
-    });
+        expect(merged.net.id, b.net.id);
+        expect(merged.net.name, 'VCC');
+        expect(merged.endpoints, hasLength(4));
+      },
+    );
 
     test('the older label wins when both nets are named', () async {
       final (a, b) = await twoNets();

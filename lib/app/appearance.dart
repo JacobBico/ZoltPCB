@@ -80,10 +80,7 @@ enum BoardEditorStyle {
     'A crosshair you aim by moving the board — every point placed exactly, '
         'never under your finger',
   ),
-  classic(
-    'Classic',
-    'The original: drag and tap directly on the board',
-  );
+  classic('Classic', 'The original: drag and tap directly on the board');
 
   const BoardEditorStyle(this.label, this.description);
 

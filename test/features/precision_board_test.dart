@@ -63,7 +63,9 @@ Future<void> _aimAt(WidgetTester tester, Offset board) async {
   if (residual().distance < 0.2) return;
 
   final rect = tester.getRect(find.byType(PrecisionBoardPanel));
-  final gesture = await tester.startGesture(rect.topLeft + const Offset(80, 150));
+  final gesture = await tester.startGesture(
+    rect.topLeft + const Offset(80, 150),
+  );
   await tester.pump(const Duration(milliseconds: 16));
   // Far enough to be recognised as a drag rather than a tap.
   await gesture.moveBy(const Offset(60, 0));
@@ -625,12 +627,14 @@ void main() {
     // Nothing under the sight to begin with, so the button is dead.
     await _aimAt(tester, const Offset(33, 47));
     expect(
-      tester.widget<InkWell>(
-        find.ancestor(
-          of: find.text('Delete'),
-          matching: find.byType(InkWell),
-        ),
-      ).onTap,
+      tester
+          .widget<InkWell>(
+            find.ancestor(
+              of: find.text('Delete'),
+              matching: find.byType(InkWell),
+            ),
+          )
+          .onTap,
       isNull,
     );
 
@@ -682,8 +686,11 @@ void main() {
       await settleApp(tester);
 
       final tracks = await boards.getTracks(project.id);
-      expect(tracks.length, greaterThanOrEqualTo(2),
-          reason: 'a stray-angle target needs a run and a 45');
+      expect(
+        tracks.length,
+        greaterThanOrEqualTo(2),
+        reason: 'a stray-angle target needs a run and a 45',
+      );
 
       for (final track in tracks) {
         final dx = track.endX - track.startX;
@@ -955,51 +962,56 @@ void main() {
       expect((one.y - 33).abs(), lessThanOrEqualTo(0.5));
     });
 
-    testAppWithStorage('the chip goes once everything is down, but Parts stays',
-        (tester, db, storage) async {
-      // A button that can only tell you there is nothing to do is a button
-      // taking up room on a strip that has none to spare — but changing a
-      // footprint afterwards still has to be possible.
-      final footprintStorage = InMemoryLibraryStorageFor();
-      final project = await ProjectRepository(db).create(name: 'Done');
-      final parts = PartRepository(db);
-      final boards = BoardRepository(db);
-      await FootprintLibraryRepository(
-        db,
-        footprintStorage,
-      ).import(nickname: 'Test', sources: twoPadFootprintSources());
+    testAppWithStorage(
+      'the chip goes once everything is down, but Parts stays',
+      (tester, db, storage) async {
+        // A button that can only tell you there is nothing to do is a button
+        // taking up room on a strip that has none to spare — but changing a
+        // footprint afterwards still has to be possible.
+        final footprintStorage = InMemoryLibraryStorageFor();
+        final project = await ProjectRepository(db).create(name: 'Done');
+        final parts = PartRepository(db);
+        final boards = BoardRepository(db);
+        await FootprintLibraryRepository(
+          db,
+          footprintStorage,
+        ).import(nickname: 'Test', sources: twoPadFootprintSources());
 
-      final r1 = await parts.addPart(
-        project.id,
-        resistorSpec(footprint: 'Test:TwoPad'),
-      );
-      final ref = await boards.assignFootprint(
-        projectId: project.id,
-        partId: r1.part.id,
-        libId: 'Test:TwoPad',
-      );
-      await boards.updatePlacement(ref.copyWith(x: 35, y: 35, placed: true));
+        final r1 = await parts.addPart(
+          project.id,
+          resistorSpec(footprint: 'Test:TwoPad'),
+        );
+        final ref = await boards.assignFootprint(
+          projectId: project.id,
+          partId: r1.part.id,
+          libId: 'Test:TwoPad',
+        );
+        await boards.updatePlacement(ref.copyWith(x: 35, y: 35, placed: true));
 
-      await pumpApp(
-        tester,
-        Scaffold(body: PrecisionBoardPanel(project: project)),
-        database: db,
-        footprintStorage: footprintStorage,
-      );
+        await pumpApp(
+          tester,
+          Scaffold(body: PrecisionBoardPanel(project: project)),
+          database: db,
+          footprintStorage: footprintStorage,
+        );
 
-      expect(find.textContaining('to place'), findsNothing);
+        expect(find.textContaining('to place'), findsNothing);
 
-      // Still reachable, with the footprint still changeable.
-      await tester.tap(find.byTooltip('More'));
-      await settleApp(tester);
-      expect(find.text('Parts and footprints'), findsOneWidget);
-      expect(find.text('All placed — change a footprint here'), findsOneWidget);
+        // Still reachable, with the footprint still changeable.
+        await tester.tap(find.byTooltip('More'));
+        await settleApp(tester);
+        expect(find.text('Parts and footprints'), findsOneWidget);
+        expect(
+          find.text('All placed — change a footprint here'),
+          findsOneWidget,
+        );
 
-      await tester.tap(find.text('Parts and footprints'));
-      await settleApp(tester);
-      expect(find.text('R1  10k'), findsOneWidget);
-      expect(find.text('SHOW'), findsOneWidget);
-    });
+        await tester.tap(find.text('Parts and footprints'));
+        await settleApp(tester);
+        expect(find.text('R1  10k'), findsOneWidget);
+        expect(find.text('SHOW'), findsOneWidget);
+      },
+    );
 
     testAppWithStorage('a new component makes the chip come back', (
       tester,
@@ -1053,10 +1065,7 @@ void main() {
         footprintStorage,
       ).import(nickname: 'Test', sources: twoPadFootprintSources());
       // Names nothing the library has.
-      await PartRepository(db).addPart(
-        project.id,
-        resistorSpec(footprint: ''),
-      );
+      await PartRepository(db).addPart(project.id, resistorSpec(footprint: ''));
 
       await pumpApp(
         tester,
@@ -1174,8 +1183,10 @@ void main() {
 
       var texts = await boards.getTexts(project.id);
       expect(texts.single.content, 'HINTPCB');
-      expect((texts.single.position - const Offset(33, 45)).distance,
-          lessThanOrEqualTo(0.5));
+      expect(
+        (texts.single.position - const Offset(33, 45)).distance,
+        lessThanOrEqualTo(0.5),
+      );
 
       // Selected on adding, so it can be moved straight away.
       await tester.tap(find.text('Move'));
@@ -1185,15 +1196,21 @@ void main() {
       await settleApp(tester);
 
       texts = await boards.getTexts(project.id);
-      expect((texts.single.position - const Offset(36, 47)).distance,
-          lessThanOrEqualTo(0.5));
+      expect(
+        (texts.single.position - const Offset(36, 47)).distance,
+        lessThanOrEqualTo(0.5),
+      );
 
       await tester.tap(find.text('Delete'));
       await settleApp(tester);
       expect(await boards.getTexts(project.id), isEmpty);
     });
 
-    testAppWithStorage('a designator can be hidden', (tester, db, storage) async {
+    testAppWithStorage('a designator can be hidden', (
+      tester,
+      db,
+      storage,
+    ) async {
       final footprintStorage = InMemoryLibraryStorageFor();
       final (project, boards) = await _board(db, footprintStorage);
 
@@ -1252,11 +1269,13 @@ void main() {
       await tester.tap(find.text('DROP'));
       await settleApp(tester);
 
-      final moved = (await boards.getFootprints(project.id))
-          .firstWhere((p) => p.x == 30);
+      final moved = (await boards.getFootprints(
+        project.id,
+      )).firstWhere((p) => p.x == 30);
       expect(moved.labelOffset, isNotNull);
-      final lands = FootprintPlacement.of(moved)
-          .apply(moved.labelOffset!.dx, moved.labelOffset!.dy);
+      final lands = FootprintPlacement.of(
+        moved,
+      ).apply(moved.labelOffset!.dx, moved.labelOffset!.dy);
       expect((lands - const Offset(30, 30)).distance, lessThanOrEqualTo(0.5));
     });
   });
@@ -1338,13 +1357,13 @@ void main() {
 
     final scene = _painter(tester).scene;
     final part = scene.footprints.firstWhere((f) => f.ref.id == tapped.ref.id);
-    final placed = (await boards.getFootprints(project.id))
-        .firstWhere((p) => p.id == part.ref.id);
-    final middle = FootprintPlacement.of(placed)
-        .apply(
-          footprintBounds(part.definition!).center.dx,
-          footprintBounds(part.definition!).center.dy,
-        );
+    final placed = (await boards.getFootprints(
+      project.id,
+    )).firstWhere((p) => p.id == part.ref.id);
+    final middle = FootprintPlacement.of(placed).apply(
+      footprintBounds(part.definition!).center.dx,
+      footprintBounds(part.definition!).center.dy,
+    );
     final centre = scene.outline.bounds.center;
     expect((middle - centre).distance, lessThan(1e-6));
   });

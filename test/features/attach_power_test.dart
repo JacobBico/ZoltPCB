@@ -61,10 +61,10 @@ void main() {
     // One net, holding the resistor pin and the ground pin and nothing else.
     final allNets = await nets.getNets(project.id);
     expect(allNets, hasLength(1));
-    expect(
-      allNets.single.endpoints.map((e) => e.pin.id).toSet(),
-      {r1.pins.first.id, placed.part.pins.single.id},
-    );
+    expect(allNets.single.endpoints.map((e) => e.pin.id).toSet(), {
+      r1.pins.first.id,
+      placed.part.pins.single.id,
+    });
   });
 
   test('the symbol lands on the side the wire leaves the pin', () async {
@@ -135,10 +135,7 @@ void main() {
     final result = await ground(r1.pins.first, libId: 'power:MISSING');
 
     expect(result, isA<AttachPowerFailed>());
-    expect(
-      (result as AttachPowerFailed).reason,
-      AttachPowerFailure.unreadable,
-    );
+    expect((result as AttachPowerFailed).reason, AttachPowerFailure.unreadable);
     // Nothing was added along the way.
     expect(await parts.getPartsWithDetails(project.id), hasLength(1));
     expect(await nets.getNets(project.id), isEmpty);

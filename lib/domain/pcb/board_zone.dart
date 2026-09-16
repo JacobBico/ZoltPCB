@@ -80,8 +80,7 @@ class BoardZone {
       final a = points[i];
       final b = points[j];
       if ((a.dy > point.dy) != (b.dy > point.dy) &&
-          point.dx <
-              (b.dx - a.dx) * (point.dy - a.dy) / (b.dy - a.dy) + a.dx) {
+          point.dx < (b.dx - a.dx) * (point.dy - a.dy) / (b.dy - a.dy) + a.dx) {
         inside = !inside;
       }
     }

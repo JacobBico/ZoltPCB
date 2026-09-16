@@ -56,7 +56,9 @@ abstract final class FootprintImport {
         type: FileType.any,
       );
     } catch (error) {
-      return FootprintImportResult(failed: ['Could not open the picker: $error']);
+      return FootprintImportResult(
+        failed: ['Could not open the picker: $error'],
+      );
     }
     if (picked.isEmpty) return const FootprintImportResult(cancelled: true);
 
@@ -93,19 +95,14 @@ abstract final class FootprintImport {
     }
 
     if (loose.isNotEmpty) {
-      final suggestion = FootprintLibraryReader.nicknameFor(
-        loose.keys.first,
-      );
+      final suggestion = FootprintLibraryReader.nicknameFor(loose.keys.first);
       final nickname = askNickname == null
           ? suggestion
           : await askNickname(suggestion);
       if (nickname != null && nickname.trim().isNotEmpty) {
         try {
           imported.add(
-            await repository.import(
-              nickname: nickname.trim(),
-              sources: loose,
-            ),
+            await repository.import(nickname: nickname.trim(), sources: loose),
           );
         } on LibraryImportException catch (e) {
           failed.add(e.message);
@@ -139,8 +136,9 @@ abstract final class FootprintImport {
       final name = entry.name;
       if (!name.toLowerCase().endsWith('.kicad_mod')) continue;
       // Skip the junk archivers add.
-      if (name.split('/').any((part) => part.startsWith('.') ||
-          part == '__MACOSX')) {
+      if (name
+          .split('/')
+          .any((part) => part.startsWith('.') || part == '__MACOSX')) {
         continue;
       }
 

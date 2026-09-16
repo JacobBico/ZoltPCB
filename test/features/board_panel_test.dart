@@ -195,73 +195,75 @@ void _pinchZoomTests() {
   // already-zoomed view on every frame compounded it. This drives a real
   // two-finger gesture — something adb cannot synthesise — and checks the
   // zoom lands where the fingers say it should.
-  testAppWithStorage('a two-finger pinch zooms by the pinch, not exponentially',
-      (tester, db, storage) async {
-    final project = await ProjectRepository(db).create(name: 'P');
-    await PartRepository(db).addPart(project.id, resistorSpec());
+  testAppWithStorage(
+    'a two-finger pinch zooms by the pinch, not exponentially',
+    (tester, db, storage) async {
+      final project = await ProjectRepository(db).create(name: 'P');
+      await PartRepository(db).addPart(project.id, resistorSpec());
 
-    await pumpApp(
-      tester,
-      Scaffold(body: BoardPanel(project: project)),
-      database: db,
-      storage: storage,
-    );
-
-    double zoom() {
-      final paint = tester.widget<CustomPaint>(
-        find
-            .descendant(
-              of: find.byType(BoardPanel),
-              matching: find.byType(CustomPaint),
-            )
-            .first,
+      await pumpApp(
+        tester,
+        Scaffold(body: BoardPanel(project: project)),
+        database: db,
+        storage: storage,
       );
-      return (paint.painter! as BoardPainter).viewport.pixelsPerMm;
-    }
 
-    final centre = tester.getCenter(find.byType(BoardPanel));
+      double zoom() {
+        final paint = tester.widget<CustomPaint>(
+          find
+              .descendant(
+                of: find.byType(BoardPanel),
+                matching: find.byType(CustomPaint),
+              )
+              .first,
+        );
+        return (paint.painter! as BoardPainter).viewport.pixelsPerMm;
+      }
 
-    final first = await tester.startGesture(centre - const Offset(50, 0));
-    final second = await tester.startGesture(
-      centre + const Offset(50, 0),
-      pointer: 2,
-    );
+      final centre = tester.getCenter(find.byType(BoardPanel));
 
-    Future<void> spreadTo(double halfSpan) async {
-      await first.moveTo(centre - Offset(halfSpan, 0));
-      await second.moveTo(centre + Offset(halfSpan, 0));
-      await tester.pump(const Duration(milliseconds: 16));
-    }
+      final first = await tester.startGesture(centre - const Offset(50, 0));
+      final second = await tester.startGesture(
+        centre + const Offset(50, 0),
+        pointer: 2,
+      );
 
-    // Get the pinch recognised first. Flutter measures scale from the span
-    // at recognition, not from first contact, so the opening few pixels are
-    // a dead zone in every app — that part is the framework's business.
-    for (var half = 55.0; half <= 80; half += 5) {
-      await spreadTo(half);
-    }
-    final zoomAtMid = zoom();
+      Future<void> spreadTo(double halfSpan) async {
+        await first.moveTo(centre - Offset(halfSpan, 0));
+        await second.moveTo(centre + Offset(halfSpan, 0));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
 
-    // From here the zoom has to track the fingers exactly, frame after
-    // frame. Compounding — the reported bug — shows up as this ratio
-    // growing geometrically with the number of frames instead.
-    const midSpan = 160.0;
-    const endSpan = 320.0;
-    for (var half = 85.0; half <= endSpan / 2; half += 5) {
-      await spreadTo(half);
-    }
-    final zoomAtEnd = zoom();
+      // Get the pinch recognised first. Flutter measures scale from the span
+      // at recognition, not from first contact, so the opening few pixels are
+      // a dead zone in every app — that part is the framework's business.
+      for (var half = 55.0; half <= 80; half += 5) {
+        await spreadTo(half);
+      }
+      final zoomAtMid = zoom();
 
-    await first.up();
-    await second.up();
-    await settleApp(tester);
+      // From here the zoom has to track the fingers exactly, frame after
+      // frame. Compounding — the reported bug — shows up as this ratio
+      // growing geometrically with the number of frames instead.
+      const midSpan = 160.0;
+      const endSpan = 320.0;
+      for (var half = 85.0; half <= endSpan / 2; half += 5) {
+        await spreadTo(half);
+      }
+      final zoomAtEnd = zoom();
 
-    final ratio = zoomAtEnd / zoomAtMid;
-    expect(
-      ratio,
-      closeTo(endSpan / midSpan, 0.05),
-      reason: 'spreading the fingers 2x zoomed ${ratio}x',
-    );
-  });
+      await first.up();
+      await second.up();
+      await settleApp(tester);
+
+      final ratio = zoomAtEnd / zoomAtMid;
+      expect(
+        ratio,
+        closeTo(endSpan / midSpan, 0.05),
+        reason: 'spreading the fingers 2x zoomed ${ratio}x',
+      );
+    },
+  );
 }
 
 /// A small routed-or-routable board: two resistors 15 mm apart, joined by
@@ -275,10 +277,10 @@ Future<({String projectId, Project project})> _twoResistorBoard(
   final nets = NetRepository(db);
   final boards = BoardRepository(db);
 
-  await FootprintLibraryRepository(db, footprintStorage).import(
-    nickname: 'Test',
-    sources: twoPadFootprintSources(),
-  );
+  await FootprintLibraryRepository(
+    db,
+    footprintStorage,
+  ).import(nickname: 'Test', sources: twoPadFootprintSources());
 
   final r1 = await parts.addPart(project.id, resistorSpec());
   final r2 = await parts.addPart(project.id, resistorSpec());
@@ -302,12 +304,11 @@ Future<({String projectId, Project project})> _twoResistorBoard(
   return (projectId: project.id, project: project);
 }
 
-BoardPainter _boardPainter(WidgetTester tester) =>
-    tester
-            .widgetList<CustomPaint>(find.byType(CustomPaint))
-            .map((w) => w.painter)
-            .whereType<BoardPainter>()
-            .single;
+BoardPainter _boardPainter(WidgetTester tester) => tester
+    .widgetList<CustomPaint>(find.byType(CustomPaint))
+    .map((w) => w.painter)
+    .whereType<BoardPainter>()
+    .single;
 
 void _gestureTests() {
   // Reported: dragging a footprint was "laggy". It was worse than lag — the
@@ -428,8 +429,10 @@ void _padTapTests() {
     return (painter: _boardPainter(tester), projectId: setup.projectId);
   }
 
-  Offset screenOf(BoardPainter painter, String label) => painter.viewport
-      .toScreen(painter.scene.pads.firstWhere((p) => p.label == label).position);
+  Offset screenOf(BoardPainter painter, String label) =>
+      painter.viewport.toScreen(
+        painter.scene.pads.firstWhere((p) => p.label == label).position,
+      );
 
   testAppWithStorage('tapping one pad then another routes between them', (
     tester,

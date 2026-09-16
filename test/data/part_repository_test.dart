@@ -274,8 +274,10 @@ void _editingTests() {
       final restored = await parts.getPartWithDetails(r1.part.id);
       expect(restored, isNotNull);
       expect(restored!.part.reference, r1.part.reference);
-      expect(restored.pins.map((p) => p.id).toSet(),
-          r1.pins.map((p) => p.id).toSet());
+      expect(
+        restored.pins.map((p) => p.id).toSet(),
+        r1.pins.map((p) => p.id).toSet(),
+      );
 
       final restoredNets = await nets.getNets(project.id);
       expect(restoredNets, hasLength(1));
@@ -331,18 +333,20 @@ void _editingTests() {
       }
     });
 
-    test('a duplicate is offset from the original, not stacked on it',
-        () async {
-      final original = await parts.addPart(project.id, resistorSpec());
-      await parts.updateUnitPlacement(
-        original.units.first.copyWith(x: 50, y: 50, placed: true),
-      );
+    test(
+      'a duplicate is offset from the original, not stacked on it',
+      () async {
+        final original = await parts.addPart(project.id, resistorSpec());
+        await parts.updateUnitPlacement(
+          original.units.first.copyWith(x: 50, y: 50, placed: true),
+        );
 
-      final copy = await parts.duplicatePart(original.part.id);
+        final copy = await parts.duplicatePart(original.part.id);
 
-      expect(copy!.units.first.x, isNot(50));
-      expect(copy.units.first.placed, isTrue);
-    });
+        expect(copy!.units.first.x, isNot(50));
+        expect(copy.units.first.placed, isTrue);
+      },
+    );
 
     test('pasting places the part where it was asked for', () async {
       final source = await parts.addPart(project.id, resistorSpec());

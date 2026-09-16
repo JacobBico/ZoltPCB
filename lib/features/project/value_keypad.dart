@@ -55,7 +55,9 @@ class ValueKeypad extends StatelessWidget {
     final next = dot >= 0
         ? text.replaceRange(dot, dot + 1, prefix)
         : '$text$prefix';
-    final trimmed = next.endsWith('.') ? next.substring(0, next.length - 1) : next;
+    final trimmed = next.endsWith('.')
+        ? next.substring(0, next.length - 1)
+        : next;
     controller.value = TextEditingValue(
       text: trimmed,
       selection: TextSelection.collapsed(offset: trimmed.length),
@@ -178,12 +180,15 @@ class _Key extends StatelessWidget {
             ),
             child: Text(
               label,
-              style: (dense ? theme.textTheme.bodyMedium : theme.textTheme.titleMedium)
-                  ?.copyWith(
-                    color: accent
-                        ? KicadPalette.highlight
-                        : KicadPalette.textPrimary,
-                  ),
+              style:
+                  (dense
+                          ? theme.textTheme.bodyMedium
+                          : theme.textTheme.titleMedium)
+                      ?.copyWith(
+                        color: accent
+                            ? KicadPalette.highlight
+                            : KicadPalette.textPrimary,
+                      ),
             ),
           ),
         ),

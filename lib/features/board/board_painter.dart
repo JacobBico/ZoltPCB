@@ -25,6 +25,8 @@ class BoardPainter extends CustomPainter {
     this.highlightedNetId,
     this.pendingRoute = const [],
     this.pendingLayer,
+    this.pendingWidth,
+    this.routeClashes = const [],
     this.showRatsnest = true,
     this.showOutlineGrips = false,
     this.draggingOutline = false,
@@ -72,6 +74,12 @@ class BoardPainter extends CustomPainter {
   /// The route the finger is drawing, in board millimetres.
   final List<Offset> pendingRoute;
   final CopperLayer? pendingLayer;
+
+  /// Width the route will be laid at; the design rule when null.
+  final double? pendingWidth;
+
+  /// Where the route being drawn is too close to other copper.
+  final List<RouteClash> routeClashes;
 
   final bool showRatsnest;
 
@@ -271,13 +279,12 @@ class BoardPainter extends CustomPainter {
   Path _outlinePath() {
     final outline = scene.outline;
     if (outline.kind == BoardOutlineKind.circle) {
-      return Path()
-        ..addOval(
-          Rect.fromCircle(
-            center: viewport.toScreen(outline.center),
-            radius: viewport.lengthToScreen(outline.radius),
-          ),
-        );
+      return Path()..addOval(
+        Rect.fromCircle(
+          center: viewport.toScreen(outline.center),
+          radius: viewport.lengthToScreen(outline.radius),
+        ),
+      );
     }
     final corners = outline.path;
     final path = Path();
@@ -590,7 +597,11 @@ class BoardPainter extends CustomPainter {
 
       if (isCentre) {
         canvas
-          ..drawCircle(screen, size / 2, Paint()..color = KicadPalette.boardCanvas)
+          ..drawCircle(
+            screen,
+            size / 2,
+            Paint()..color = KicadPalette.boardCanvas,
+          )
           ..drawCircle(
             screen,
             size / 2,
@@ -642,10 +653,7 @@ class BoardPainter extends CustomPainter {
         viewport.toScreen(Offset(track.endX, track.endY)),
         Paint()
           ..color = color
-          ..strokeWidth = math.max(
-            1.0,
-            viewport.lengthToScreen(track.width),
-          )
+          ..strokeWidth = math.max(1.0, viewport.lengthToScreen(track.width))
           ..strokeCap = StrokeCap.round,
       );
 
@@ -735,12 +743,20 @@ class BoardPainter extends CustomPainter {
         ..strokeWidth = 1.2,
     );
     canvas
-      ..drawLine(rect.topLeft, rect.bottomRight, Paint()
-        ..color = KicadPalette.error
-        ..strokeWidth = 1)
-      ..drawLine(rect.topRight, rect.bottomLeft, Paint()
-        ..color = KicadPalette.error
-        ..strokeWidth = 1);
+      ..drawLine(
+        rect.topLeft,
+        rect.bottomRight,
+        Paint()
+          ..color = KicadPalette.error
+          ..strokeWidth = 1,
+      )
+      ..drawLine(
+        rect.topRight,
+        rect.bottomLeft,
+        Paint()
+          ..color = KicadPalette.error
+          ..strokeWidth = 1,
+      );
     _paintReference(canvas, footprint, selected: selected);
   }
 
@@ -803,8 +819,10 @@ class BoardPainter extends CustomPainter {
   }
 
   Color? _graphicColor(BoardLayer? layer) => switch (layer) {
-    BoardLayer.frontSilk || BoardLayer.backSilk => KicadPalette.silkscreen
-        .withValues(alpha: layer == BoardLayer.frontSilk ? 0.9 : 0.45),
+    BoardLayer.frontSilk ||
+    BoardLayer.backSilk => KicadPalette.silkscreen.withValues(
+      alpha: layer == BoardLayer.frontSilk ? 0.9 : 0.45,
+    ),
     BoardLayer.frontCourtyard ||
     BoardLayer.backCourtyard => KicadPalette.courtyard.withValues(alpha: 0.5),
     BoardLayer.frontFab ||
@@ -904,9 +922,7 @@ class BoardPainter extends CustomPainter {
     final base = ref.flipped
         ? KicadPalette.silkscreen.withValues(alpha: 0.45)
         : KicadPalette.silkscreen;
-    final color = labelSelected || selected
-        ? KicadPalette.highlight
-        : base;
+    final color = labelSelected || selected ? KicadPalette.highlight : base;
 
     _paintSilkText(
       canvas,
@@ -1025,16 +1041,29 @@ class BoardPainter extends CustomPainter {
       ..color = colorFor(layer).withValues(alpha: 0.85)
       ..strokeWidth = math.max(
         1.5,
-        viewport.lengthToScreen(scene.board.rules.trackWidth),
+        viewport.lengthToScreen(pendingWidth ?? scene.board.rules.trackWidth),
       )
+      ..strokeCap = StrokeCap.round;
+    // Too close to another net: the run turns red, and does not stop.
+    final clashing = {for (final clash in routeClashes) clash.segment};
+    final red = Paint()
+      ..color = KicadPalette.error
+      ..strokeWidth = paint.strokeWidth
       ..strokeCap = StrokeCap.round;
 
     for (var i = 0; i < pendingRoute.length - 1; i++) {
       canvas.drawLine(
         viewport.toScreen(pendingRoute[i]),
         viewport.toScreen(pendingRoute[i + 1]),
-        paint,
+        clashing.contains(i) ? red : paint,
       );
+    }
+    final ring = Paint()
+      ..color = KicadPalette.error
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    for (final clash in routeClashes) {
+      canvas.drawCircle(viewport.toScreen(clash.at), 9, ring);
     }
 
     // Where the route currently ends, so the finger is not the only thing
@@ -1093,6 +1122,8 @@ class BoardPainter extends CustomPainter {
       old.selectedTrackId != selectedTrackId ||
       old.highlightedNetId != highlightedNetId ||
       old.pendingRoute != pendingRoute ||
+      old.pendingWidth != pendingWidth ||
+      old.routeClashes.length != routeClashes.length ||
       old.pendingLayer != pendingLayer ||
       old.showRatsnest != showRatsnest ||
       old.showOutlineGrips != showOutlineGrips ||

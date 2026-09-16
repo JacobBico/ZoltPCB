@@ -77,11 +77,36 @@ abstract final class BoardProjectWriter {
             'via_drill': rules.viaDrill,
             'wire_width': 6,
           },
+          for (final (index, netClass) in document.scene.netClasses.indexed)
+            {
+              'bus_width': 12,
+              'clearance': netClass.clearance ?? rules.clearance,
+              'diff_pair_gap': 0.25,
+              'diff_pair_via_gap': 0.25,
+              'diff_pair_width': 0.2,
+              'line_style': 0,
+              'microvia_diameter': 0.3,
+              'microvia_drill': 0.1,
+              'name': netClass.name,
+              'pcb_color': 'rgba(0, 0, 0, 0.000)',
+              'priority': index,
+              'schematic_color': 'rgba(0, 0, 0, 0.000)',
+              'track_width': netClass.trackWidth,
+              'via_diameter': rules.viaDiameter,
+              'via_drill': rules.viaDrill,
+              'wire_width': 6,
+            },
         ],
         'meta': {'version': 4},
         'net_colors': null,
         'netclass_assignments': null,
-        'netclass_patterns': <Object?>[],
+        // Each net named outright, which is how KiCad records a net put in a
+        // class by hand rather than by a wildcard.
+        'netclass_patterns': [
+          for (final net in document.nets)
+            if (document.scene.classOf(net.net.id) case final netClass?)
+              {'netclass': netClass.name, 'pattern': net.displayName},
+        ],
       },
       'sheets': <Object?>[],
       'text_variables': <String, Object?>{},
@@ -94,8 +119,7 @@ abstract final class BoardProjectWriter {
   static DesignRules? rulesFrom(String json) {
     final decoded = jsonDecode(json);
     if (decoded is! Map) return null;
-    final classes =
-        (decoded['net_settings'] as Map?)?['classes'] as List?;
+    final classes = (decoded['net_settings'] as Map?)?['classes'] as List?;
     final first = classes?.firstOrNull;
     if (first is! Map) return null;
     return DesignRules(

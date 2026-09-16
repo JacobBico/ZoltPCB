@@ -177,92 +177,95 @@ void _reportedConnectionBug() {
 
     tearDown(() async => db.close());
 
-    test('a capacitor pin joined to an opamp pin leaves the other pin free',
-        () async {
-      final cap = await parts.addPart(project.id, resistorSpec());
-      final opamp = await parts.addPart(project.id, dualOpampSpec());
+    test(
+      'a capacitor pin joined to an opamp pin leaves the other pin free',
+      () async {
+        final cap = await parts.addPart(project.id, resistorSpec());
+        final opamp = await parts.addPart(project.id, dualOpampSpec());
 
-      for (final unit in [...cap.units, ...opamp.units]) {
-        await parts.updateUnitPlacement(
-          unit.copyWith(x: 100, y: 100, placed: true),
+        for (final unit in [...cap.units, ...opamp.units]) {
+          await parts.updateUnitPlacement(
+            unit.copyWith(x: 100, y: 100, placed: true),
+          );
+        }
+
+        final capPin1 = cap.pins.firstWhere((p) => p.number == '1');
+        final capPin2 = cap.pins.firstWhere((p) => p.number == '2');
+        final opampPin3 = opamp.pins.firstWhere((p) => p.number == '3');
+
+        await nets.connectPins(capPin1.id, opampPin3.id);
+
+        final netList = await nets.getNets(project.id);
+        expect(netList, hasLength(1), reason: 'one tap pair, one net');
+        expect(netList.single.endpoints.map((e) => e.pin.id).toSet(), {
+          capPin1.id,
+          opampPin3.id,
+        });
+
+        final scene = SchematicScene.build(
+          paper: project.paper,
+          parts: await parts.getPartsWithDetails(project.id),
+          nets: netList,
+          symbols: const {},
         );
-      }
 
-      final capPin1 = cap.pins.firstWhere((p) => p.number == '1');
-      final capPin2 = cap.pins.firstWhere((p) => p.number == '2');
-      final opampPin3 = opamp.pins.firstWhere((p) => p.number == '3');
-
-      await nets.connectPins(capPin1.id, opampPin3.id);
-
-      final netList = await nets.getNets(project.id);
-      expect(netList, hasLength(1), reason: 'one tap pair, one net');
-      expect(
-        netList.single.endpoints.map((e) => e.pin.id).toSet(),
-        {capPin1.id, opampPin3.id},
-      );
-
-      final scene = SchematicScene.build(
-        paper: project.paper,
-        parts: await parts.getPartsWithDetails(project.id),
-        nets: netList,
-        symbols: const {},
-      );
-
-      final netId = netList.single.net.id;
-      final drawn = scene.pinsByNet[netId] ?? const [];
-      expect(
-        drawn.map((p) => p.pin.id).toList(),
-        unorderedEquals([capPin1.id, opampPin3.id]),
-        reason: 'the canvas must draw exactly the two connected pins',
-      );
-
-      final freePin = scene.pins.firstWhere((p) => p.pin.id == capPin2.id);
-      expect(freePin.netId, isNull);
-    });
-
-    test('a shared unit-0 pin is drawn once per net, not once per unit',
-        () async {
-      // The dual opamp's supply pins are common to every unit, so they are
-      // drawn on each placed unit. They must still count as one connection.
-      final opamp = await parts.addPart(project.id, dualOpampSpec());
-      final resistor = await parts.addPart(project.id, resistorSpec());
-      for (final unit in [...opamp.units, ...resistor.units]) {
-        await parts.updateUnitPlacement(
-          unit.copyWith(x: 100, y: 100, placed: true),
+        final netId = netList.single.net.id;
+        final drawn = scene.pinsByNet[netId] ?? const [];
+        expect(
+          drawn.map((p) => p.pin.id).toList(),
+          unorderedEquals([capPin1.id, opampPin3.id]),
+          reason: 'the canvas must draw exactly the two connected pins',
         );
-      }
 
-      final supply = opamp.pins.firstWhere((p) => p.number == '8');
-      expect(supply.unit, 0, reason: 'fixture models a shared supply pin');
+        final freePin = scene.pins.firstWhere((p) => p.pin.id == capPin2.id);
+        expect(freePin.netId, isNull);
+      },
+    );
 
-      await nets.connectPins(
-        supply.id,
-        resistor.pins.firstWhere((p) => p.number == '1').id,
-      );
+    test(
+      'a shared unit-0 pin is drawn once per net, not once per unit',
+      () async {
+        // The dual opamp's supply pins are common to every unit, so they are
+        // drawn on each placed unit. They must still count as one connection.
+        final opamp = await parts.addPart(project.id, dualOpampSpec());
+        final resistor = await parts.addPart(project.id, resistorSpec());
+        for (final unit in [...opamp.units, ...resistor.units]) {
+          await parts.updateUnitPlacement(
+            unit.copyWith(x: 100, y: 100, placed: true),
+          );
+        }
 
-      final netList = await nets.getNets(project.id);
-      final scene = SchematicScene.build(
-        paper: project.paper,
-        parts: await parts.getPartsWithDetails(project.id),
-        nets: netList,
-        symbols: const {},
-      );
+        final supply = opamp.pins.firstWhere((p) => p.number == '8');
+        expect(supply.unit, 0, reason: 'fixture models a shared supply pin');
 
-      final drawn = scene.pinsByNet[netList.single.net.id] ?? const [];
-      expect(
-        drawn.map((p) => p.pin.id).toSet(),
-        hasLength(2),
-        reason: 'two distinct pins are on this net',
-      );
-      expect(
-        drawn,
-        hasLength(2),
-        reason: 'the shared pin must not be duplicated per placed unit',
-      );
-    });
+        await nets.connectPins(
+          supply.id,
+          resistor.pins.firstWhere((p) => p.number == '1').id,
+        );
+
+        final netList = await nets.getNets(project.id);
+        final scene = SchematicScene.build(
+          paper: project.paper,
+          parts: await parts.getPartsWithDetails(project.id),
+          nets: netList,
+          symbols: const {},
+        );
+
+        final drawn = scene.pinsByNet[netList.single.net.id] ?? const [];
+        expect(
+          drawn.map((p) => p.pin.id).toSet(),
+          hasLength(2),
+          reason: 'two distinct pins are on this net',
+        );
+        expect(
+          drawn,
+          hasLength(2),
+          reason: 'the shared pin must not be duplicated per placed unit',
+        );
+      },
+    );
   });
 }
-
 
 /// Tap resolution: the rule that decides which pin a finger meant, and when
 /// it should decline to guess.
@@ -399,7 +402,6 @@ void _tapResolutionTests() {
   });
 }
 
-
 /// Wires: the scene routes each net connection so the canvas can both draw
 /// and hit-test exactly the same geometry.
 void _wireTests() {
@@ -491,7 +493,11 @@ void _wireTests() {
       final wire = plain.wires.single;
       expect(wire.isAdjustable, isTrue, reason: 'both pins leave vertically');
 
-      final nudged = await sceneNow(hints: {wire.key: const [6.35]});
+      final nudged = await sceneNow(
+        hints: {
+          wire.key: const [6.35],
+        },
+      );
       final moved = nudged.wires.single;
 
       expect(moved.points.first, wire.points.first);
@@ -514,18 +520,19 @@ void _wireTests() {
       expect(scene.wireNear(const Offset(200, 200), 1.0), isNull);
     });
 
-    test('the wire key does not depend on which pin was tapped first',
-        () async {
-      await twoJoinedResistors();
-      final scene = await sceneNow();
-      final wire = scene.wires.single;
+    test(
+      'the wire key does not depend on which pin was tapped first',
+      () async {
+        await twoJoinedResistors();
+        final scene = await sceneNow();
+        final wire = scene.wires.single;
 
-      expect(wire.key, NetRepository.routeKey(wire.pinAId, wire.pinBId));
-      expect(wire.key, NetRepository.routeKey(wire.pinBId, wire.pinAId));
-    });
+        expect(wire.key, NetRepository.routeKey(wire.pinAId, wire.pinBId));
+        expect(wire.key, NetRepository.routeKey(wire.pinBId, wire.pinAId));
+      },
+    );
 
-    test('touching a run resolves that run, not the wire as a whole',
-        () async {
+    test('touching a run resolves that run, not the wire as a whole', () async {
       await twoJoinedResistors();
       final scene = await sceneNow();
       final wire = scene.wires.single;
@@ -544,24 +551,26 @@ void _wireTests() {
       expect(scene.wireHandleNear(const Offset(250, 250), 1.0), isNull);
     });
 
-    test('a wire can be grabbed anywhere along it, not just at its corner',
-        () async {
-      // The stretches either end of a wire must stay attached to their
-      // pins, so they are not movable themselves — but they are most of
-      // what there is to touch. Grabbing one still has to work.
-      await twoJoinedResistors();
-      final scene = await sceneNow();
-      final wire = scene.wires.single;
+    test(
+      'a wire can be grabbed anywhere along it, not just at its corner',
+      () async {
+        // The stretches either end of a wire must stay attached to their
+        // pins, so they are not movable themselves — but they are most of
+        // what there is to touch. Grabbing one still has to work.
+        await twoJoinedResistors();
+        final scene = await sceneNow();
+        final wire = scene.wires.single;
 
-      final firstSegmentMiddle = Offset(
-        (wire.points[0].dx + wire.points[1].dx) / 2,
-        (wire.points[0].dy + wire.points[1].dy) / 2,
-      );
+        final firstSegmentMiddle = Offset(
+          (wire.points[0].dx + wire.points[1].dx) / 2,
+          (wire.points[0].dy + wire.points[1].dy) / 2,
+        );
 
-      final hit = scene.wireHandleNear(firstSegmentMiddle, 1.0);
-      expect(hit, isNotNull);
-      expect(hit!.wire.key, wire.key);
-    });
+        final hit = scene.wireHandleNear(firstSegmentMiddle, 1.0);
+        expect(hit, isNotNull);
+        expect(hit!.wire.key, wire.key);
+      },
+    );
 
     test('a straightened wire can still be grabbed and bent again', () async {
       // Once a wire is straight its movable run has collapsed to a point.

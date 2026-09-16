@@ -92,7 +92,10 @@ void main() {
       FootprintLibraryReader.nicknameFor('/a/b/Resistor_SMD.pretty.zip'),
       'Resistor_SMD',
     );
-    expect(FootprintLibraryReader.nicknameFor('Package_DIP.zip'), 'Package_DIP');
+    expect(
+      FootprintLibraryReader.nicknameFor('Package_DIP.zip'),
+      'Package_DIP',
+    );
   });
 
   group('repository', () {
@@ -151,20 +154,22 @@ void main() {
       expect(eight.every((e) => e.padCount == 8), isTrue);
     });
 
-    test('re-importing a nickname replaces it rather than doubling it',
-        () async {
-      await repository.import(
-        nickname: 'Resistor_SMD',
-        sources: read('Resistor_SMD', limit: 10),
-      );
-      await repository.import(
-        nickname: 'Resistor_SMD',
-        sources: read('Resistor_SMD', limit: 4),
-      );
+    test(
+      're-importing a nickname replaces it rather than doubling it',
+      () async {
+        await repository.import(
+          nickname: 'Resistor_SMD',
+          sources: read('Resistor_SMD', limit: 10),
+        );
+        await repository.import(
+          nickname: 'Resistor_SMD',
+          sources: read('Resistor_SMD', limit: 4),
+        );
 
-      expect(await repository.getLibraries(), hasLength(1));
-      expect(await repository.footprintCount(), 4);
-    });
+        expect(await repository.getLibraries(), hasLength(1));
+        expect(await repository.footprintCount(), 4);
+      },
+    );
 
     test('deleting a library takes its footprints with it', () async {
       final info = await repository.import(

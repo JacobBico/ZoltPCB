@@ -1,5 +1,7 @@
 import 'dart:ui';
 
+import '../models/schematic_wire.dart';
+import 'drawn_wire_geometry.dart';
 import 'wire_router.dart';
 
 /// A pin as the router needs it: a point, and the way a wire leaves it.
@@ -48,7 +50,14 @@ class RoutedWire {
     required this.pinBId,
     required this.points,
     this.handles = const [],
+    this.drawnId,
   });
+
+  /// The stored wire this is, when the user drew or shaped it; null for a
+  /// connection the app routed itself.
+  final String? drawnId;
+
+  bool get isDrawn => drawnId != null;
 
   final String netId;
   final String pinAId;
@@ -62,8 +71,9 @@ class RoutedWire {
 
   bool get isAdjustable => handles.isNotEmpty;
 
-  /// Stable key for the pin pair, matching the stored route hint.
-  String get key => NetRouting.routeKey(pinAId, pinBId);
+  /// Stable key: the stored wire's id when drawn, otherwise the pin pair,
+  /// matching the stored route hint.
+  String get key => drawnId ?? NetRouting.routeKey(pinAId, pinBId);
 
   /// Shortest distance from [point] to the drawn path.
   double distanceTo(Offset point) {
@@ -97,9 +107,7 @@ class RoutedWire {
 abstract final class NetRouting {
   /// Stable key for a pin pair, independent of which end came first.
   static String routeKey(String pinAId, String pinBId) =>
-      pinAId.compareTo(pinBId) <= 0
-      ? '$pinAId|$pinBId'
-      : '$pinBId|$pinAId';
+      pinAId.compareTo(pinBId) <= 0 ? '$pinAId|$pinBId' : '$pinBId|$pinAId';
 
   /// Routes every net in [pinsByNet].
   static List<RoutedWire> routeAll({
@@ -111,6 +119,163 @@ abstract final class NetRouting {
     for (final entry in pinsByNet.entries) {
       wires.addAll(
         routeNet(entry.key, entry.value, obstacles: obstacles, hints: hints),
+      );
+    }
+    return wires;
+  }
+
+  /// Routes a net whose drawing is partly the user's own.
+  ///
+  /// The drawn wires come first, exactly as laid, with their ends pulled
+  /// onto wherever their pins now are. Only what they leave unjoined is
+  /// routed automatically — one connection between each pair of pieces —
+  /// so a net drawn by hand shows no extra wires, and one joined in a hurry
+  /// still shows how it is joined.
+  static List<RoutedWire> routeNetWithDrawn(
+    String netId,
+    List<RoutablePin> pins, {
+    List<SchematicWire> drawn = const [],
+    List<Rect> obstacles = const [],
+    Map<String, List<double>> hints = const {},
+  }) {
+    final byId = {for (final pin in pins) pin.id: pin};
+    final wires = <RoutedWire>[];
+
+    // Pieces of the net already joined, as sets of pin ids.
+    final parent = {for (final pin in pins) pin.id: pin.id};
+    String find(String id) {
+      var root = id;
+      while (parent[root] != root) {
+        root = parent[root]!;
+      }
+      return root;
+    }
+
+    void union(String a, String b) {
+      final ra = find(a);
+      final rb = find(b);
+      if (ra != rb) parent[ra] = rb;
+    }
+
+    final placed = <List<Offset>>[];
+    for (final wire in drawn) {
+      final a = byId[wire.pinAId];
+      final b = byId[wire.pinBId];
+      final points = DrawnWireGeometry.attachEnds(
+        wire.points,
+        start: a?.position,
+        end: b?.position,
+      );
+      if (points.length < 2) continue;
+      placed.add(points);
+      wires.add(
+        RoutedWire(
+          netId: netId,
+          pinAId: wire.pinAId ?? '',
+          pinBId: wire.pinBId ?? '',
+          points: points,
+          drawnId: wire.id,
+        ),
+      );
+    }
+
+    // Drawn wires that touch — end to end, or an end on another's run —
+    // are one piece, and a piece joins every pin at any of its ends. That
+    // is how a wire drawn as several segments, the way a KiCad file stores
+    // one, still counts as a single connection.
+    final groupOf = List<int>.generate(placed.length, (i) => i);
+    int findWire(int i) {
+      while (groupOf[i] != i) {
+        i = groupOf[i];
+      }
+      return i;
+    }
+
+    bool touches(List<Offset> end, List<Offset> other) {
+      for (final point in [end.first, end.last]) {
+        final (_, distance) = DrawnWireGeometry.nearestRun(other, point);
+        if (distance < 0.01) return true;
+      }
+      return false;
+    }
+
+    for (var i = 0; i < placed.length; i++) {
+      for (var j = i + 1; j < placed.length; j++) {
+        if (touches(placed[i], placed[j]) || touches(placed[j], placed[i])) {
+          final ri = findWire(i);
+          final rj = findWire(j);
+          if (ri != rj) groupOf[ri] = rj;
+        }
+      }
+    }
+    final pinsOfGroup = <int, Set<String>>{};
+    for (var i = 0; i < placed.length; i++) {
+      final group = pinsOfGroup[findWire(i)] ??= {};
+      final wire = drawn[i];
+      if (byId.containsKey(wire.pinAId)) group.add(wire.pinAId!);
+      if (byId.containsKey(wire.pinBId)) group.add(wire.pinBId!);
+      for (final pin in pins) {
+        if ((pin.position - placed[i].first).distance < 0.01 ||
+            (pin.position - placed[i].last).distance < 0.01) {
+          group.add(pin.id);
+        }
+      }
+    }
+    for (final group in pinsOfGroup.values) {
+      final members = group.toList();
+      for (final other in members.skip(1)) {
+        union(members.first, other);
+      }
+    }
+
+    // One representative pin list per piece, then a spanning tree between
+    // pieces using the closest pair of pins each time.
+    final groups = <String, List<RoutablePin>>{};
+    for (final pin in pins) {
+      (groups[find(pin.id)] ??= []).add(pin);
+    }
+    final pieces = groups.values.toList();
+    if (pieces.length < 2) return wires;
+
+    final inTree = <int>{0};
+    while (inTree.length < pieces.length) {
+      (RoutablePin, RoutablePin)? bestPair;
+      int? bestPiece;
+      var bestDistance = double.infinity;
+      for (final i in inTree) {
+        for (var j = 0; j < pieces.length; j++) {
+          if (inTree.contains(j)) continue;
+          for (final a in pieces[i]) {
+            for (final b in pieces[j]) {
+              final d = (a.position - b.position).distance;
+              if (d < bestDistance) {
+                bestDistance = d;
+                bestPair = (a, b);
+                bestPiece = j;
+              }
+            }
+          }
+        }
+      }
+      if (bestPair == null || bestPiece == null) break;
+      inTree.add(bestPiece);
+      final (a, b) = bestPair;
+      final route = WireRouter.route(
+        from: a.position,
+        fromExit: a.exitDirection,
+        to: b.position,
+        toExit: b.exitDirection,
+        obstacles: obstacles,
+        offsets: hints[routeKey(a.id, b.id)] ?? const [],
+      );
+      wires.add(
+        RoutedWire(
+          netId: netId,
+          pinAId: a.id,
+          pinBId: b.id,
+          points: route.points,
+          handles: route.handles,
+        ),
       );
     }
     return wires;

@@ -124,9 +124,7 @@ class _EdgeCutEditorState extends State<_EdgeCutEditor> {
 
   static String _mm(double value) {
     final text = value.toStringAsFixed(3);
-    return text.contains('.')
-        ? text.replaceFirst(RegExp(r'\.?0+$'), '')
-        : text;
+    return text.contains('.') ? text.replaceFirst(RegExp(r'\.?0+$'), '') : text;
   }
 
   static double? _parse(TextEditingController c) =>
@@ -376,12 +374,8 @@ class _EdgeCutEditorState extends State<_EdgeCutEditor> {
       actions: [
         if (widget.edge != null)
           TextButton(
-            onPressed: () =>
-                Navigator.of(context).pop(const EdgeCutDeleted()),
-            child: Text(
-              'DELETE',
-              style: TextStyle(color: KicadPalette.error),
-            ),
+            onPressed: () => Navigator.of(context).pop(const EdgeCutDeleted()),
+            child: Text('DELETE', style: TextStyle(color: KicadPalette.error)),
           ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
@@ -401,9 +395,7 @@ class _EdgeCutEditorState extends State<_EdgeCutEditor> {
       decimal: true,
       signed: true,
     ),
-    inputFormatters: [
-      FilteringTextInputFormatter.allow(RegExp(r'[0-9.,\-]')),
-    ],
+    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,\-]'))],
     decoration: InputDecoration(labelText: label, isDense: true),
     onChanged: (_) => setState(() {}),
   );

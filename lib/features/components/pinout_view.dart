@@ -114,9 +114,15 @@ class _PinHeaderRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          SizedBox(width: _PinColumns.number, child: Text('PIN', style: style)),
+          SizedBox(
+            width: _PinColumns.number,
+            child: Text('PIN', style: style),
+          ),
           Expanded(child: Text('NAME', style: style)),
-          SizedBox(width: _PinColumns.type, child: Text('TYPE', style: style)),
+          SizedBox(
+            width: _PinColumns.type,
+            child: Text('TYPE', style: style),
+          ),
           SizedBox(
             width: _PinColumns.unit,
             child: Text('UNIT', style: style, textAlign: TextAlign.right),
@@ -157,9 +163,7 @@ class _PinRow extends StatelessWidget {
           color: highlighted
               ? KicadPalette.highlight.withValues(alpha: 0.10)
               : null,
-          border: Border(
-            bottom: BorderSide(color: KicadPalette.border),
-          ),
+          border: Border(bottom: BorderSide(color: KicadPalette.border)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,

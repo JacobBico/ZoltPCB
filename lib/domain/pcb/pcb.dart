@@ -13,3 +13,4 @@ export '../geometry/placement_finder.dart';
 export 'track_angles.dart';
 export 'track_router.dart';
 export 'track_slide.dart';
+export 'net_class.dart';

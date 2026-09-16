@@ -30,10 +30,18 @@ class PinoutSymbol extends Notifier<String?> {
     final stored = await ref
         .read(settingsRepositoryProvider)
         .get(SettingsRepository.pinoutSymbolKey);
-    if (stored != null && stored.isNotEmpty && state == null) state = stored;
+    // Only a microcontroller is remembered. An older version could send any
+    // part here, and a diode reopening in the pinout explorer was the result.
+    if (stored != null &&
+        stored.isNotEmpty &&
+        state == null &&
+        isMcuLibrary(stored.split(':').first)) {
+      state = stored;
+    }
   }
 
   void select(String? libId) {
+    if (libId != null && !isMcuLibrary(libId.split(':').first)) return;
     state = libId;
     if (libId != null) {
       ref

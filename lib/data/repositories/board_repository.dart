@@ -80,8 +80,8 @@ class BoardRepository {
     return (await query.get()).map(_toFootprint).toList();
   }
 
-  Stream<List<PlacedFootprintRef>> watchFootprints(String projectId) => _db
-      .watchAggregate({_db.boardFootprints}, () => getFootprints(projectId));
+  Stream<List<PlacedFootprintRef>> watchFootprints(String projectId) =>
+      _db.watchAggregate({_db.boardFootprints}, () => getFootprints(projectId));
 
   Future<PlacedFootprintRef?> footprintForPart(String partId) async {
     final row = await (_db.select(
@@ -102,11 +102,9 @@ class BoardRepository {
   }) async {
     final existing = await footprintForPart(partId);
     if (existing != null) {
-      await (_db.update(
-        _db.boardFootprints,
-      )..where((t) => t.id.equals(existing.id))).write(
-        BoardFootprintsCompanion(libId: Value(libId)),
-      );
+      await (_db.update(_db.boardFootprints)
+            ..where((t) => t.id.equals(existing.id)))
+          .write(BoardFootprintsCompanion(libId: Value(libId)));
       return existing.copyWith(libId: libId);
     }
 
@@ -231,18 +229,19 @@ class BoardRepository {
 
   /// Writes a segment's own numbers back.
   Future<void> updateTrack(Track track) async {
-    await (_db.update(_db.boardTracks)..where((t) => t.id.equals(track.id)))
-        .write(
-          BoardTracksCompanion(
-            layer: Value(track.layer.layer.token),
-            startX: Value(track.startX),
-            startY: Value(track.startY),
-            endX: Value(track.endX),
-            endY: Value(track.endY),
-            width: Value(track.width),
-            netId: Value(track.netId),
-          ),
-        );
+    await (_db.update(
+      _db.boardTracks,
+    )..where((t) => t.id.equals(track.id))).write(
+      BoardTracksCompanion(
+        layer: Value(track.layer.layer.token),
+        startX: Value(track.startX),
+        startY: Value(track.startY),
+        endX: Value(track.endX),
+        endY: Value(track.endY),
+        width: Value(track.width),
+        netId: Value(track.netId),
+      ),
+    );
   }
 
   Future<void> updateVia(Via via) async {
@@ -286,8 +285,7 @@ class BoardRepository {
             .write(BoardTracksCompanion(netId: Value(entry.value)));
       }
       for (final entry in vias.entries) {
-        await (_db.update(_db.boardVias)
-              ..where((t) => t.id.equals(entry.key)))
+        await (_db.update(_db.boardVias)..where((t) => t.id.equals(entry.key)))
             .write(BoardViasCompanion(netId: Value(entry.value)));
       }
     });
@@ -395,14 +393,15 @@ class BoardRepository {
   }
 
   Future<void> updateEdge(BoardEdge edge) async {
-    await (_db.update(_db.boardEdges)..where((t) => t.id.equals(edge.id)))
-        .write(
-          BoardEdgesCompanion(
-            kind: Value(edge.kind.name),
-            points: Value(_encodePoints(edge.points)),
-            width: Value(edge.width),
-          ),
-        );
+    await (_db.update(
+      _db.boardEdges,
+    )..where((t) => t.id.equals(edge.id))).write(
+      BoardEdgesCompanion(
+        kind: Value(edge.kind.name),
+        points: Value(_encodePoints(edge.points)),
+        width: Value(edge.width),
+      ),
+    );
   }
 
   Future<void> deleteEdge(String id) async {
@@ -427,6 +426,82 @@ class BoardRepository {
   }
 
   // --- silkscreen text -------------------------------------------------
+
+  // --- net classes -----------------------------------------------------
+
+  Future<List<NetClass>> getNetClasses(String projectId) async {
+    final query = _db.select(_db.netClasses)
+      ..where((t) => t.projectId.equals(projectId))
+      ..orderBy([(t) => OrderingTerm(expression: t.createdAt)]);
+    return [
+      for (final row in await query.get())
+        NetClass(
+          id: row.id,
+          projectId: row.projectId,
+          name: row.name,
+          trackWidth: row.trackWidth,
+          clearance: row.clearance,
+        ),
+    ];
+  }
+
+  Stream<List<NetClass>> watchNetClasses(String projectId) =>
+      _db.watchAggregate({_db.netClasses}, () => getNetClasses(projectId));
+
+  Future<NetClass> addNetClass({
+    required String projectId,
+    required String name,
+    required double trackWidth,
+    double? clearance,
+  }) async {
+    final netClass = NetClass(
+      id: newId(),
+      projectId: projectId,
+      name: name,
+      trackWidth: trackWidth,
+      clearance: clearance,
+    );
+    await _db
+        .into(_db.netClasses)
+        .insert(
+          NetClassesCompanion.insert(
+            id: netClass.id,
+            projectId: projectId,
+            name: name,
+            trackWidth: trackWidth,
+            clearance: Value(clearance),
+            createdAt: DateTime.now(),
+          ),
+        );
+    return netClass;
+  }
+
+  Future<void> updateNetClass(NetClass netClass) async {
+    await (_db.update(
+      _db.netClasses,
+    )..where((t) => t.id.equals(netClass.id))).write(
+      NetClassesCompanion(
+        name: Value(netClass.name),
+        trackWidth: Value(netClass.trackWidth),
+        clearance: Value(netClass.clearance),
+      ),
+    );
+  }
+
+  /// Deletes a class. Its nets go back to the design rules.
+  Future<void> deleteNetClass(String id) async {
+    await (_db.update(_db.nets)..where((t) => t.netClassId.equals(id))).write(
+      const NetsCompanion(netClassId: Value(null)),
+    );
+    await (_db.delete(_db.netClasses)..where((t) => t.id.equals(id))).go();
+  }
+
+  /// Puts [netId] in [netClassId], or back on the design rules for null.
+  Future<void> setNetClass(String netId, String? netClassId) async {
+    await (_db.update(_db.nets)..where((t) => t.id.equals(netId))).write(
+      NetsCompanion(netClassId: Value(netClassId)),
+    );
+  }
 
   Future<List<BoardText>> getTexts(String projectId) async {
     final query = _db.select(_db.boardTexts)
@@ -460,17 +535,18 @@ class BoardRepository {
   }
 
   Future<void> updateText(BoardText text) async {
-    await (_db.update(_db.boardTexts)..where((t) => t.id.equals(text.id)))
-        .write(
-          BoardTextsCompanion(
-            content: Value(text.content),
-            x: Value(text.position.dx),
-            y: Value(text.position.dy),
-            rotation: Value(text.rotation),
-            size: Value(text.size),
-            layer: Value(text.layer.token),
-          ),
-        );
+    await (_db.update(
+      _db.boardTexts,
+    )..where((t) => t.id.equals(text.id))).write(
+      BoardTextsCompanion(
+        content: Value(text.content),
+        x: Value(text.position.dx),
+        y: Value(text.position.dy),
+        rotation: Value(text.rotation),
+        size: Value(text.size),
+        layer: Value(text.layer.token),
+      ),
+    );
   }
 
   Future<void> deleteText(String id) async {
@@ -558,17 +634,18 @@ class BoardRepository {
   }
 
   Future<void> updateZone(BoardZone zone) async {
-    await (_db.update(_db.boardZones)..where((t) => t.id.equals(zone.id)))
-        .write(
-          BoardZonesCompanion(
-            layer: Value(zone.layer.token),
-            netId: Value(zone.netId),
-            netName: Value(zone.netName),
-            points: Value(_encodePoints(zone.points)),
-            clearance: Value(zone.clearance),
-            minThickness: Value(zone.minThickness),
-          ),
-        );
+    await (_db.update(
+      _db.boardZones,
+    )..where((t) => t.id.equals(zone.id))).write(
+      BoardZonesCompanion(
+        layer: Value(zone.layer.token),
+        netId: Value(zone.netId),
+        netName: Value(zone.netName),
+        points: Value(_encodePoints(zone.points)),
+        clearance: Value(zone.clearance),
+        minThickness: Value(zone.minThickness),
+      ),
+    );
   }
 
   Future<void> deleteZone(String id) async {

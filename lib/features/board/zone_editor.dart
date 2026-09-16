@@ -143,12 +143,7 @@ class _ZoneEditorState extends State<_ZoneEditor> {
     final corners = outline.path;
     if (corners.length < 3) {
       final rect = outline.bounds.deflate(inset);
-      return [
-        rect.topLeft,
-        rect.topRight,
-        rect.bottomRight,
-        rect.bottomLeft,
-      ];
+      return [rect.topLeft, rect.topRight, rect.bottomRight, rect.bottomLeft];
     }
 
     // Pulled towards the middle rather than properly offset. A true polygon
@@ -168,9 +163,7 @@ class _ZoneEditorState extends State<_ZoneEditor> {
 
   static String _mm(double value) {
     final text = value.toStringAsFixed(3);
-    return text.contains('.')
-        ? text.replaceFirst(RegExp(r'\.?0+$'), '')
-        : text;
+    return text.contains('.') ? text.replaceFirst(RegExp(r'\.?0+$'), '') : text;
   }
 
   double get _clearanceValue =>
@@ -289,11 +282,7 @@ class _ZoneEditorState extends State<_ZoneEditor> {
                         ),
                         const SizedBox(width: 10),
                         Expanded(
-                          child: _number(
-                            _minThickness,
-                            'Min width mm',
-                            () {},
-                          ),
+                          child: _number(_minThickness, 'Min width mm', () {}),
                         ),
                       ],
                     ),
@@ -368,10 +357,7 @@ class _ZoneEditorState extends State<_ZoneEditor> {
         if (widget.zone != null)
           TextButton(
             onPressed: () => Navigator.of(context).pop(const ZoneDeleted()),
-            child: Text(
-              'DELETE',
-              style: TextStyle(color: KicadPalette.error),
-            ),
+            child: Text('DELETE', style: TextStyle(color: KicadPalette.error)),
           ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),

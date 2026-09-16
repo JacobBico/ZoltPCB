@@ -55,10 +55,7 @@ class EditHistory extends Notifier<EditHistoryState> {
       _projectId = projectId;
       state = const EditHistoryState();
     }
-    state = EditHistoryState(
-      past: [...state.past, action],
-      future: const [],
-    );
+    state = EditHistoryState(past: [...state.past, action], future: const []);
   }
 
   /// Reverses the most recent edit and returns its label.

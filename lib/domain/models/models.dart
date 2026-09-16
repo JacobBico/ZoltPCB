@@ -5,9 +5,11 @@
 /// which keeps the export layer testable without a database.
 library;
 
+export 'circuit_clip.dart';
 export 'net.dart';
 export 'part.dart';
 export 'part_clone.dart';
 export 'part_spec.dart';
 export 'pin.dart';
 export 'project.dart';
+export 'schematic_wire.dart';

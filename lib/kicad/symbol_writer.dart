@@ -197,8 +197,7 @@ abstract final class SymbolWriter {
   }
 
   static SList _points(List<SymbolPoint> points) => S.list('pts', [
-    for (final point in points)
-      S.of('xy', [point.x, point.y]),
+    for (final point in points) S.of('xy', [point.x, point.y]),
   ]);
 
   static SList _stroke(StrokeStyle stroke) => S.list('stroke', [
@@ -234,7 +233,9 @@ abstract final class SymbolWriter {
     }
 
     final keys = byUnit.keys.toList()
-      ..sort((a, b) => a.$1 != b.$1 ? a.$1.compareTo(b.$1) : a.$2.compareTo(b.$2));
+      ..sort(
+        (a, b) => a.$1 != b.$1 ? a.$1.compareTo(b.$1) : a.$2.compareTo(b.$2),
+      );
 
     return SymbolDefinition(
       libraryNickname: part.part.libraryNickname,

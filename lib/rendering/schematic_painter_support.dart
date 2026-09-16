@@ -37,7 +37,10 @@ void drawCanvasText(
   };
   painter.paint(
     canvas,
-    Offset(anchor.dx + dx, anchorAtBottom ? anchor.dy - painter.height : anchor.dy),
+    Offset(
+      anchor.dx + dx,
+      anchorAtBottom ? anchor.dy - painter.height : anchor.dy,
+    ),
   );
   painter.dispose();
 }

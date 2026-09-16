@@ -6,6 +6,9 @@ import '../../core/widgets/app_top_bar.dart';
 import '../../core/widgets/section_rail.dart';
 import '../components/component_browser_panel.dart';
 import '../libraries/libraries_panel.dart';
+import '../library_editors/footprint_editor_panel.dart';
+import '../library_editors/my_library_panel.dart';
+import '../library_editors/symbol_editor_panel.dart';
 import '../pinout/pinout_panel.dart';
 import '../projects/projects_panel.dart';
 import '../settings/settings_panel.dart';
@@ -14,6 +17,9 @@ enum HomeSection {
   projects('Projects'),
   components('Components'),
   pinout('Pinout'),
+  symbols('Symbols'),
+  footprints('Footprints'),
+  myLibrary('My Library'),
   libraries('Libraries'),
   settings('Settings');
 
@@ -97,6 +103,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     label: 'Pinout',
                     icon: Icons.settings_input_component_outlined,
                   ),
+                  const RailEntry(
+                    label: 'Symbols',
+                    icon: Icons.schema_outlined,
+                  ),
+                  const RailEntry(
+                    label: 'Footprints',
+                    icon: Icons.grid_on_outlined,
+                  ),
+                  const RailEntry(
+                    label: 'My Library',
+                    icon: Icons.bookmarks_outlined,
+                  ),
                   RailEntry(
                     label: 'Libraries',
                     icon: Icons.folder_open_outlined,
@@ -117,17 +135,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _action() => switch (_section) {
-    HomeSection.projects => FilledButton.icon(
-      onPressed: () => ProjectsPanel.create(context, ref),
-      icon: const Icon(Icons.add, size: 18),
-      label: const Text('NEW PROJECT'),
+    HomeSection.projects => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        OutlinedButton.icon(
+          onPressed: () => ProjectsPanel.openKicad(context, ref),
+          icon: const Icon(Icons.file_open_outlined, size: 16),
+          label: const Text('OPEN KICAD'),
+        ),
+        const SizedBox(width: 8),
+        FilledButton.icon(
+          onPressed: () => ProjectsPanel.create(context, ref),
+          icon: const Icon(Icons.add, size: 18),
+          label: const Text('NEW PROJECT'),
+        ),
+      ],
     ),
     HomeSection.components => OutlinedButton.icon(
       onPressed: () => _show(HomeSection.libraries),
       icon: const Icon(Icons.folder_open_outlined, size: 16),
       label: const Text('LIBRARIES'),
     ),
-    HomeSection.pinout => const SizedBox.shrink(),
+    HomeSection.pinout ||
+    HomeSection.symbols ||
+    HomeSection.footprints ||
+    HomeSection.myLibrary => const SizedBox.shrink(),
     // The libraries panel has its own import button, which follows the
     // Symbols/Footprints tab. One up here would always import symbols —
     // wrong half the time, and a second button for the same job.
@@ -138,6 +170,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     HomeSection.projects => const ProjectsPanel(),
     HomeSection.components => const ComponentBrowserPanel(),
     HomeSection.pinout => const PinoutPanel(),
+    HomeSection.symbols => const SymbolEditorPanel(),
+    HomeSection.footprints => const FootprintEditorPanel(),
+    HomeSection.myLibrary => const MyLibraryPanel(),
     HomeSection.libraries => const LibrariesPanel(),
     HomeSection.settings => const SettingsPanel(),
   };

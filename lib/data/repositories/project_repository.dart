@@ -85,33 +85,36 @@ class ProjectRepository {
       company: company,
       revision: revision,
     );
-    await _db.into(_db.projects).insert(
-      ProjectsCompanion.insert(
-        id: project.id,
-        name: project.name,
-        description: Value(project.description),
-        paper: Value(project.paper),
-        company: Value(project.company),
-        revision: Value(project.revision),
-        createdAt: project.createdAt,
-        modifiedAt: project.modifiedAt,
-      ),
-    );
-    return project;
-  }
-
-  Future<void> update(Project project) async {
-    await (_db.update(_db.projects)..where((t) => t.id.equals(project.id)))
-        .write(
-          ProjectsCompanion(
-            name: Value(project.name),
+    await _db
+        .into(_db.projects)
+        .insert(
+          ProjectsCompanion.insert(
+            id: project.id,
+            name: project.name,
             description: Value(project.description),
             paper: Value(project.paper),
             company: Value(project.company),
             revision: Value(project.revision),
-            modifiedAt: Value(DateTime.now()),
+            createdAt: project.createdAt,
+            modifiedAt: project.modifiedAt,
           ),
         );
+    return project;
+  }
+
+  Future<void> update(Project project) async {
+    await (_db.update(
+      _db.projects,
+    )..where((t) => t.id.equals(project.id))).write(
+      ProjectsCompanion(
+        name: Value(project.name),
+        description: Value(project.description),
+        paper: Value(project.paper),
+        company: Value(project.company),
+        revision: Value(project.revision),
+        modifiedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   Future<void> rename(String id, String name) async {
@@ -126,8 +129,9 @@ class ProjectRepository {
   /// Bumps `modifiedAt`. Called whenever a project's contents change so the
   /// project list stays ordered by real activity.
   Future<void> touch(String id) async {
-    await (_db.update(_db.projects)..where((t) => t.id.equals(id)))
-        .write(ProjectsCompanion(modifiedAt: Value(DateTime.now())));
+    await (_db.update(_db.projects)..where((t) => t.id.equals(id))).write(
+      ProjectsCompanion(modifiedAt: Value(DateTime.now())),
+    );
   }
 
   /// Deletes a project and, by cascade, its parts, pins and nets.

@@ -7,6 +7,7 @@ import 'renderable_pin.dart';
 import 'schematic_geometry.dart';
 import '../domain/geometry/net_routing.dart';
 import '../domain/geometry/wire_router.dart';
+import '../domain/geometry/drawn_wire_geometry.dart';
 
 export '../domain/geometry/net_routing.dart' show RoutedWire;
 
@@ -133,6 +134,7 @@ class SchematicScene {
     required List<NetWithEndpoints> nets,
     Map<String, List<double>> routeHints = const {},
     required Map<String, SymbolDefinition> symbols,
+    List<SchematicWire> drawnWires = const [],
   }) {
     final netByPin = <String, NetWithEndpoints>{
       for (final net in nets)
@@ -204,12 +206,22 @@ class SchematicScene {
       (byNet[netId] ??= []).add(pin);
     }
 
-    final obstacles = [
-      for (final unit in units) _boundsOf(unit).deflate(0.2),
-    ];
+    final obstacles = [for (final unit in units) _boundsOf(unit).deflate(0.2)];
+    final drawnByNet = <String, List<SchematicWire>>{};
+    for (final wire in drawnWires) {
+      (drawnByNet[wire.netId] ??= []).add(wire);
+    }
     final wires = <RoutedWire>[];
     for (final entry in byNet.entries) {
-      wires.addAll(_routeNet(entry.key, entry.value, obstacles, routeHints));
+      wires.addAll(
+        _routeNet(
+          entry.key,
+          entry.value,
+          obstacles,
+          routeHints,
+          drawnByNet[entry.key] ?? const [],
+        ),
+      );
     }
 
     return SchematicScene(
@@ -458,17 +470,126 @@ class SchematicScene {
   }
 
   /// Chooses which pins to join and routes each connection.
+  ///
+  /// Routed once per net and then reused until something that net's route
+  /// depends on changes: its pins, its drawn wires, its hints, or a part
+  /// standing near it. Dragging one part used to re-route every wire on the
+  /// sheet each frame; now it re-routes the few that touch it.
   static List<RoutedWire> _routeNet(
     String netId,
     List<PlacedPin> pins,
     List<Rect> obstacles,
     Map<String, List<double>> routeHints,
-  ) => NetRouting.routeNet(
-    netId,
-    [for (final pin in pins) pin.routable],
-    obstacles: obstacles,
-    hints: routeHints,
-  );
+    List<SchematicWire> drawn,
+  ) {
+    final routable = [for (final pin in pins) pin.routable];
+
+    var reach = Rect.fromPoints(
+      routable.first.position,
+      routable.first.position,
+    );
+    for (final pin in routable) {
+      reach = reach.expandToInclude(
+        Rect.fromLTWH(pin.position.dx, pin.position.dy, 0, 0),
+      );
+    }
+    for (final wire in drawn) {
+      for (final p in wire.points) {
+        reach = reach.expandToInclude(Rect.fromLTWH(p.dx, p.dy, 0, 0));
+      }
+    }
+    // Routes detour round parts, but never by more than a few grid squares.
+    reach = reach.inflate(12.7);
+    final nearby = [
+      for (final o in obstacles)
+        if (o.overlaps(reach)) o,
+    ];
+
+    final signature = StringBuffer();
+    for (final pin in routable) {
+      signature
+        ..write(pin.id)
+        ..write(pin.position.dx.toStringAsFixed(3))
+        ..write(',')
+        ..write(pin.position.dy.toStringAsFixed(3))
+        ..write(pin.exitDirection.dx.toStringAsFixed(2))
+        ..write(pin.exitDirection.dy.toStringAsFixed(2))
+        ..write(';');
+    }
+    for (final o in nearby) {
+      signature.write(
+        'o${o.left.toStringAsFixed(3)},${o.top.toStringAsFixed(3)},${o.right.toStringAsFixed(3)},${o.bottom.toStringAsFixed(3)}',
+      );
+    }
+    for (final wire in drawn) {
+      signature.write('w${wire.id}${SchematicWire.encode(wire.points)}');
+    }
+    for (final a in routable) {
+      for (final b in routable) {
+        final hint = routeHints[NetRouting.routeKey(a.id, b.id)];
+        if (hint != null && a.id.compareTo(b.id) < 0) signature.write('h$hint');
+      }
+    }
+    final key = signature.toString();
+
+    final cached = _routeCache[netId];
+    if (cached != null && cached.$1 == key) return cached.$2;
+
+    final routed = NetRouting.routeNetWithDrawn(
+      netId,
+      routable,
+      drawn: drawn,
+      obstacles: nearby,
+      hints: routeHints,
+    );
+    if (_routeCache.length > 4000) _routeCache.clear();
+    _routeCache[netId] = (key, routed);
+    return routed;
+  }
+
+  static final _routeCache = <String, (String, List<RoutedWire>)>{};
+
+  /// The wire and run of it nearest [sheetPoint], any wire at all.
+  WireRunHit? wireRunNear(Offset sheetPoint, double toleranceMm) {
+    WireRunHit? best;
+    var bestDistance = double.infinity;
+    for (final wire in wires) {
+      final (run, distance) = DrawnWireGeometry.nearestRun(
+        wire.points,
+        sheetPoint,
+      );
+      if (run >= 0 && distance < bestDistance) {
+        bestDistance = distance;
+        best = WireRunHit(wire: wire, run: run);
+      }
+    }
+    return bestDistance <= toleranceMm ? best : null;
+  }
+
+  /// The same scene with one wire drawn along [points], for a slide being
+  /// dragged.
+  SchematicScene withWirePoints(String key, List<Offset> points) =>
+      SchematicScene(
+        paper: paper,
+        units: units,
+        pins: pins,
+        nets: nets,
+        pinsByNet: pinsByNet,
+        wires: [
+          for (final wire in wires)
+            if (wire.key == key)
+              RoutedWire(
+                netId: wire.netId,
+                pinAId: wire.pinAId,
+                pinBId: wire.pinBId,
+                points: points,
+                drawnId: wire.drawnId,
+              )
+            else
+              wire,
+        ],
+        labels: labels,
+      );
 
   /// The unit whose body contains [sheetPoint], for dragging.
   PlacedUnit? unitAt(Offset sheetPoint, {double paddingMm = 1.27}) {
@@ -560,7 +681,6 @@ class SchematicScene {
   }
 }
 
-
 /// What a tap on the canvas resolved to.
 sealed class PinTapResult {
   const PinTapResult();
@@ -585,11 +705,20 @@ class PinTapAmbiguous extends PinTapResult {
   final List<PlacedPin> candidates;
 }
 
-
 /// A specific movable run of a specific wire.
 class WireHandleHit {
   const WireHandleHit({required this.wire, required this.handle});
 
   final RoutedWire wire;
   final WireHandle handle;
+}
+
+/// A run of a wire the user has hold of.
+class WireRunHit {
+  const WireRunHit({required this.wire, required this.run});
+
+  final RoutedWire wire;
+
+  /// Index of the run: between corners run and run + 1.
+  final int run;
 }

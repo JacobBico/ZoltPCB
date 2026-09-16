@@ -2699,6 +2699,422 @@ class PartPinsCompanion extends UpdateCompanion<PartPinRow> {
   }
 }
 
+class $NetClassesTable extends NetClasses
+    with TableInfo<$NetClassesTable, NetClassRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $NetClassesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _projectIdMeta = const VerificationMeta(
+    'projectId',
+  );
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+    'project_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES projects (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _trackWidthMeta = const VerificationMeta(
+    'trackWidth',
+  );
+  @override
+  late final GeneratedColumn<double> trackWidth = GeneratedColumn<double>(
+    'track_width',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _clearanceMeta = const VerificationMeta(
+    'clearance',
+  );
+  @override
+  late final GeneratedColumn<double> clearance = GeneratedColumn<double>(
+    'clearance',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    projectId,
+    name,
+    trackWidth,
+    clearance,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'net_classes';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<NetClassRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('project_id')) {
+      context.handle(
+        _projectIdMeta,
+        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_projectIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('track_width')) {
+      context.handle(
+        _trackWidthMeta,
+        trackWidth.isAcceptableOrUnknown(data['track_width']!, _trackWidthMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_trackWidthMeta);
+    }
+    if (data.containsKey('clearance')) {
+      context.handle(
+        _clearanceMeta,
+        clearance.isAcceptableOrUnknown(data['clearance']!, _clearanceMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  NetClassRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return NetClassRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      projectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      trackWidth: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}track_width'],
+      )!,
+      clearance: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}clearance'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $NetClassesTable createAlias(String alias) {
+    return $NetClassesTable(attachedDatabase, alias);
+  }
+}
+
+class NetClassRow extends DataClass implements Insertable<NetClassRow> {
+  final String id;
+  final String projectId;
+  final String name;
+  final double trackWidth;
+
+  /// Null uses the board's design rule.
+  final double? clearance;
+  final DateTime createdAt;
+  const NetClassRow({
+    required this.id,
+    required this.projectId,
+    required this.name,
+    required this.trackWidth,
+    this.clearance,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['project_id'] = Variable<String>(projectId);
+    map['name'] = Variable<String>(name);
+    map['track_width'] = Variable<double>(trackWidth);
+    if (!nullToAbsent || clearance != null) {
+      map['clearance'] = Variable<double>(clearance);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  NetClassesCompanion toCompanion(bool nullToAbsent) {
+    return NetClassesCompanion(
+      id: Value(id),
+      projectId: Value(projectId),
+      name: Value(name),
+      trackWidth: Value(trackWidth),
+      clearance: clearance == null && nullToAbsent
+          ? const Value.absent()
+          : Value(clearance),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory NetClassRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return NetClassRow(
+      id: serializer.fromJson<String>(json['id']),
+      projectId: serializer.fromJson<String>(json['projectId']),
+      name: serializer.fromJson<String>(json['name']),
+      trackWidth: serializer.fromJson<double>(json['trackWidth']),
+      clearance: serializer.fromJson<double?>(json['clearance']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'projectId': serializer.toJson<String>(projectId),
+      'name': serializer.toJson<String>(name),
+      'trackWidth': serializer.toJson<double>(trackWidth),
+      'clearance': serializer.toJson<double?>(clearance),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  NetClassRow copyWith({
+    String? id,
+    String? projectId,
+    String? name,
+    double? trackWidth,
+    Value<double?> clearance = const Value.absent(),
+    DateTime? createdAt,
+  }) => NetClassRow(
+    id: id ?? this.id,
+    projectId: projectId ?? this.projectId,
+    name: name ?? this.name,
+    trackWidth: trackWidth ?? this.trackWidth,
+    clearance: clearance.present ? clearance.value : this.clearance,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  NetClassRow copyWithCompanion(NetClassesCompanion data) {
+    return NetClassRow(
+      id: data.id.present ? data.id.value : this.id,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      name: data.name.present ? data.name.value : this.name,
+      trackWidth: data.trackWidth.present
+          ? data.trackWidth.value
+          : this.trackWidth,
+      clearance: data.clearance.present ? data.clearance.value : this.clearance,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('NetClassRow(')
+          ..write('id: $id, ')
+          ..write('projectId: $projectId, ')
+          ..write('name: $name, ')
+          ..write('trackWidth: $trackWidth, ')
+          ..write('clearance: $clearance, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, projectId, name, trackWidth, clearance, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is NetClassRow &&
+          other.id == this.id &&
+          other.projectId == this.projectId &&
+          other.name == this.name &&
+          other.trackWidth == this.trackWidth &&
+          other.clearance == this.clearance &&
+          other.createdAt == this.createdAt);
+}
+
+class NetClassesCompanion extends UpdateCompanion<NetClassRow> {
+  final Value<String> id;
+  final Value<String> projectId;
+  final Value<String> name;
+  final Value<double> trackWidth;
+  final Value<double?> clearance;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const NetClassesCompanion({
+    this.id = const Value.absent(),
+    this.projectId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.trackWidth = const Value.absent(),
+    this.clearance = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  NetClassesCompanion.insert({
+    required String id,
+    required String projectId,
+    required String name,
+    required double trackWidth,
+    this.clearance = const Value.absent(),
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       projectId = Value(projectId),
+       name = Value(name),
+       trackWidth = Value(trackWidth),
+       createdAt = Value(createdAt);
+  static Insertable<NetClassRow> custom({
+    Expression<String>? id,
+    Expression<String>? projectId,
+    Expression<String>? name,
+    Expression<double>? trackWidth,
+    Expression<double>? clearance,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (projectId != null) 'project_id': projectId,
+      if (name != null) 'name': name,
+      if (trackWidth != null) 'track_width': trackWidth,
+      if (clearance != null) 'clearance': clearance,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  NetClassesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? projectId,
+    Value<String>? name,
+    Value<double>? trackWidth,
+    Value<double?>? clearance,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return NetClassesCompanion(
+      id: id ?? this.id,
+      projectId: projectId ?? this.projectId,
+      name: name ?? this.name,
+      trackWidth: trackWidth ?? this.trackWidth,
+      clearance: clearance ?? this.clearance,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (trackWidth.present) {
+      map['track_width'] = Variable<double>(trackWidth.value);
+    }
+    if (clearance.present) {
+      map['clearance'] = Variable<double>(clearance.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('NetClassesCompanion(')
+          ..write('id: $id, ')
+          ..write('projectId: $projectId, ')
+          ..write('name: $name, ')
+          ..write('trackWidth: $trackWidth, ')
+          ..write('clearance: $clearance, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $NetsTable extends Nets with TableInfo<$NetsTable, NetRow> {
   @override
   final GeneratedDatabase attachedDatabase;
@@ -2754,6 +3170,20 @@ class $NetsTable extends Nets with TableInfo<$NetsTable, NetRow> {
     type: DriftSqlType.double,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _netClassIdMeta = const VerificationMeta(
+    'netClassId',
+  );
+  @override
+  late final GeneratedColumn<String> netClassId = GeneratedColumn<String>(
+    'net_class_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES net_classes (id) ON DELETE SET NULL',
+    ),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -2772,6 +3202,7 @@ class $NetsTable extends Nets with TableInfo<$NetsTable, NetRow> {
     name,
     labelX,
     labelY,
+    netClassId,
     createdAt,
   ];
   @override
@@ -2817,6 +3248,15 @@ class $NetsTable extends Nets with TableInfo<$NetsTable, NetRow> {
         labelY.isAcceptableOrUnknown(data['label_y']!, _labelYMeta),
       );
     }
+    if (data.containsKey('net_class_id')) {
+      context.handle(
+        _netClassIdMeta,
+        netClassId.isAcceptableOrUnknown(
+          data['net_class_id']!,
+          _netClassIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -2854,6 +3294,10 @@ class $NetsTable extends Nets with TableInfo<$NetsTable, NetRow> {
         DriftSqlType.double,
         data['${effectivePrefix}label_y'],
       ),
+      netClassId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}net_class_id'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -2879,6 +3323,9 @@ class NetRow extends DataClass implements Insertable<NetRow> {
   /// corner of the net's own wire, which is where it reads best.
   final double? labelX;
   final double? labelY;
+
+  /// The net class the board routes this net with; null for the default.
+  final String? netClassId;
   final DateTime createdAt;
   const NetRow({
     required this.id,
@@ -2886,6 +3333,7 @@ class NetRow extends DataClass implements Insertable<NetRow> {
     this.name,
     this.labelX,
     this.labelY,
+    this.netClassId,
     required this.createdAt,
   });
   @override
@@ -2902,6 +3350,9 @@ class NetRow extends DataClass implements Insertable<NetRow> {
     if (!nullToAbsent || labelY != null) {
       map['label_y'] = Variable<double>(labelY);
     }
+    if (!nullToAbsent || netClassId != null) {
+      map['net_class_id'] = Variable<String>(netClassId);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -2917,6 +3368,9 @@ class NetRow extends DataClass implements Insertable<NetRow> {
       labelY: labelY == null && nullToAbsent
           ? const Value.absent()
           : Value(labelY),
+      netClassId: netClassId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(netClassId),
       createdAt: Value(createdAt),
     );
   }
@@ -2932,6 +3386,7 @@ class NetRow extends DataClass implements Insertable<NetRow> {
       name: serializer.fromJson<String?>(json['name']),
       labelX: serializer.fromJson<double?>(json['labelX']),
       labelY: serializer.fromJson<double?>(json['labelY']),
+      netClassId: serializer.fromJson<String?>(json['netClassId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -2944,6 +3399,7 @@ class NetRow extends DataClass implements Insertable<NetRow> {
       'name': serializer.toJson<String?>(name),
       'labelX': serializer.toJson<double?>(labelX),
       'labelY': serializer.toJson<double?>(labelY),
+      'netClassId': serializer.toJson<String?>(netClassId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -2954,6 +3410,7 @@ class NetRow extends DataClass implements Insertable<NetRow> {
     Value<String?> name = const Value.absent(),
     Value<double?> labelX = const Value.absent(),
     Value<double?> labelY = const Value.absent(),
+    Value<String?> netClassId = const Value.absent(),
     DateTime? createdAt,
   }) => NetRow(
     id: id ?? this.id,
@@ -2961,6 +3418,7 @@ class NetRow extends DataClass implements Insertable<NetRow> {
     name: name.present ? name.value : this.name,
     labelX: labelX.present ? labelX.value : this.labelX,
     labelY: labelY.present ? labelY.value : this.labelY,
+    netClassId: netClassId.present ? netClassId.value : this.netClassId,
     createdAt: createdAt ?? this.createdAt,
   );
   NetRow copyWithCompanion(NetsCompanion data) {
@@ -2970,6 +3428,9 @@ class NetRow extends DataClass implements Insertable<NetRow> {
       name: data.name.present ? data.name.value : this.name,
       labelX: data.labelX.present ? data.labelX.value : this.labelX,
       labelY: data.labelY.present ? data.labelY.value : this.labelY,
+      netClassId: data.netClassId.present
+          ? data.netClassId.value
+          : this.netClassId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -2982,6 +3443,7 @@ class NetRow extends DataClass implements Insertable<NetRow> {
           ..write('name: $name, ')
           ..write('labelX: $labelX, ')
           ..write('labelY: $labelY, ')
+          ..write('netClassId: $netClassId, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -2989,7 +3451,7 @@ class NetRow extends DataClass implements Insertable<NetRow> {
 
   @override
   int get hashCode =>
-      Object.hash(id, projectId, name, labelX, labelY, createdAt);
+      Object.hash(id, projectId, name, labelX, labelY, netClassId, createdAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2999,6 +3461,7 @@ class NetRow extends DataClass implements Insertable<NetRow> {
           other.name == this.name &&
           other.labelX == this.labelX &&
           other.labelY == this.labelY &&
+          other.netClassId == this.netClassId &&
           other.createdAt == this.createdAt);
 }
 
@@ -3008,6 +3471,7 @@ class NetsCompanion extends UpdateCompanion<NetRow> {
   final Value<String?> name;
   final Value<double?> labelX;
   final Value<double?> labelY;
+  final Value<String?> netClassId;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const NetsCompanion({
@@ -3016,6 +3480,7 @@ class NetsCompanion extends UpdateCompanion<NetRow> {
     this.name = const Value.absent(),
     this.labelX = const Value.absent(),
     this.labelY = const Value.absent(),
+    this.netClassId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -3025,6 +3490,7 @@ class NetsCompanion extends UpdateCompanion<NetRow> {
     this.name = const Value.absent(),
     this.labelX = const Value.absent(),
     this.labelY = const Value.absent(),
+    this.netClassId = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -3036,6 +3502,7 @@ class NetsCompanion extends UpdateCompanion<NetRow> {
     Expression<String>? name,
     Expression<double>? labelX,
     Expression<double>? labelY,
+    Expression<String>? netClassId,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -3045,6 +3512,7 @@ class NetsCompanion extends UpdateCompanion<NetRow> {
       if (name != null) 'name': name,
       if (labelX != null) 'label_x': labelX,
       if (labelY != null) 'label_y': labelY,
+      if (netClassId != null) 'net_class_id': netClassId,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -3056,6 +3524,7 @@ class NetsCompanion extends UpdateCompanion<NetRow> {
     Value<String?>? name,
     Value<double?>? labelX,
     Value<double?>? labelY,
+    Value<String?>? netClassId,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -3065,6 +3534,7 @@ class NetsCompanion extends UpdateCompanion<NetRow> {
       name: name ?? this.name,
       labelX: labelX ?? this.labelX,
       labelY: labelY ?? this.labelY,
+      netClassId: netClassId ?? this.netClassId,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -3088,6 +3558,9 @@ class NetsCompanion extends UpdateCompanion<NetRow> {
     if (labelY.present) {
       map['label_y'] = Variable<double>(labelY.value);
     }
+    if (netClassId.present) {
+      map['net_class_id'] = Variable<String>(netClassId.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -3105,6 +3578,7 @@ class NetsCompanion extends UpdateCompanion<NetRow> {
           ..write('name: $name, ')
           ..write('labelX: $labelX, ')
           ..write('labelY: $labelY, ')
+          ..write('netClassId: $netClassId, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -3423,6 +3897,472 @@ class NetNodesCompanion extends UpdateCompanion<NetNodeRow> {
           ..write('id: $id, ')
           ..write('netId: $netId, ')
           ..write('partPinId: $partPinId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SchematicWiresTable extends SchematicWires
+    with TableInfo<$SchematicWiresTable, SchematicWireRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SchematicWiresTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _projectIdMeta = const VerificationMeta(
+    'projectId',
+  );
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+    'project_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES projects (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _netIdMeta = const VerificationMeta('netId');
+  @override
+  late final GeneratedColumn<String> netId = GeneratedColumn<String>(
+    'net_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES nets (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _pinAIdMeta = const VerificationMeta('pinAId');
+  @override
+  late final GeneratedColumn<String> pinAId = GeneratedColumn<String>(
+    'pin_a_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES part_pins (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _pinBIdMeta = const VerificationMeta('pinBId');
+  @override
+  late final GeneratedColumn<String> pinBId = GeneratedColumn<String>(
+    'pin_b_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES part_pins (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _pointsMeta = const VerificationMeta('points');
+  @override
+  late final GeneratedColumn<String> points = GeneratedColumn<String>(
+    'points',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    projectId,
+    netId,
+    pinAId,
+    pinBId,
+    points,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'schematic_wires';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SchematicWireRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('project_id')) {
+      context.handle(
+        _projectIdMeta,
+        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_projectIdMeta);
+    }
+    if (data.containsKey('net_id')) {
+      context.handle(
+        _netIdMeta,
+        netId.isAcceptableOrUnknown(data['net_id']!, _netIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_netIdMeta);
+    }
+    if (data.containsKey('pin_a_id')) {
+      context.handle(
+        _pinAIdMeta,
+        pinAId.isAcceptableOrUnknown(data['pin_a_id']!, _pinAIdMeta),
+      );
+    }
+    if (data.containsKey('pin_b_id')) {
+      context.handle(
+        _pinBIdMeta,
+        pinBId.isAcceptableOrUnknown(data['pin_b_id']!, _pinBIdMeta),
+      );
+    }
+    if (data.containsKey('points')) {
+      context.handle(
+        _pointsMeta,
+        points.isAcceptableOrUnknown(data['points']!, _pointsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pointsMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SchematicWireRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SchematicWireRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      projectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_id'],
+      )!,
+      netId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}net_id'],
+      )!,
+      pinAId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pin_a_id'],
+      ),
+      pinBId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pin_b_id'],
+      ),
+      points: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}points'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SchematicWiresTable createAlias(String alias) {
+    return $SchematicWiresTable(attachedDatabase, alias);
+  }
+}
+
+class SchematicWireRow extends DataClass
+    implements Insertable<SchematicWireRow> {
+  final String id;
+  final String projectId;
+  final String netId;
+  final String? pinAId;
+  final String? pinBId;
+
+  /// Corners in sheet millimetres, `x,y;x,y;…`, from the A end to the B end.
+  final String points;
+  final DateTime createdAt;
+  const SchematicWireRow({
+    required this.id,
+    required this.projectId,
+    required this.netId,
+    this.pinAId,
+    this.pinBId,
+    required this.points,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['project_id'] = Variable<String>(projectId);
+    map['net_id'] = Variable<String>(netId);
+    if (!nullToAbsent || pinAId != null) {
+      map['pin_a_id'] = Variable<String>(pinAId);
+    }
+    if (!nullToAbsent || pinBId != null) {
+      map['pin_b_id'] = Variable<String>(pinBId);
+    }
+    map['points'] = Variable<String>(points);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  SchematicWiresCompanion toCompanion(bool nullToAbsent) {
+    return SchematicWiresCompanion(
+      id: Value(id),
+      projectId: Value(projectId),
+      netId: Value(netId),
+      pinAId: pinAId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pinAId),
+      pinBId: pinBId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pinBId),
+      points: Value(points),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory SchematicWireRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SchematicWireRow(
+      id: serializer.fromJson<String>(json['id']),
+      projectId: serializer.fromJson<String>(json['projectId']),
+      netId: serializer.fromJson<String>(json['netId']),
+      pinAId: serializer.fromJson<String?>(json['pinAId']),
+      pinBId: serializer.fromJson<String?>(json['pinBId']),
+      points: serializer.fromJson<String>(json['points']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'projectId': serializer.toJson<String>(projectId),
+      'netId': serializer.toJson<String>(netId),
+      'pinAId': serializer.toJson<String?>(pinAId),
+      'pinBId': serializer.toJson<String?>(pinBId),
+      'points': serializer.toJson<String>(points),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  SchematicWireRow copyWith({
+    String? id,
+    String? projectId,
+    String? netId,
+    Value<String?> pinAId = const Value.absent(),
+    Value<String?> pinBId = const Value.absent(),
+    String? points,
+    DateTime? createdAt,
+  }) => SchematicWireRow(
+    id: id ?? this.id,
+    projectId: projectId ?? this.projectId,
+    netId: netId ?? this.netId,
+    pinAId: pinAId.present ? pinAId.value : this.pinAId,
+    pinBId: pinBId.present ? pinBId.value : this.pinBId,
+    points: points ?? this.points,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  SchematicWireRow copyWithCompanion(SchematicWiresCompanion data) {
+    return SchematicWireRow(
+      id: data.id.present ? data.id.value : this.id,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      netId: data.netId.present ? data.netId.value : this.netId,
+      pinAId: data.pinAId.present ? data.pinAId.value : this.pinAId,
+      pinBId: data.pinBId.present ? data.pinBId.value : this.pinBId,
+      points: data.points.present ? data.points.value : this.points,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SchematicWireRow(')
+          ..write('id: $id, ')
+          ..write('projectId: $projectId, ')
+          ..write('netId: $netId, ')
+          ..write('pinAId: $pinAId, ')
+          ..write('pinBId: $pinBId, ')
+          ..write('points: $points, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, projectId, netId, pinAId, pinBId, points, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SchematicWireRow &&
+          other.id == this.id &&
+          other.projectId == this.projectId &&
+          other.netId == this.netId &&
+          other.pinAId == this.pinAId &&
+          other.pinBId == this.pinBId &&
+          other.points == this.points &&
+          other.createdAt == this.createdAt);
+}
+
+class SchematicWiresCompanion extends UpdateCompanion<SchematicWireRow> {
+  final Value<String> id;
+  final Value<String> projectId;
+  final Value<String> netId;
+  final Value<String?> pinAId;
+  final Value<String?> pinBId;
+  final Value<String> points;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const SchematicWiresCompanion({
+    this.id = const Value.absent(),
+    this.projectId = const Value.absent(),
+    this.netId = const Value.absent(),
+    this.pinAId = const Value.absent(),
+    this.pinBId = const Value.absent(),
+    this.points = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SchematicWiresCompanion.insert({
+    required String id,
+    required String projectId,
+    required String netId,
+    this.pinAId = const Value.absent(),
+    this.pinBId = const Value.absent(),
+    required String points,
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       projectId = Value(projectId),
+       netId = Value(netId),
+       points = Value(points),
+       createdAt = Value(createdAt);
+  static Insertable<SchematicWireRow> custom({
+    Expression<String>? id,
+    Expression<String>? projectId,
+    Expression<String>? netId,
+    Expression<String>? pinAId,
+    Expression<String>? pinBId,
+    Expression<String>? points,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (projectId != null) 'project_id': projectId,
+      if (netId != null) 'net_id': netId,
+      if (pinAId != null) 'pin_a_id': pinAId,
+      if (pinBId != null) 'pin_b_id': pinBId,
+      if (points != null) 'points': points,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SchematicWiresCompanion copyWith({
+    Value<String>? id,
+    Value<String>? projectId,
+    Value<String>? netId,
+    Value<String?>? pinAId,
+    Value<String?>? pinBId,
+    Value<String>? points,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return SchematicWiresCompanion(
+      id: id ?? this.id,
+      projectId: projectId ?? this.projectId,
+      netId: netId ?? this.netId,
+      pinAId: pinAId ?? this.pinAId,
+      pinBId: pinBId ?? this.pinBId,
+      points: points ?? this.points,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
+    if (netId.present) {
+      map['net_id'] = Variable<String>(netId.value);
+    }
+    if (pinAId.present) {
+      map['pin_a_id'] = Variable<String>(pinAId.value);
+    }
+    if (pinBId.present) {
+      map['pin_b_id'] = Variable<String>(pinBId.value);
+    }
+    if (points.present) {
+      map['points'] = Variable<String>(points.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SchematicWiresCompanion(')
+          ..write('id: $id, ')
+          ..write('projectId: $projectId, ')
+          ..write('netId: $netId, ')
+          ..write('pinAId: $pinAId, ')
+          ..write('pinBId: $pinBId, ')
+          ..write('points: $points, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -10864,8 +11804,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $PartsTable parts = $PartsTable(this);
   late final $PartUnitsTable partUnits = $PartUnitsTable(this);
   late final $PartPinsTable partPins = $PartPinsTable(this);
+  late final $NetClassesTable netClasses = $NetClassesTable(this);
   late final $NetsTable nets = $NetsTable(this);
   late final $NetNodesTable netNodes = $NetNodesTable(this);
+  late final $SchematicWiresTable schematicWires = $SchematicWiresTable(this);
   late final $SymbolLibrariesTable symbolLibraries = $SymbolLibrariesTable(
     this,
   );
@@ -10902,9 +11844,17 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'idx_nets_project',
     'CREATE INDEX idx_nets_project ON nets (project_id)',
   );
+  late final Index idxNetClassesProject = Index(
+    'idx_net_classes_project',
+    'CREATE INDEX idx_net_classes_project ON net_classes (project_id)',
+  );
   late final Index idxNetNodesNet = Index(
     'idx_net_nodes_net',
     'CREATE INDEX idx_net_nodes_net ON net_nodes (net_id)',
+  );
+  late final Index idxSchematicWiresProject = Index(
+    'idx_schematic_wires_project',
+    'CREATE INDEX idx_schematic_wires_project ON schematic_wires (project_id)',
   );
   late final Index idxSymbolIndexLibrary = Index(
     'idx_symbol_index_library',
@@ -10959,8 +11909,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     parts,
     partUnits,
     partPins,
+    netClasses,
     nets,
     netNodes,
+    schematicWires,
     symbolLibraries,
     symbolIndexEntries,
     netRouteHints,
@@ -10978,7 +11930,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     idxPartUnitsPart,
     idxPartPinsPart,
     idxNetsProject,
+    idxNetClassesProject,
     idxNetNodesNet,
+    idxSchematicWiresProject,
     idxSymbolIndexLibrary,
     idxSymbolIndexSearch,
     idxRouteHintsProject,
@@ -11019,7 +11973,21 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         'projects',
         limitUpdateKind: UpdateKind.delete,
       ),
+      result: [TableUpdate('net_classes', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'projects',
+        limitUpdateKind: UpdateKind.delete,
+      ),
       result: [TableUpdate('nets', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'net_classes',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('nets', kind: UpdateKind.update)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -11034,6 +12002,34 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('net_nodes', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'projects',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('schematic_wires', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'nets',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('schematic_wires', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'part_pins',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('schematic_wires', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'part_pins',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('schematic_wires', kind: UpdateKind.delete)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -11198,6 +12194,24 @@ final class $$ProjectsTableReferences
     );
   }
 
+  static MultiTypedResultKey<$NetClassesTable, List<NetClassRow>>
+  _netClassesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.netClasses,
+    aliasName: $_aliasNameGenerator(db.projects.id, db.netClasses.projectId),
+  );
+
+  $$NetClassesTableProcessedTableManager get netClassesRefs {
+    final manager = $$NetClassesTableTableManager(
+      $_db,
+      $_db.netClasses,
+    ).filter((f) => f.projectId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_netClassesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$NetsTable, List<NetRow>> _netsRefsTable(
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
@@ -11212,6 +12226,27 @@ final class $$ProjectsTableReferences
     ).filter((f) => f.projectId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_netsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$SchematicWiresTable, List<SchematicWireRow>>
+  _schematicWiresRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.schematicWires,
+    aliasName: $_aliasNameGenerator(
+      db.projects.id,
+      db.schematicWires.projectId,
+    ),
+  );
+
+  $$SchematicWiresTableProcessedTableManager get schematicWiresRefs {
+    final manager = $$SchematicWiresTableTableManager(
+      $_db,
+      $_db.schematicWires,
+    ).filter((f) => f.projectId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_schematicWiresRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -11443,6 +12478,31 @@ class $$ProjectsTableFilterComposer
     return f(composer);
   }
 
+  Expression<bool> netClassesRefs(
+    Expression<bool> Function($$NetClassesTableFilterComposer f) f,
+  ) {
+    final $$NetClassesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.netClasses,
+      getReferencedColumn: (t) => t.projectId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$NetClassesTableFilterComposer(
+            $db: $db,
+            $table: $db.netClasses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<bool> netsRefs(
     Expression<bool> Function($$NetsTableFilterComposer f) f,
   ) {
@@ -11459,6 +12519,31 @@ class $$ProjectsTableFilterComposer
           }) => $$NetsTableFilterComposer(
             $db: $db,
             $table: $db.nets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> schematicWiresRefs(
+    Expression<bool> Function($$SchematicWiresTableFilterComposer f) f,
+  ) {
+    final $$SchematicWiresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.schematicWires,
+      getReferencedColumn: (t) => t.projectId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SchematicWiresTableFilterComposer(
+            $db: $db,
+            $table: $db.schematicWires,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -11781,6 +12866,31 @@ class $$ProjectsTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> netClassesRefs<T extends Object>(
+    Expression<T> Function($$NetClassesTableAnnotationComposer a) f,
+  ) {
+    final $$NetClassesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.netClasses,
+      getReferencedColumn: (t) => t.projectId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$NetClassesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.netClasses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> netsRefs<T extends Object>(
     Expression<T> Function($$NetsTableAnnotationComposer a) f,
   ) {
@@ -11797,6 +12907,31 @@ class $$ProjectsTableAnnotationComposer
           }) => $$NetsTableAnnotationComposer(
             $db: $db,
             $table: $db.nets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> schematicWiresRefs<T extends Object>(
+    Expression<T> Function($$SchematicWiresTableAnnotationComposer a) f,
+  ) {
+    final $$SchematicWiresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.schematicWires,
+      getReferencedColumn: (t) => t.projectId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SchematicWiresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.schematicWires,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -12022,7 +13157,9 @@ class $$ProjectsTableTableManager
           ProjectRow,
           PrefetchHooks Function({
             bool partsRefs,
+            bool netClassesRefs,
             bool netsRefs,
+            bool schematicWiresRefs,
             bool netRouteHintsRefs,
             bool boardsRefs,
             bool boardFootprintsRefs,
@@ -12099,7 +13236,9 @@ class $$ProjectsTableTableManager
           prefetchHooksCallback:
               ({
                 partsRefs = false,
+                netClassesRefs = false,
                 netsRefs = false,
+                schematicWiresRefs = false,
                 netRouteHintsRefs = false,
                 boardsRefs = false,
                 boardFootprintsRefs = false,
@@ -12113,7 +13252,9 @@ class $$ProjectsTableTableManager
                   db: db,
                   explicitlyWatchedTables: [
                     if (partsRefs) db.parts,
+                    if (netClassesRefs) db.netClasses,
                     if (netsRefs) db.nets,
+                    if (schematicWiresRefs) db.schematicWires,
                     if (netRouteHintsRefs) db.netRouteHints,
                     if (boardsRefs) db.boards,
                     if (boardFootprintsRefs) db.boardFootprints,
@@ -12147,6 +13288,27 @@ class $$ProjectsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (netClassesRefs)
+                        await $_getPrefetchedData<
+                          ProjectRow,
+                          $ProjectsTable,
+                          NetClassRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProjectsTableReferences
+                              ._netClassesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProjectsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).netClassesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.projectId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (netsRefs)
                         await $_getPrefetchedData<
                           ProjectRow,
@@ -12158,6 +13320,27 @@ class $$ProjectsTableTableManager
                               ._netsRefsTable(db),
                           managerFromTypedResult: (p0) =>
                               $$ProjectsTableReferences(db, table, p0).netsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.projectId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (schematicWiresRefs)
+                        await $_getPrefetchedData<
+                          ProjectRow,
+                          $ProjectsTable,
+                          SchematicWireRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProjectsTableReferences
+                              ._schematicWiresRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProjectsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).schematicWiresRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.projectId == item.id,
@@ -12354,7 +13537,9 @@ typedef $$ProjectsTableProcessedTableManager =
       ProjectRow,
       PrefetchHooks Function({
         bool partsRefs,
+        bool netClassesRefs,
         bool netsRefs,
+        bool schematicWiresRefs,
         bool netRouteHintsRefs,
         bool boardsRefs,
         bool boardFootprintsRefs,
@@ -14140,6 +15325,431 @@ typedef $$PartPinsTableProcessedTableManager =
       PartPinRow,
       PrefetchHooks Function({bool partId, bool netNodesRefs})
     >;
+typedef $$NetClassesTableCreateCompanionBuilder =
+    NetClassesCompanion Function({
+      required String id,
+      required String projectId,
+      required String name,
+      required double trackWidth,
+      Value<double?> clearance,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$NetClassesTableUpdateCompanionBuilder =
+    NetClassesCompanion Function({
+      Value<String> id,
+      Value<String> projectId,
+      Value<String> name,
+      Value<double> trackWidth,
+      Value<double?> clearance,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$NetClassesTableReferences
+    extends BaseReferences<_$AppDatabase, $NetClassesTable, NetClassRow> {
+  $$NetClassesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $ProjectsTable _projectIdTable(_$AppDatabase db) =>
+      db.projects.createAlias(
+        $_aliasNameGenerator(db.netClasses.projectId, db.projects.id),
+      );
+
+  $$ProjectsTableProcessedTableManager get projectId {
+    final $_column = $_itemColumn<String>('project_id')!;
+
+    final manager = $$ProjectsTableTableManager(
+      $_db,
+      $_db.projects,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_projectIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$NetsTable, List<NetRow>> _netsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.nets,
+    aliasName: $_aliasNameGenerator(db.netClasses.id, db.nets.netClassId),
+  );
+
+  $$NetsTableProcessedTableManager get netsRefs {
+    final manager = $$NetsTableTableManager(
+      $_db,
+      $_db.nets,
+    ).filter((f) => f.netClassId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_netsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$NetClassesTableFilterComposer
+    extends Composer<_$AppDatabase, $NetClassesTable> {
+  $$NetClassesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get trackWidth => $composableBuilder(
+    column: $table.trackWidth,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get clearance => $composableBuilder(
+    column: $table.clearance,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ProjectsTableFilterComposer get projectId {
+    final $$ProjectsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableFilterComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> netsRefs(
+    Expression<bool> Function($$NetsTableFilterComposer f) f,
+  ) {
+    final $$NetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.nets,
+      getReferencedColumn: (t) => t.netClassId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$NetsTableFilterComposer(
+            $db: $db,
+            $table: $db.nets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$NetClassesTableOrderingComposer
+    extends Composer<_$AppDatabase, $NetClassesTable> {
+  $$NetClassesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get trackWidth => $composableBuilder(
+    column: $table.trackWidth,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get clearance => $composableBuilder(
+    column: $table.clearance,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ProjectsTableOrderingComposer get projectId {
+    final $$ProjectsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableOrderingComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$NetClassesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $NetClassesTable> {
+  $$NetClassesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<double> get trackWidth => $composableBuilder(
+    column: $table.trackWidth,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get clearance =>
+      $composableBuilder(column: $table.clearance, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$ProjectsTableAnnotationComposer get projectId {
+    final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> netsRefs<T extends Object>(
+    Expression<T> Function($$NetsTableAnnotationComposer a) f,
+  ) {
+    final $$NetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.nets,
+      getReferencedColumn: (t) => t.netClassId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$NetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.nets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$NetClassesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $NetClassesTable,
+          NetClassRow,
+          $$NetClassesTableFilterComposer,
+          $$NetClassesTableOrderingComposer,
+          $$NetClassesTableAnnotationComposer,
+          $$NetClassesTableCreateCompanionBuilder,
+          $$NetClassesTableUpdateCompanionBuilder,
+          (NetClassRow, $$NetClassesTableReferences),
+          NetClassRow,
+          PrefetchHooks Function({bool projectId, bool netsRefs})
+        > {
+  $$NetClassesTableTableManager(_$AppDatabase db, $NetClassesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$NetClassesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$NetClassesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$NetClassesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> projectId = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<double> trackWidth = const Value.absent(),
+                Value<double?> clearance = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => NetClassesCompanion(
+                id: id,
+                projectId: projectId,
+                name: name,
+                trackWidth: trackWidth,
+                clearance: clearance,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String projectId,
+                required String name,
+                required double trackWidth,
+                Value<double?> clearance = const Value.absent(),
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => NetClassesCompanion.insert(
+                id: id,
+                projectId: projectId,
+                name: name,
+                trackWidth: trackWidth,
+                clearance: clearance,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$NetClassesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({projectId = false, netsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [if (netsRefs) db.nets],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (projectId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.projectId,
+                                referencedTable: $$NetClassesTableReferences
+                                    ._projectIdTable(db),
+                                referencedColumn: $$NetClassesTableReferences
+                                    ._projectIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (netsRefs)
+                    await $_getPrefetchedData<
+                      NetClassRow,
+                      $NetClassesTable,
+                      NetRow
+                    >(
+                      currentTable: table,
+                      referencedTable: $$NetClassesTableReferences
+                          ._netsRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$NetClassesTableReferences(db, table, p0).netsRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where((e) => e.netClassId == item.id),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$NetClassesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $NetClassesTable,
+      NetClassRow,
+      $$NetClassesTableFilterComposer,
+      $$NetClassesTableOrderingComposer,
+      $$NetClassesTableAnnotationComposer,
+      $$NetClassesTableCreateCompanionBuilder,
+      $$NetClassesTableUpdateCompanionBuilder,
+      (NetClassRow, $$NetClassesTableReferences),
+      NetClassRow,
+      PrefetchHooks Function({bool projectId, bool netsRefs})
+    >;
 typedef $$NetsTableCreateCompanionBuilder =
     NetsCompanion Function({
       required String id,
@@ -14147,6 +15757,7 @@ typedef $$NetsTableCreateCompanionBuilder =
       Value<String?> name,
       Value<double?> labelX,
       Value<double?> labelY,
+      Value<String?> netClassId,
       required DateTime createdAt,
       Value<int> rowid,
     });
@@ -14157,6 +15768,7 @@ typedef $$NetsTableUpdateCompanionBuilder =
       Value<String?> name,
       Value<double?> labelX,
       Value<double?> labelY,
+      Value<String?> netClassId,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -14182,6 +15794,23 @@ final class $$NetsTableReferences
     );
   }
 
+  static $NetClassesTable _netClassIdTable(_$AppDatabase db) => db.netClasses
+      .createAlias($_aliasNameGenerator(db.nets.netClassId, db.netClasses.id));
+
+  $$NetClassesTableProcessedTableManager? get netClassId {
+    final $_column = $_itemColumn<String>('net_class_id');
+    if ($_column == null) return null;
+    final manager = $$NetClassesTableTableManager(
+      $_db,
+      $_db.netClasses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_netClassIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
   static MultiTypedResultKey<$NetNodesTable, List<NetNodeRow>>
   _netNodesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.netNodes,
@@ -14195,6 +15824,24 @@ final class $$NetsTableReferences
     ).filter((f) => f.netId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_netNodesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$SchematicWiresTable, List<SchematicWireRow>>
+  _schematicWiresRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.schematicWires,
+    aliasName: $_aliasNameGenerator(db.nets.id, db.schematicWires.netId),
+  );
+
+  $$SchematicWiresTableProcessedTableManager get schematicWiresRefs {
+    final manager = $$SchematicWiresTableTableManager(
+      $_db,
+      $_db.schematicWires,
+    ).filter((f) => f.netId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_schematicWiresRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -14311,6 +15958,29 @@ class $$NetsTableFilterComposer extends Composer<_$AppDatabase, $NetsTable> {
     return composer;
   }
 
+  $$NetClassesTableFilterComposer get netClassId {
+    final $$NetClassesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.netClassId,
+      referencedTable: $db.netClasses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$NetClassesTableFilterComposer(
+            $db: $db,
+            $table: $db.netClasses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   Expression<bool> netNodesRefs(
     Expression<bool> Function($$NetNodesTableFilterComposer f) f,
   ) {
@@ -14327,6 +15997,31 @@ class $$NetsTableFilterComposer extends Composer<_$AppDatabase, $NetsTable> {
           }) => $$NetNodesTableFilterComposer(
             $db: $db,
             $table: $db.netNodes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> schematicWiresRefs(
+    Expression<bool> Function($$SchematicWiresTableFilterComposer f) f,
+  ) {
+    final $$SchematicWiresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.schematicWires,
+      getReferencedColumn: (t) => t.netId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SchematicWiresTableFilterComposer(
+            $db: $db,
+            $table: $db.schematicWires,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -14467,6 +16162,29 @@ class $$NetsTableOrderingComposer extends Composer<_$AppDatabase, $NetsTable> {
     );
     return composer;
   }
+
+  $$NetClassesTableOrderingComposer get netClassId {
+    final $$NetClassesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.netClassId,
+      referencedTable: $db.netClasses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$NetClassesTableOrderingComposer(
+            $db: $db,
+            $table: $db.netClasses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$NetsTableAnnotationComposer
@@ -14516,6 +16234,29 @@ class $$NetsTableAnnotationComposer
     return composer;
   }
 
+  $$NetClassesTableAnnotationComposer get netClassId {
+    final $$NetClassesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.netClassId,
+      referencedTable: $db.netClasses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$NetClassesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.netClasses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   Expression<T> netNodesRefs<T extends Object>(
     Expression<T> Function($$NetNodesTableAnnotationComposer a) f,
   ) {
@@ -14532,6 +16273,31 @@ class $$NetsTableAnnotationComposer
           }) => $$NetNodesTableAnnotationComposer(
             $db: $db,
             $table: $db.netNodes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> schematicWiresRefs<T extends Object>(
+    Expression<T> Function($$SchematicWiresTableAnnotationComposer a) f,
+  ) {
+    final $$SchematicWiresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.schematicWires,
+      getReferencedColumn: (t) => t.netId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SchematicWiresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.schematicWires,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -14632,7 +16398,9 @@ class $$NetsTableTableManager
           NetRow,
           PrefetchHooks Function({
             bool projectId,
+            bool netClassId,
             bool netNodesRefs,
+            bool schematicWiresRefs,
             bool boardTracksRefs,
             bool boardViasRefs,
             bool boardZonesRefs,
@@ -14656,6 +16424,7 @@ class $$NetsTableTableManager
                 Value<String?> name = const Value.absent(),
                 Value<double?> labelX = const Value.absent(),
                 Value<double?> labelY = const Value.absent(),
+                Value<String?> netClassId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NetsCompanion(
@@ -14664,6 +16433,7 @@ class $$NetsTableTableManager
                 name: name,
                 labelX: labelX,
                 labelY: labelY,
+                netClassId: netClassId,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -14674,6 +16444,7 @@ class $$NetsTableTableManager
                 Value<String?> name = const Value.absent(),
                 Value<double?> labelX = const Value.absent(),
                 Value<double?> labelY = const Value.absent(),
+                Value<String?> netClassId = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
               }) => NetsCompanion.insert(
@@ -14682,6 +16453,7 @@ class $$NetsTableTableManager
                 name: name,
                 labelX: labelX,
                 labelY: labelY,
+                netClassId: netClassId,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -14694,7 +16466,9 @@ class $$NetsTableTableManager
           prefetchHooksCallback:
               ({
                 projectId = false,
+                netClassId = false,
                 netNodesRefs = false,
+                schematicWiresRefs = false,
                 boardTracksRefs = false,
                 boardViasRefs = false,
                 boardZonesRefs = false,
@@ -14703,6 +16477,7 @@ class $$NetsTableTableManager
                   db: db,
                   explicitlyWatchedTables: [
                     if (netNodesRefs) db.netNodes,
+                    if (schematicWiresRefs) db.schematicWires,
                     if (boardTracksRefs) db.boardTracks,
                     if (boardViasRefs) db.boardVias,
                     if (boardZonesRefs) db.boardZones,
@@ -14736,6 +16511,19 @@ class $$NetsTableTableManager
                                   )
                                   as T;
                         }
+                        if (netClassId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.netClassId,
+                                    referencedTable: $$NetsTableReferences
+                                        ._netClassIdTable(db),
+                                    referencedColumn: $$NetsTableReferences
+                                        ._netClassIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
 
                         return state;
                       },
@@ -14752,6 +16540,26 @@ class $$NetsTableTableManager
                               ._netNodesRefsTable(db),
                           managerFromTypedResult: (p0) =>
                               $$NetsTableReferences(db, table, p0).netNodesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.netId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (schematicWiresRefs)
+                        await $_getPrefetchedData<
+                          NetRow,
+                          $NetsTable,
+                          SchematicWireRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$NetsTableReferences
+                              ._schematicWiresRefsTable(db),
+                          managerFromTypedResult: (p0) => $$NetsTableReferences(
+                            db,
+                            table,
+                            p0,
+                          ).schematicWiresRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.netId == item.id,
@@ -14840,7 +16648,9 @@ typedef $$NetsTableProcessedTableManager =
       NetRow,
       PrefetchHooks Function({
         bool projectId,
+        bool netClassId,
         bool netNodesRefs,
+        bool schematicWiresRefs,
         bool boardTracksRefs,
         bool boardViasRefs,
         bool boardZonesRefs,
@@ -15229,6 +17039,657 @@ typedef $$NetNodesTableProcessedTableManager =
       (NetNodeRow, $$NetNodesTableReferences),
       NetNodeRow,
       PrefetchHooks Function({bool netId, bool partPinId})
+    >;
+typedef $$SchematicWiresTableCreateCompanionBuilder =
+    SchematicWiresCompanion Function({
+      required String id,
+      required String projectId,
+      required String netId,
+      Value<String?> pinAId,
+      Value<String?> pinBId,
+      required String points,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$SchematicWiresTableUpdateCompanionBuilder =
+    SchematicWiresCompanion Function({
+      Value<String> id,
+      Value<String> projectId,
+      Value<String> netId,
+      Value<String?> pinAId,
+      Value<String?> pinBId,
+      Value<String> points,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$SchematicWiresTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $SchematicWiresTable, SchematicWireRow> {
+  $$SchematicWiresTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $ProjectsTable _projectIdTable(_$AppDatabase db) =>
+      db.projects.createAlias(
+        $_aliasNameGenerator(db.schematicWires.projectId, db.projects.id),
+      );
+
+  $$ProjectsTableProcessedTableManager get projectId {
+    final $_column = $_itemColumn<String>('project_id')!;
+
+    final manager = $$ProjectsTableTableManager(
+      $_db,
+      $_db.projects,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_projectIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $NetsTable _netIdTable(_$AppDatabase db) => db.nets.createAlias(
+    $_aliasNameGenerator(db.schematicWires.netId, db.nets.id),
+  );
+
+  $$NetsTableProcessedTableManager get netId {
+    final $_column = $_itemColumn<String>('net_id')!;
+
+    final manager = $$NetsTableTableManager(
+      $_db,
+      $_db.nets,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_netIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $PartPinsTable _pinAIdTable(_$AppDatabase db) =>
+      db.partPins.createAlias(
+        $_aliasNameGenerator(db.schematicWires.pinAId, db.partPins.id),
+      );
+
+  $$PartPinsTableProcessedTableManager? get pinAId {
+    final $_column = $_itemColumn<String>('pin_a_id');
+    if ($_column == null) return null;
+    final manager = $$PartPinsTableTableManager(
+      $_db,
+      $_db.partPins,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_pinAIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $PartPinsTable _pinBIdTable(_$AppDatabase db) =>
+      db.partPins.createAlias(
+        $_aliasNameGenerator(db.schematicWires.pinBId, db.partPins.id),
+      );
+
+  $$PartPinsTableProcessedTableManager? get pinBId {
+    final $_column = $_itemColumn<String>('pin_b_id');
+    if ($_column == null) return null;
+    final manager = $$PartPinsTableTableManager(
+      $_db,
+      $_db.partPins,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_pinBIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$SchematicWiresTableFilterComposer
+    extends Composer<_$AppDatabase, $SchematicWiresTable> {
+  $$SchematicWiresTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get points => $composableBuilder(
+    column: $table.points,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ProjectsTableFilterComposer get projectId {
+    final $$ProjectsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableFilterComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$NetsTableFilterComposer get netId {
+    final $$NetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.netId,
+      referencedTable: $db.nets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$NetsTableFilterComposer(
+            $db: $db,
+            $table: $db.nets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$PartPinsTableFilterComposer get pinAId {
+    final $$PartPinsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.pinAId,
+      referencedTable: $db.partPins,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PartPinsTableFilterComposer(
+            $db: $db,
+            $table: $db.partPins,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$PartPinsTableFilterComposer get pinBId {
+    final $$PartPinsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.pinBId,
+      referencedTable: $db.partPins,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PartPinsTableFilterComposer(
+            $db: $db,
+            $table: $db.partPins,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SchematicWiresTableOrderingComposer
+    extends Composer<_$AppDatabase, $SchematicWiresTable> {
+  $$SchematicWiresTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get points => $composableBuilder(
+    column: $table.points,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ProjectsTableOrderingComposer get projectId {
+    final $$ProjectsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableOrderingComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$NetsTableOrderingComposer get netId {
+    final $$NetsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.netId,
+      referencedTable: $db.nets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$NetsTableOrderingComposer(
+            $db: $db,
+            $table: $db.nets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$PartPinsTableOrderingComposer get pinAId {
+    final $$PartPinsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.pinAId,
+      referencedTable: $db.partPins,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PartPinsTableOrderingComposer(
+            $db: $db,
+            $table: $db.partPins,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$PartPinsTableOrderingComposer get pinBId {
+    final $$PartPinsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.pinBId,
+      referencedTable: $db.partPins,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PartPinsTableOrderingComposer(
+            $db: $db,
+            $table: $db.partPins,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SchematicWiresTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SchematicWiresTable> {
+  $$SchematicWiresTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get points =>
+      $composableBuilder(column: $table.points, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$ProjectsTableAnnotationComposer get projectId {
+    final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$NetsTableAnnotationComposer get netId {
+    final $$NetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.netId,
+      referencedTable: $db.nets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$NetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.nets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$PartPinsTableAnnotationComposer get pinAId {
+    final $$PartPinsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.pinAId,
+      referencedTable: $db.partPins,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PartPinsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.partPins,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$PartPinsTableAnnotationComposer get pinBId {
+    final $$PartPinsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.pinBId,
+      referencedTable: $db.partPins,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PartPinsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.partPins,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SchematicWiresTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SchematicWiresTable,
+          SchematicWireRow,
+          $$SchematicWiresTableFilterComposer,
+          $$SchematicWiresTableOrderingComposer,
+          $$SchematicWiresTableAnnotationComposer,
+          $$SchematicWiresTableCreateCompanionBuilder,
+          $$SchematicWiresTableUpdateCompanionBuilder,
+          (SchematicWireRow, $$SchematicWiresTableReferences),
+          SchematicWireRow,
+          PrefetchHooks Function({
+            bool projectId,
+            bool netId,
+            bool pinAId,
+            bool pinBId,
+          })
+        > {
+  $$SchematicWiresTableTableManager(
+    _$AppDatabase db,
+    $SchematicWiresTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SchematicWiresTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SchematicWiresTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SchematicWiresTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> projectId = const Value.absent(),
+                Value<String> netId = const Value.absent(),
+                Value<String?> pinAId = const Value.absent(),
+                Value<String?> pinBId = const Value.absent(),
+                Value<String> points = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SchematicWiresCompanion(
+                id: id,
+                projectId: projectId,
+                netId: netId,
+                pinAId: pinAId,
+                pinBId: pinBId,
+                points: points,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String projectId,
+                required String netId,
+                Value<String?> pinAId = const Value.absent(),
+                Value<String?> pinBId = const Value.absent(),
+                required String points,
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => SchematicWiresCompanion.insert(
+                id: id,
+                projectId: projectId,
+                netId: netId,
+                pinAId: pinAId,
+                pinBId: pinBId,
+                points: points,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$SchematicWiresTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                projectId = false,
+                netId = false,
+                pinAId = false,
+                pinBId = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (projectId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.projectId,
+                                    referencedTable:
+                                        $$SchematicWiresTableReferences
+                                            ._projectIdTable(db),
+                                    referencedColumn:
+                                        $$SchematicWiresTableReferences
+                                            ._projectIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (netId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.netId,
+                                    referencedTable:
+                                        $$SchematicWiresTableReferences
+                                            ._netIdTable(db),
+                                    referencedColumn:
+                                        $$SchematicWiresTableReferences
+                                            ._netIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (pinAId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.pinAId,
+                                    referencedTable:
+                                        $$SchematicWiresTableReferences
+                                            ._pinAIdTable(db),
+                                    referencedColumn:
+                                        $$SchematicWiresTableReferences
+                                            ._pinAIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (pinBId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.pinBId,
+                                    referencedTable:
+                                        $$SchematicWiresTableReferences
+                                            ._pinBIdTable(db),
+                                    referencedColumn:
+                                        $$SchematicWiresTableReferences
+                                            ._pinBIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$SchematicWiresTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SchematicWiresTable,
+      SchematicWireRow,
+      $$SchematicWiresTableFilterComposer,
+      $$SchematicWiresTableOrderingComposer,
+      $$SchematicWiresTableAnnotationComposer,
+      $$SchematicWiresTableCreateCompanionBuilder,
+      $$SchematicWiresTableUpdateCompanionBuilder,
+      (SchematicWireRow, $$SchematicWiresTableReferences),
+      SchematicWireRow,
+      PrefetchHooks Function({
+        bool projectId,
+        bool netId,
+        bool pinAId,
+        bool pinBId,
+      })
     >;
 typedef $$SymbolLibrariesTableCreateCompanionBuilder =
     SymbolLibrariesCompanion Function({
@@ -20947,9 +23408,13 @@ class $AppDatabaseManager {
       $$PartUnitsTableTableManager(_db, _db.partUnits);
   $$PartPinsTableTableManager get partPins =>
       $$PartPinsTableTableManager(_db, _db.partPins);
+  $$NetClassesTableTableManager get netClasses =>
+      $$NetClassesTableTableManager(_db, _db.netClasses);
   $$NetsTableTableManager get nets => $$NetsTableTableManager(_db, _db.nets);
   $$NetNodesTableTableManager get netNodes =>
       $$NetNodesTableTableManager(_db, _db.netNodes);
+  $$SchematicWiresTableTableManager get schematicWires =>
+      $$SchematicWiresTableTableManager(_db, _db.schematicWires);
   $$SymbolLibrariesTableTableManager get symbolLibraries =>
       $$SymbolLibrariesTableTableManager(_db, _db.symbolLibraries);
   $$SymbolIndexEntriesTableTableManager get symbolIndexEntries =>

@@ -37,13 +37,20 @@ void main() {
   setUpAll(() async {
     if (skip) return;
     // Real fonts, so text reads as text rather than the test font's boxes.
-    const mono = '/home/jacob/flutter/bin/cache/dart-sdk/bin/resources/'
+    const mono =
+        '/home/jacob/flutter/bin/cache/dart-sdk/bin/resources/'
         'devtools/assets/fonts/Roboto_Mono/RobotoMono-Regular.ttf';
-    const icons = '/home/jacob/flutter/bin/cache/artifacts/material_fonts/'
+    const icons =
+        '/home/jacob/flutter/bin/cache/artifacts/material_fonts/'
         'MaterialIcons-Regular.otf';
-    for (final (family, path) in [('monospace', mono), ('MaterialIcons', icons)]) {
+    for (final (family, path) in [
+      ('monospace', mono),
+      ('MaterialIcons', icons),
+    ]) {
       final loader = FontLoader(family)
-        ..addFont(Future.value(ByteData.sublistView(File(path).readAsBytesSync())));
+        ..addFont(
+          Future.value(ByteData.sublistView(File(path).readAsBytesSync())),
+        );
       await loader.load();
     }
   });
@@ -63,11 +70,18 @@ void main() {
     });
   }
 
-  Widget framed(Widget child) =>
-      RepaintBoundary(key: key, child: Scaffold(body: child));
+  Widget framed(Widget child) => RepaintBoundary(
+    key: key,
+    child: Scaffold(body: child),
+  );
 
   testAppWithStorage('settings', skip: skip, (tester, db, storage) async {
-    await pumpApp(tester, framed(const SettingsPanel()), database: db, storage: storage);
+    await pumpApp(
+      tester,
+      framed(const SettingsPanel()),
+      database: db,
+      storage: storage,
+    );
     await shoot(tester, 'settings');
   });
 
@@ -83,10 +97,10 @@ void main() {
       storage,
     ) async {
       KicadPalette.current = palette;
-      await SymbolLibraryRepository(db, storage).import(
-        fileName: 'Device.kicad_sym',
-        bytes: libraryBytes(),
-      );
+      await SymbolLibraryRepository(
+        db,
+        storage,
+      ).import(fileName: 'Device.kicad_sym', bytes: libraryBytes());
       final library = SymbolLibraryReader.parseLibrary(
         libraryBytes(),
         nickname: 'Device',
@@ -97,8 +111,14 @@ void main() {
       final project = await ProjectRepository(db).create(name: 'Shot');
       final parts = PartRepository(db);
       final nets = NetRepository(db);
-      final r1 = await parts.addPart(project.id, sym('R').toNewPartSpec(value: '4k7'));
-      final c1 = await parts.addPart(project.id, sym('C').toNewPartSpec(value: '100n'));
+      final r1 = await parts.addPart(
+        project.id,
+        sym('R').toNewPartSpec(value: '4k7'),
+      );
+      final c1 = await parts.addPart(
+        project.id,
+        sym('C').toNewPartSpec(value: '100n'),
+      );
       final u1 = await parts.addPart(project.id, sym('LM2904').toNewPartSpec());
       await nets.connectPins(r1.pins.last.id, c1.pins.first.id);
       await nets.connectPins(
@@ -130,19 +150,19 @@ void main() {
     final project = await ProjectRepository(db).create(name: 'Shot');
     final parts = PartRepository(db);
     final boards = BoardRepository(db);
-    await FootprintLibraryRepository(db, footprintStorage).import(
-      nickname: 'Test',
-      sources: twoPadFootprintSources(),
-    );
+    await FootprintLibraryRepository(
+      db,
+      footprintStorage,
+    ).import(nickname: 'Test', sources: twoPadFootprintSources());
 
     final placed = <String>[];
     for (var i = 0; i < 4; i++) {
       final part = await parts.addPart(
         project.id,
-        SymbolLibraryReader.parseLibrary(libraryBytes(), nickname: 'Device')
-            .symbols
-            .firstWhere((s) => s.name == 'R')
-            .toNewPartSpec(),
+        SymbolLibraryReader.parseLibrary(
+          libraryBytes(),
+          nickname: 'Device',
+        ).symbols.firstWhere((s) => s.name == 'R').toNewPartSpec(),
       );
       placed.add(part.part.id);
     }

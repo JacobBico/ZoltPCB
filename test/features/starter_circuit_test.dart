@@ -186,14 +186,25 @@ void main() {
 
     final oscIn = netWith(all, 'U1.6');
     final oscOut = netWith(all, 'U1.7');
-    expect(oscIn.where((p) => p.startsWith('${crystal.reference}.')), hasLength(1));
-    expect(oscOut.where((p) => p.startsWith('${crystal.reference}.')), hasLength(1));
+    expect(
+      oscIn.where((p) => p.startsWith('${crystal.reference}.')),
+      hasLength(1),
+    );
+    expect(
+      oscOut.where((p) => p.startsWith('${crystal.reference}.')),
+      hasLength(1),
+    );
     // Each side also holds one 20pF.
     final loads = await partsWithLib('Device:C');
-    final twenty = loads.where((c) => c.value == '20pF').map((c) => c.reference);
+    final twenty = loads
+        .where((c) => c.value == '20pF')
+        .map((c) => c.reference);
     expect(twenty, hasLength(2));
     for (final side in [oscIn, oscOut]) {
-      expect(side.where((p) => twenty.any((r) => p.startsWith('$r.'))), hasLength(1));
+      expect(
+        side.where((p) => twenty.any((r) => p.startsWith('$r.'))),
+        hasLength(1),
+      );
     }
   });
 

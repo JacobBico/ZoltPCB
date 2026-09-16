@@ -184,9 +184,8 @@ class _SilkscreenTextDialogState extends State<_SilkscreenTextDialog> {
       actions: [
         if (widget.existing)
           TextButton(
-            onPressed: () => Navigator.of(
-              context,
-            ).pop(const SilkscreenTextResult.deleted()),
+            onPressed: () =>
+                Navigator.of(context).pop(const SilkscreenTextResult.deleted()),
             child: Text('DELETE', style: TextStyle(color: KicadPalette.error)),
           ),
         TextButton(

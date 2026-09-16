@@ -1,3 +1,5 @@
+import '../data/editors/own_library_store.dart';
+import '../data/import/kicad_project_importer.dart';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,6 +36,34 @@ final partRepositoryProvider = Provider<PartRepository>(
 
 final netRepositoryProvider = Provider<NetRepository>(
   (ref) => NetRepository(ref.watch(databaseProvider)),
+);
+
+/// The schematic wires the user drew, for a project.
+final schematicWiresProvider =
+    StreamProvider.family<List<SchematicWire>, String>(
+      (ref, projectId) =>
+          ref.watch(netRepositoryProvider).watchWires(projectId),
+      isAutoDispose: true,
+    );
+
+/// The user's own symbols and footprints.
+final ownLibraryStoreProvider = Provider<OwnLibraryStore>(
+  (ref) => OwnLibraryStore(
+    symbols: ref.watch(symbolLibraryRepositoryProvider),
+    footprints: ref.watch(footprintLibraryRepositoryProvider),
+  ),
+);
+
+/// Opens KiCad projects made on a desktop.
+final kicadImporterProvider = Provider<KicadProjectImporter>(
+  (ref) => KicadProjectImporter(
+    projects: ref.watch(projectRepositoryProvider),
+    parts: ref.watch(partRepositoryProvider),
+    nets: ref.watch(netRepositoryProvider),
+    boards: ref.watch(boardRepositoryProvider),
+    symbols: ref.watch(symbolLibraryRepositoryProvider),
+    footprints: ref.watch(footprintLibraryRepositoryProvider),
+  ),
 );
 
 /// Every project, most recently modified first.
@@ -107,6 +137,13 @@ class SymbolLibraryFilter extends Notifier<String?> {
   void set(String? libraryId) => state = libraryId;
 }
 
+/// The library filter used when picking a microcontroller, kept apart from
+/// the Components section's own so a filter chosen there — Device, say —
+/// cannot leave the chip picker empty.
+final mcuLibraryFilterProvider = NotifierProvider<SymbolLibraryFilter, String?>(
+  SymbolLibraryFilter.new,
+);
+
 /// Search results for the current query and filter.
 /// Component search results. The flag narrows it to microcontrollers, for
 /// the pinout explorer — nobody needs the alternate functions of a diode.
@@ -116,7 +153,11 @@ final symbolSearchProvider =
       microcontrollersOnly,
     ) {
       final query = ref.watch(symbolSearchQueryProvider);
-      final libraryId = ref.watch(symbolLibraryFilterProvider);
+      final libraryId = ref.watch(
+        microcontrollersOnly
+            ? mcuLibraryFilterProvider
+            : symbolLibraryFilterProvider,
+      );
       // Re-run whenever the set of imported libraries changes.
       ref.watch(symbolLibrariesProvider);
       return ref
@@ -174,10 +215,9 @@ final footprintLibraryRepositoryProvider = Provider<FootprintLibraryRepository>(
   ),
 );
 
-final footprintLibrariesProvider =
-    StreamProvider<List<FootprintLibraryInfo>>(
-      (ref) => ref.watch(footprintLibraryRepositoryProvider).watchLibraries(),
-    );
+final footprintLibrariesProvider = StreamProvider<List<FootprintLibraryInfo>>(
+  (ref) => ref.watch(footprintLibraryRepositoryProvider).watchLibraries(),
+);
 
 final boardRepositoryProvider = Provider<BoardRepository>(
   (ref) => BoardRepository(ref.watch(databaseProvider)),
@@ -238,9 +278,7 @@ final boardSceneProvider = FutureProvider.family<BoardScene, String>((
   final board = await ref.watch(boardProvider(projectId).future);
   final parts = await ref.watch(projectPartsProvider(projectId).future);
   final nets = await ref.watch(projectNetsProvider(projectId).future);
-  final placements = await ref.watch(
-    boardFootprintsProvider(projectId).future,
-  );
+  final placements = await ref.watch(boardFootprintsProvider(projectId).future);
   final definitions = await ref.watch(
     projectFootprintsProvider(projectId).future,
   );
@@ -249,6 +287,7 @@ final boardSceneProvider = FutureProvider.family<BoardScene, String>((
   final edges = await ref.watch(boardEdgesProvider(projectId).future);
   final zones = await ref.watch(boardZonesProvider(projectId).future);
   final texts = await ref.watch(boardTextsProvider(projectId).future);
+  final netClasses = await ref.watch(netClassesProvider(projectId).future);
 
   return BoardScene.build(
     board: board,
@@ -261,27 +300,32 @@ final boardSceneProvider = FutureProvider.family<BoardScene, String>((
     edges: edges,
     zones: zones,
     texts: texts,
+    netClasses: netClasses,
   );
 }, isAutoDispose: true);
 
+/// The project's named net classes.
+final netClassesProvider = StreamProvider.family<List<NetClass>, String>(
+  (ref, projectId) =>
+      ref.watch(boardRepositoryProvider).watchNetClasses(projectId),
+  isAutoDispose: true,
+);
+
 /// Free silkscreen text on the board.
 final boardTextsProvider = StreamProvider.family<List<BoardText>, String>(
-  (ref, projectId) =>
-      ref.watch(boardRepositoryProvider).watchTexts(projectId),
+  (ref, projectId) => ref.watch(boardRepositoryProvider).watchTexts(projectId),
   isAutoDispose: true,
 );
 
 /// The extra shapes on the board's Edge.Cuts layer.
 final boardEdgesProvider = StreamProvider.family<List<BoardEdge>, String>(
-  (ref, projectId) =>
-      ref.watch(boardRepositoryProvider).watchEdges(projectId),
+  (ref, projectId) => ref.watch(boardRepositoryProvider).watchEdges(projectId),
   isAutoDispose: true,
 );
 
 /// The board's copper pours.
 final boardZonesProvider = StreamProvider.family<List<BoardZone>, String>(
-  (ref, projectId) =>
-      ref.watch(boardRepositoryProvider).watchZones(projectId),
+  (ref, projectId) => ref.watch(boardRepositoryProvider).watchZones(projectId),
   isAutoDispose: true,
 );
 
@@ -332,20 +376,20 @@ final exportPreviewProvider = FutureProvider.family<ExportPreview, String>((
   return ExportPreview.of(document);
 }, isAutoDispose: true);
 
-/// A copied component, held for the life of the session.
+/// A copied piece of schematic — parts, their wiring among themselves and
+/// their drawn wires — held for the life of the session.
 ///
 /// Deliberately in memory rather than the database: a clipboard that
 /// survived a restart would be a surprise, and nothing about it needs to be
 /// durable.
-final partClipboardProvider = NotifierProvider<PartClipboard, NewPartSpec?>(
-  PartClipboard.new,
-);
+final circuitClipboardProvider =
+    NotifierProvider<CircuitClipboard, CircuitClip?>(CircuitClipboard.new);
 
-class PartClipboard extends Notifier<NewPartSpec?> {
+class CircuitClipboard extends Notifier<CircuitClip?> {
   @override
-  NewPartSpec? build() => null;
+  CircuitClip? build() => null;
 
-  void copy(NewPartSpec spec) => state = spec;
+  void copy(CircuitClip clip) => state = clip;
 
   void clear() => state = null;
 }

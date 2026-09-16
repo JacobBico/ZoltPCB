@@ -36,7 +36,8 @@ String derivedId(String seed) {
   final b = hex(words[1] >> 16, 4);
   // Version 4 and the RFC variant bits, so the result is a well-formed UUID.
   final c = '4${hex(words[1] & 0xffff, 4).substring(1)}';
-  final d = '${(8 + (words[2] >> 30)).toRadixString(16)}'
+  final d =
+      '${(8 + (words[2] >> 30)).toRadixString(16)}'
       '${hex(words[2] & 0xffffff, 6).substring(0, 3)}';
   final e = '${hex(words[2], 8).substring(2)}${hex(words[3], 8).substring(2)}';
 

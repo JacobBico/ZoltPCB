@@ -193,7 +193,9 @@ abstract final class SymbolParser {
 
     return SymbolPin(
       // `(pin passive line ...)` — type and style are positional.
-      electricalType: PinElectricalType.fromToken(node.atom(1) ?? 'unspecified'),
+      electricalType: PinElectricalType.fromToken(
+        node.atom(1) ?? 'unspecified',
+      ),
       graphicStyle: PinGraphicStyle.fromToken(node.atom(2) ?? 'line'),
       at: _parseXy(at),
       angle: at?.number(3) ?? 0,

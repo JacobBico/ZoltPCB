@@ -86,7 +86,8 @@ void main() {
 
     test('the nickname comes from the file name', () async {
       final info = await repo.import(
-        fileName: '/storage/emulated/0/Download/Amplifier_Operational.kicad_sym',
+        fileName:
+            '/storage/emulated/0/Download/Amplifier_Operational.kicad_sym',
         bytes: bytes(_library),
       );
 
@@ -177,8 +178,7 @@ void main() {
       expect((await repo.search('ground')).single.libId, 'power:GND');
     });
 
-    test('every term has to match, so extra words narrow the result',
-        () async {
+    test('every term has to match, so extra words narrow the result', () async {
       expect((await repo.search('resistor small')).map((e) => e.libId), [
         'Device:R_Small',
       ]);
@@ -276,10 +276,7 @@ void main() {
   });
 
   test('a power symbol converts to a part kept out of the BOM', () async {
-    await repo.import(
-      fileName: 'power.kicad_sym',
-      bytes: bytes(_powerLibrary),
-    );
+    await repo.import(fileName: 'power.kicad_sym', bytes: bytes(_powerLibrary));
     final gnd = (await repo.loadSymbol('power:GND'))!;
     final spec = gnd.toNewPartSpec();
 

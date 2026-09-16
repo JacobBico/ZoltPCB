@@ -65,8 +65,7 @@ class DesignRules {
       other.viaDrill == viaDrill;
 
   @override
-  int get hashCode =>
-      Object.hash(trackWidth, clearance, viaDiameter, viaDrill);
+  int get hashCode => Object.hash(trackWidth, clearance, viaDiameter, viaDrill);
 }
 
 /// A project's board: where its edges are and what rules it is drawn to.
@@ -105,11 +104,12 @@ class Board {
   BoardOutline get outline => switch (outlineKind) {
     BoardOutlineKind.rectangle => BoardOutline.rectangle(_boundsRect),
     BoardOutlineKind.circle => BoardOutline.circle(_boundsRect),
-    BoardOutlineKind.polygon => outlinePoints.length >= 3
-        ? BoardOutline.polygon(outlinePoints)
-        // A polygon that lost its points is not a shape at all; falling back
-        // to the box keeps the board drawable rather than blank.
-        : BoardOutline.rectangle(_boundsRect),
+    BoardOutlineKind.polygon =>
+      outlinePoints.length >= 3
+          ? BoardOutline.polygon(outlinePoints)
+          // A polygon that lost its points is not a shape at all; falling back
+          // to the box keeps the board drawable rather than blank.
+          : BoardOutline.rectangle(_boundsRect),
   };
 
   Rect get _boundsRect =>

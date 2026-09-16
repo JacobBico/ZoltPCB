@@ -19,6 +19,7 @@ import 'design_rules_dialog.dart';
 import 'drc_sheet.dart';
 import 'footprint_sidebar.dart';
 import 'object_properties.dart';
+import 'net_classes_dialog.dart';
 import 'silkscreen_dialogs.dart';
 import 'track_sizes_dialog.dart';
 import 'zone_editor.dart';
@@ -240,6 +241,10 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                       selectedLabelId: _carryingLabelId ?? _selectedLabelId,
                       highlightedNetId: _highlightedNetId,
                       pendingRoute: _pendingPath(snap.at),
+                      pendingWidth: _tool == AimTool.route
+                          ? _widthFor(scene)
+                          : null,
+                      routeClashes: _clashes(scene, snap.at),
                       pendingLayer: _routeLayer,
                       showRatsnest: _showRatsnest,
                       showOutlineGrips:
@@ -367,6 +372,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
     return BoardScene.build(
       texts: committed.texts,
+      netClasses: committed.netClasses,
       board: committed.board,
       parts: parts,
       nets: nets,
@@ -410,6 +416,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     final sample = slide.moved.firstOrNull;
     return BoardScene.build(
       texts: committed.texts,
+      netClasses: committed.netClasses,
       board: committed.board,
       parts: parts,
       nets: nets,
@@ -463,10 +470,9 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
     return BoardScene.build(
       texts: committed.texts,
+      netClasses: committed.netClasses,
       board: _carryingOutline
-          ? committed.board.withOutline(
-              _shiftOutline(committed.outline, delta),
-            )
+          ? committed.board.withOutline(_shiftOutline(committed.outline, delta))
           : committed.board,
       parts: parts,
       nets: nets,
@@ -504,9 +510,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       edges: [
         for (final edge in committed.edges)
           if (edge.id == edgeId || moving.edgeIds.contains(edge.id))
-            edge.copyWith(
-              points: [for (final p in edge.points) p + delta],
-            )
+            edge.copyWith(points: [for (final p in edge.points) p + delta])
           else
             edge,
       ],
@@ -534,14 +538,8 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       };
 
   /// Where the crosshair is pointing, after snapping.
-  SnapTarget _snapAt(
-    BoardScene scene,
-    SchematicViewport viewport,
-    Size size,
-  ) {
-    final centre = viewport.toSheet(
-      Offset(size.width / 2, size.height / 2),
-    );
+  SnapTarget _snapAt(BoardScene scene, SchematicViewport viewport, Size size) {
+    final centre = viewport.toSheet(Offset(size.width / 2, size.height / 2));
     final carriedId = _carryingId;
     if (carriedId != null) {
       final footprint = scene.footprints
@@ -656,9 +654,8 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                       label: layer.label,
                       icon: Icons.layers_outlined,
                       colour: BoardPainter.colorFor(layer),
-                      onTap: () => ref
-                          .read(activeLayerProvider.notifier)
-                          .toggle(),
+                      onTap: () =>
+                          ref.read(activeLayerProvider.notifier).toggle(),
                     ),
                     _StripChip(
                       label: _snap ? '${_mm(_grid)} mm' : 'free',
@@ -689,8 +686,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                       colour: _angleLock == TrackAngleLock.any
                           ? KicadPalette.warning
                           : KicadPalette.textSecondary,
-                      onTap: () =>
-                          setState(() => _angleLock = _angleLock.next),
+                      onTap: () => setState(() => _angleLock = _angleLock.next),
                     ),
                     _StripChip(
                       label: _curveRadius > 0
@@ -797,10 +793,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       _carryingSelection;
 
   /// The buttons that matter right now, and no others.
-  List<Widget> _contextButtons(
-    BoardScene scene,
-    List<PartWithDetails> parts,
-  ) {
+  List<Widget> _contextButtons(BoardScene scene, List<PartWithDetails> parts) {
     final history = ref.watch(editHistoryProvider);
 
     if (_carryingId != null) {
@@ -843,17 +836,13 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         _Chip(
           icon: Icons.open_with,
           label: 'Move ${_selected.count}',
-          onPressed: _selected.isEmpty
-              ? null
-              : () => _carryRegion(),
+          onPressed: _selected.isEmpty ? null : () => _carryRegion(),
         ),
         _Chip(
           icon: Icons.delete_outline,
           label: 'Delete ${_selected.count}',
           danger: true,
-          onPressed: _selected.isEmpty
-              ? null
-              : () => _deleteSelection(scene),
+          onPressed: _selected.isEmpty ? null : () => _deleteSelection(scene),
         ),
         _Chip(
           icon: Icons.close,
@@ -973,8 +962,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         _Chip(
           icon: Icons.swap_horiz,
           label: 'Footprint',
-          onPressed: () =>
-              setState(() => _assigningPartId = footprint.part.id),
+          onPressed: () => setState(() => _assigningPartId = footprint.part.id),
         ),
       ];
     }
@@ -1004,9 +992,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           icon: Icons.layers_clear_outlined,
           label: 'Rip net',
           danger: true,
-          onPressed: track.netId == null
-              ? null
-              : () => _ripUpNet(track.netId!),
+          onPressed: track.netId == null ? null : () => _ripUpNet(track.netId!),
         ),
       ];
     }
@@ -1206,8 +1192,13 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         return;
       }
       HapticFeedback.selectionClick();
+      // A net in a class routes at the class width, the way KiCad picks the
+      // width up from the net under the cursor.
+      final netClass = scene.classOf(pad?.netId ?? snap.netId);
+      if (netClass != null) _notify(netClass.label);
       setState(() {
         _clearSelection();
+        if (netClass != null) _trackWidth = netClass.trackWidth;
         _routeNetId = pad?.netId ?? snap.netId;
         _routeLayer = pad != null
             ? _layerFor(pad)
@@ -1707,9 +1698,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   Future<void> _dropCarried(BoardScene scene, Offset at) async {
     final id = _carryingId;
     if (id == null) return;
-    final footprint = scene.footprints
-        .where((f) => f.ref.id == id)
-        .firstOrNull;
+    final footprint = scene.footprints.where((f) => f.ref.id == id).firstOrNull;
     setState(() {
       _carryingId = null;
       _carryAnchor = null;
@@ -1742,7 +1731,9 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     if (before == null) return;
     await ref
         .read(boardRepositoryProvider)
-        .updatePlacement(before.copyWith(rotation: (before.rotation + 90) % 360));
+        .updatePlacement(
+          before.copyWith(rotation: (before.rotation + 90) % 360),
+        );
   }
 
   // --- silkscreen ------------------------------------------------------
@@ -1778,6 +1769,8 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     ],
     staleTrackIds: committed.staleTrackIds,
     staleViaIds: committed.staleViaIds,
+    netClasses: committed.netClasses,
+    netClassByNet: committed.netClassByNet,
   );
 
   Future<void> _dropSilk(BoardScene scene, Offset at) async {
@@ -1810,9 +1803,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     // Stored in the part's own frame, so the label turns and flips with
     // the part afterwards instead of being left behind on the board.
     final before = footprint.ref;
-    final after = before.copyWith(
-      labelOffset: footprint.placement.invert(at),
-    );
+    final after = before.copyWith(labelOffset: footprint.placement.invert(at));
     await repository.updatePlacement(after);
     HapticFeedback.lightImpact();
     _record(
@@ -2070,12 +2061,9 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     );
   }
 
-  BoardOutline _resizedOutline(BoardScene scene, int handle, Offset at) =>
-      scene.outline.withHandleAt(
-        handle,
-        at,
-        minimum: math.max(scene.board.gridMm * 2, 0.2),
-      );
+  BoardOutline _resizedOutline(BoardScene scene, int handle, Offset at) => scene
+      .outline
+      .withHandleAt(handle, at, minimum: math.max(scene.board.gridMm * 2, 0.2));
 
   Future<void> _dropOutlineHandle(BoardScene scene, Offset at) async {
     final handle = _carryingOutlineHandle;
@@ -2110,6 +2098,8 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     texts: committed.texts,
     staleTrackIds: committed.staleTrackIds,
     staleViaIds: committed.staleViaIds,
+    netClasses: committed.netClasses,
+    netClassByNet: committed.netClassByNet,
   );
 
   void _carryRegion() {
@@ -2240,11 +2230,12 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
   /// Every part and where it stands, with the verb that moves it on.
   void _showParts(BoardScene scene, List<PartWithDetails> parts) {
-    final onBoard = [for (final p in parts) if (p.part.onBoard) p];
+    final onBoard = [
+      for (final p in parts)
+        if (p.part.onBoard) p,
+    ];
     final placed = {for (final f in scene.footprints) f.part.id};
-    final assigned = {
-      for (final ref_ in scene.unplaced) ref_.partId: ref_,
-    };
+    final assigned = {for (final ref_ in scene.unplaced) ref_.partId: ref_};
 
     final resolvable = [
       for (final part in onBoard)
@@ -2337,9 +2328,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                             } else if (ref_ != null) {
                               _pickUp(ref_.id, part.part.reference);
                             } else {
-                              setState(
-                                () => _assigningPartId = part.part.id,
-                              );
+                              setState(() => _assigningPartId = part.part.id);
                             }
                           },
                           child: Text(
@@ -2434,11 +2423,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
   // --- selection -------------------------------------------------------
 
-  void _onTap(
-    BoardScene scene,
-    SchematicViewport viewport,
-    Offset local,
-  ) {
+  void _onTap(BoardScene scene, SchematicViewport viewport, Offset local) {
     if (_fabPreview || _carryingId != null) return;
     final board = viewport.toSheet(local);
     final tolerance = math.max(0.3, 16 / viewport.pixelsPerMm);
@@ -2571,7 +2556,21 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   // --- sizes -----------------------------------------------------------
 
   double _widthFor(BoardScene scene) =>
-      _trackWidth ?? scene.board.rules.trackWidth;
+      _trackWidth ??
+      scene.classOf(_routeNetId)?.trackWidth ??
+      scene.board.rules.trackWidth;
+
+  /// Where the route being drawn comes too close to another net.
+  List<RouteClash> _clashes(BoardScene scene, Offset at) {
+    if (_tool != AimTool.route || _points.isEmpty) return const [];
+    return routeClashes(
+      scene,
+      route: _pendingPath(at),
+      width: _widthFor(scene),
+      layer: _routeLayer ?? ref.read(activeLayerProvider),
+      netId: _routeNetId,
+    );
+  }
 
   ViaSize _viaFor(BoardScene scene) =>
       _viaSize ??
@@ -2581,6 +2580,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     final chosen = await showTrackWidthPicker(
       context,
       widths: scene.board.availableTrackWidths,
+      classes: scene.netClasses,
       selected: _widthFor(scene),
       rule: scene.board.rules.trackWidth,
     );
@@ -2705,15 +2705,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                 ),
               ),
               Divider(height: 1, color: KicadPalette.border),
-              for (final grid in const [
-                0.05,
-                0.1,
-                0.25,
-                0.5,
-                1.0,
-                1.27,
-                2.54,
-              ])
+              for (final grid in const [0.05, 0.1, 0.25, 0.5, 1.0, 1.27, 2.54])
                 ListTile(
                   dense: true,
                   leading: Icon(
@@ -2808,6 +2800,18 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                   subtitle:
                       '${scene.board.availableTrackWidths.length} widths · '
                       '${scene.board.availableViaSizes.length} vias',
+                ),
+                item(
+                  Icons.label_important_outline,
+                  'Net classes',
+                  () => showNetClassesDialog(
+                    context,
+                    projectId: widget.project.id,
+                    rules: scene.board.rules,
+                  ),
+                  subtitle: scene.netClasses.isEmpty
+                      ? 'Named widths for power, signal…'
+                      : [for (final c in scene.netClasses) c.name].join(' · '),
                 ),
                 item(
                   Icons.tune,
@@ -2969,12 +2973,12 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
   Future<void> _ripUpNet(String netId) async {
     final repository = ref.read(boardRepositoryProvider);
-    final tracks = (await repository.getTracks(widget.project.id))
-        .where((t) => t.netId == netId)
-        .toList();
-    final vias = (await repository.getVias(widget.project.id))
-        .where((v) => v.netId == netId)
-        .toList();
+    final tracks = (await repository.getTracks(
+      widget.project.id,
+    )).where((t) => t.netId == netId).toList();
+    final vias = (await repository.getVias(
+      widget.project.id,
+    )).where((v) => v.netId == netId).toList();
     await repository.ripUpNet(widget.project.id, netId);
     if (mounted) setState(() => _selectedTrackId = null);
     _record(
@@ -3197,9 +3201,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
   static String _mm(double value) {
     final text = value.toStringAsFixed(3);
-    return text.contains('.')
-        ? text.replaceFirst(RegExp(r'\.?0+$'), '')
-        : text;
+    return text.contains('.') ? text.replaceFirst(RegExp(r'\.?0+$'), '') : text;
   }
 }
 
@@ -3248,10 +3250,7 @@ class _ToolChip extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text(
                   tool.label,
-                  style: TextStyle(
-                    color: KicadPalette.highlight,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: KicadPalette.highlight, fontSize: 12),
                 ),
               ],
             ],

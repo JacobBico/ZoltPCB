@@ -149,9 +149,7 @@ class _EditorCard extends StatelessWidget {
           color: selected ? KicadPalette.current.selectedContainer : null,
           borderRadius: BorderRadius.circular(4),
           border: Border.all(
-            color: selected
-                ? KicadPalette.highlight
-                : KicadPalette.border,
+            color: selected ? KicadPalette.highlight : KicadPalette.border,
             width: selected ? 1.6 : 1,
           ),
         ),

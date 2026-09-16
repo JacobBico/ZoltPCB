@@ -11,12 +11,16 @@ class PartEditorResult {
     required this.value,
     required this.footprint,
     required this.dnp,
+    this.fieldsHidden = false,
   });
 
   final String reference;
   final String value;
   final String footprint;
   final bool dnp;
+
+  /// Whether the designator and value are left off the drawing.
+  final bool fieldsHidden;
 }
 
 /// Edits the fields of a placed component that end up in the BOM and the
@@ -46,6 +50,7 @@ class _PartEditorDialogState extends State<_PartEditorDialog> {
   late final TextEditingController _value;
   late final TextEditingController _footprint;
   late bool _dnp;
+  late bool _fieldsHidden;
 
   /// Whether the value is being typed on the keypad rather than on the
   /// phone's keyboard.
@@ -58,6 +63,7 @@ class _PartEditorDialogState extends State<_PartEditorDialog> {
     _value = TextEditingController(text: widget.part.value);
     _footprint = TextEditingController(text: widget.part.footprint);
     _dnp = widget.part.dnp;
+    _fieldsHidden = widget.part.fieldsHidden;
     _keypad = isNumericValuePart(widget.part.reference);
   }
 
@@ -98,6 +104,7 @@ class _PartEditorDialogState extends State<_PartEditorDialog> {
         value: _value.text.trim(),
         footprint: _footprint.text.trim(),
         dnp: _dnp,
+        fieldsHidden: _fieldsHidden,
       ),
     );
   }
@@ -114,9 +121,8 @@ class _PartEditorDialogState extends State<_PartEditorDialog> {
             child: TextFormField(
               controller: _reference,
               decoration: const InputDecoration(labelText: 'Reference'),
-              validator: (value) => (value == null || value.trim().isEmpty)
-                  ? 'Required'
-                  : null,
+              validator: (value) =>
+                  (value == null || value.trim().isEmpty) ? 'Required' : null,
             ),
           ),
           const SizedBox(width: 12),
@@ -163,6 +169,19 @@ class _PartEditorDialogState extends State<_PartEditorDialog> {
         title: const Text('Do not populate'),
         subtitle: const Text(
           'Kept in the schematic, left off the assembled board',
+        ),
+      ),
+      // The label is the value and designator as drawn, so whether it
+      // shows belongs with editing them rather than on a button of its own.
+      CheckboxListTile(
+        value: _fieldsHidden,
+        onChanged: (value) => setState(() => _fieldsHidden = value ?? false),
+        controlAffinity: ListTileControlAffinity.leading,
+        contentPadding: EdgeInsets.zero,
+        dense: true,
+        title: const Text('Hide label on the sheet'),
+        subtitle: const Text(
+          'Still exported and in the BOM — only the drawing leaves it off',
         ),
       ),
     ],

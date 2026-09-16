@@ -282,6 +282,7 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
     final id = _candidateFootprintId;
     return BoardScene.build(
       texts: committed.texts,
+      netClasses: committed.netClasses,
       board: board,
       parts: parts,
       nets: nets,

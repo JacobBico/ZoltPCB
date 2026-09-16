@@ -82,9 +82,7 @@ class _BoardShapeEditorState extends State<_BoardShapeEditor> {
 
   static String _mm(double value) {
     final text = value.toStringAsFixed(2);
-    return text
-        .replaceAll(RegExp(r'0+$'), '')
-        .replaceAll(RegExp(r'\.$'), '');
+    return text.replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
   }
 
   static double? _parse(TextEditingController c) =>
@@ -404,7 +402,10 @@ class _BoardShapeEditorState extends State<_BoardShapeEditor> {
                         Expanded(child: _field(_ys[i], 'Y')),
                         IconButton(
                           tooltip: 'Remove corner',
-                          icon: const Icon(Icons.remove_circle_outline, size: 18),
+                          icon: const Icon(
+                            Icons.remove_circle_outline,
+                            size: 18,
+                          ),
                           onPressed: _xs.length <= 3
                               ? null
                               : () => setState(() {
@@ -423,24 +424,21 @@ class _BoardShapeEditorState extends State<_BoardShapeEditor> {
     }
   }
 
-  Widget _field(TextEditingController controller, String label) =>
-      TextField(
-        controller: controller,
-        keyboardType: const TextInputType.numberWithOptions(
-          decimal: true,
-          signed: true,
-        ),
-        inputFormatters: [
-          FilteringTextInputFormatter.allow(RegExp(r'[0-9.,\-]')),
-        ],
-        decoration: InputDecoration(
-          labelText: label,
-          suffixText: 'mm',
-          isDense: true,
-          floatingLabelBehavior: FloatingLabelBehavior.always,
-        ),
-        onChanged: (_) => setState(() {}),
-      );
+  Widget _field(TextEditingController controller, String label) => TextField(
+    controller: controller,
+    keyboardType: const TextInputType.numberWithOptions(
+      decimal: true,
+      signed: true,
+    ),
+    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,\-]'))],
+    decoration: InputDecoration(
+      labelText: label,
+      suffixText: 'mm',
+      isDense: true,
+      floatingLabelBehavior: FloatingLabelBehavior.always,
+    ),
+    onChanged: (_) => setState(() {}),
+  );
 }
 
 /// The outline being typed, fitted to the preview box.
@@ -463,9 +461,11 @@ class _OutlinePreviewPainter extends CustomPainter {
       (size.height - margin * 2) / bounds.height,
     );
     Offset map(Offset p) => Offset(
-      margin + (p.dx - bounds.left) * scale +
+      margin +
+          (p.dx - bounds.left) * scale +
           (size.width - margin * 2 - bounds.width * scale) / 2,
-      margin + (p.dy - bounds.top) * scale +
+      margin +
+          (p.dy - bounds.top) * scale +
           (size.height - margin * 2 - bounds.height * scale) / 2,
     );
 

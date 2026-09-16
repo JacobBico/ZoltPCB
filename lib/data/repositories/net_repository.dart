@@ -20,10 +20,20 @@ class InvalidConnectionException implements Exception {
 
 /// One net as it stood before an edit.
 class PriorNet {
-  const PriorNet({required this.name, required this.pinIds});
+  const PriorNet({
+    required this.name,
+    required this.pinIds,
+    this.wires = const [],
+    this.netClassId,
+  });
 
   final String? name;
   final List<String> pinIds;
+
+  /// The net's drawn wires, so undoing a disconnect brings back their
+  /// shapes rather than an automatic route.
+  final List<SchematicWire> wires;
+  final String? netClassId;
 
   @override
   String toString() => 'PriorNet(${name ?? "<unnamed>"}, ${pinIds.length})';
@@ -62,10 +72,12 @@ class NetRepository {
   final AppDatabase _db;
 
   Stream<List<NetWithEndpoints>> watchNets(String projectId) {
-    return _db.watchAggregate(
-      {_db.nets, _db.netNodes, _db.partPins, _db.parts},
-      () => getNets(projectId),
-    );
+    return _db.watchAggregate({
+      _db.nets,
+      _db.netNodes,
+      _db.partPins,
+      _db.parts,
+    }, () => getNets(projectId));
   }
 
   Future<List<NetWithEndpoints>> getNets(String projectId) async {
@@ -115,7 +127,9 @@ class NetRepository {
     final rows = await query.get();
     return {
       for (final row in rows)
-        row.readTable(_db.netNodes).partPinId: row.readTable(_db.netNodes).netId,
+        row.readTable(_db.netNodes).partPinId: row
+            .readTable(_db.netNodes)
+            .netId,
     };
   }
 
@@ -162,8 +176,9 @@ class NetRepository {
     });
 
     await _applyPowerSymbolName(netId);
-    await _touchProjectForNet(netId);
-    final net = await getNet(netId);
+    final joined = await _joinSameName(netId);
+    await _touchProjectForNet(joined);
+    final net = await getNet(joined);
     return net!;
   }
 
@@ -183,7 +198,8 @@ class NetRepository {
       await _addNode(netId, pinId);
     });
     await _applyPowerSymbolName(netId);
-    await _touchProjectForNet(netId);
+    final joined = await _joinSameName(netId);
+    await _touchProjectForNet(joined);
   }
 
   /// Removes a pin from whatever net it is on.
@@ -197,9 +213,11 @@ class NetRepository {
         _db.netNodes,
       )..where((t) => t.partPinId.equals(pinId))).getSingleOrNull();
       if (node == null) return null;
+      await (_db.delete(_db.netNodes)..where((t) => t.id.equals(node.id))).go();
+      // A drawn wire to a pin that has left the net is drawing nothing.
       await (_db.delete(
-        _db.netNodes,
-      )..where((t) => t.id.equals(node.id))).go();
+        _db.schematicWires,
+      )..where((t) => t.pinAId.equals(pinId) | t.pinBId.equals(pinId))).go();
       await _pruneNet(node.netId);
       return node.netId;
     });
@@ -208,22 +226,93 @@ class NetRepository {
 
   /// Sets or clears a net's label. Pass null to make the net anonymous
   /// again, in which case it is auto-named on export.
-  Future<void> renameNet(String netId, String? name) async {
+  ///
+  /// A name is an identity, the way a label is in KiCad: naming a net SDA
+  /// joins it to any other SDA in the project. Returns the id of the net
+  /// the pins ended up on.
+  Future<String> renameNet(String netId, String? name) async {
     final trimmed = name?.trim();
     final value = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
-    await (_db.update(_db.nets)..where((t) => t.id.equals(netId)))
-        .write(NetsCompanion(name: Value(value)));
-    await _touchProjectForNet(netId);
+    await (_db.update(_db.nets)..where((t) => t.id.equals(netId))).write(
+      NetsCompanion(name: Value(value)),
+    );
+    final joined = await _joinSameName(netId);
+    await _touchProjectForNet(joined);
+    return joined;
+  }
+
+  /// The pins of every net called [name] in [projectId], for taking a
+  /// snapshot before an operation that may join them.
+  Future<List<String>> pinsNamed(String projectId, String? name) async {
+    final trimmed = name?.trim();
+    if (trimmed == null || trimmed.isEmpty) return const [];
+    final query =
+        _db.select(_db.netNodes).join([
+          innerJoin(_db.nets, _db.nets.id.equalsExp(_db.netNodes.netId)),
+        ])..where(
+          _db.nets.projectId.equals(projectId) & _db.nets.name.equals(trimmed),
+        );
+    return [
+      for (final row in await query.get())
+        row.readTable(_db.netNodes).partPinId,
+    ];
+  }
+
+  /// Puts a single pin on a net of its own called [name] — a label on one
+  /// pin, which joins whatever else carries that name.
+  /// The net [pinId] is on, making one holding just that pin when it is on
+  /// none — for a wire drawn out from a pin and left open-ended.
+  Future<String> netForPin(String projectId, String pinId) async {
+    final existing = await netIdForPin(pinId);
+    if (existing != null) return existing;
+    final netId = await _createNet(projectId);
+    await _addNode(netId, pinId);
+    await _touchProject(projectId);
+    return netId;
+  }
+
+  Future<String> labelPin(String projectId, String pinId, String name) async {
+    final existing = await netIdForPin(pinId);
+    if (existing != null) return renameNet(existing, name);
+    final netId = await _createNet(projectId, name: name.trim());
+    await _addNode(netId, pinId);
+    final joined = await _joinSameName(netId);
+    await _touchProject(projectId);
+    return joined;
+  }
+
+  /// Joins nets sharing a name, for designs that arrive with duplicates.
+  Future<void> joinSameNamedNets() => _db.joinSameNamedNets();
+
+  /// Joins every other net in the project with [netId]'s name into it, and
+  /// returns the survivor.
+  Future<String> _joinSameName(String netId) async {
+    final row = await (_db.select(
+      _db.nets,
+    )..where((t) => t.id.equals(netId))).getSingleOrNull();
+    final name = row?.name;
+    if (row == null || name == null || name.isEmpty) return netId;
+
+    final others =
+        await (_db.select(_db.nets)..where(
+              (t) =>
+                  t.projectId.equals(row.projectId) &
+                  t.name.equals(name) &
+                  t.id.equals(netId).not(),
+            ))
+            .get();
+    var survivor = netId;
+    for (final other in others) {
+      survivor = await _mergeNets(survivor, other.id);
+    }
+    return survivor;
   }
 
   /// Moves a net's label, or clears the position so it goes back to the
   /// spot the drawing chooses for it.
   Future<void> setNetLabelPosition(String netId, Offset? at) async {
     await (_db.update(_db.nets)..where((t) => t.id.equals(netId))).write(
-      NetsCompanion(
-        labelX: Value(at?.dx),
-        labelY: Value(at?.dy),
-      ),
+      NetsCompanion(labelX: Value(at?.dx), labelY: Value(at?.dy)),
     );
     await _touchProjectForNet(netId);
   }
@@ -268,8 +357,9 @@ class NetRepository {
       if (!isPowerReference(part.reference)) continue;
       final name = part.value.trim();
       if (name.isEmpty) continue;
-      await (_db.update(_db.nets)..where((t) => t.id.equals(netId)))
-          .write(NetsCompanion(name: Value(name)));
+      await (_db.update(_db.nets)..where((t) => t.id.equals(netId))).write(
+        NetsCompanion(name: Value(name)),
+      );
       return;
     }
   }
@@ -311,6 +401,8 @@ class NetRepository {
         PriorNet(
           name: net.name,
           pinIds: [for (final node in nodes) node.partPinId],
+          wires: await getWiresOfNet(netId),
+          netClassId: net.netClassId,
         ),
       );
     }
@@ -350,20 +442,144 @@ class NetRepository {
       for (final prior in snapshot.nets) {
         if (prior.pinIds.isEmpty) continue;
         final netId = await _createNet(snapshot.projectId, name: prior.name);
+        if (prior.netClassId != null) {
+          await (_db.update(_db.nets)..where((t) => t.id.equals(netId))).write(
+            NetsCompanion(netClassId: Value(prior.netClassId)),
+          );
+        }
         for (final pinId in prior.pinIds) {
           await _addNode(netId, pinId);
+        }
+        for (final wire in prior.wires) {
+          await _db
+              .into(_db.schematicWires)
+              .insert(
+                _wireCompanion(wire.copyWith(netId: netId)),
+                mode: InsertMode.insertOrReplace,
+              );
         }
       }
     });
     await _touchProject(snapshot.projectId);
   }
 
+  // --- drawn wires -------------------------------------------------------
+
+  Stream<List<SchematicWire>> watchWires(String projectId) {
+    final query = _db.select(_db.schematicWires)
+      ..where((t) => t.projectId.equals(projectId))
+      ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]);
+    return query.watch().map((rows) => [for (final r in rows) _toWire(r)]);
+  }
+
+  Future<List<SchematicWire>> getWires(String projectId) async {
+    final rows =
+        await (_db.select(_db.schematicWires)
+              ..where((t) => t.projectId.equals(projectId))
+              ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+            .get();
+    return [for (final r in rows) _toWire(r)];
+  }
+
+  Future<List<SchematicWire>> getWiresOfNet(String netId) async {
+    final rows =
+        await (_db.select(_db.schematicWires)
+              ..where((t) => t.netId.equals(netId))
+              ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+            .get();
+    return [for (final r in rows) _toWire(r)];
+  }
+
+  /// Stores a wire as drawn, on whatever net [pinAId] or [pinBId] is on now.
+  Future<SchematicWire?> addWire({
+    required String projectId,
+    required List<Offset> points,
+    String? pinAId,
+    String? pinBId,
+    String? netId,
+  }) async {
+    final net =
+        netId ??
+        (pinAId == null ? null : await netIdForPin(pinAId)) ??
+        (pinBId == null ? null : await netIdForPin(pinBId));
+    if (net == null || points.length < 2) return null;
+    final wire = SchematicWire(
+      id: newId(),
+      projectId: projectId,
+      netId: net,
+      pinAId: pinAId,
+      pinBId: pinBId,
+      points: points,
+    );
+    await _db.into(_db.schematicWires).insert(_wireCompanion(wire));
+    await _touchProject(projectId);
+    return wire;
+  }
+
+  /// Re-attaches a wire's ends, for one dragged off a pin or onto another.
+  ///
+  /// The ends are what makes a drawn wire follow the parts it joins, so a
+  /// wire that has been dragged somewhere else has to be told where it now
+  /// begins and ends — otherwise it snaps back to the pins it was drawn
+  /// between the next time the sheet is drawn.
+  Future<void> setWireEnds(
+    String id, {
+    required String? pinAId,
+    required String? pinBId,
+  }) async {
+    await (_db.update(_db.schematicWires)..where((t) => t.id.equals(id))).write(
+      SchematicWiresCompanion(pinAId: Value(pinAId), pinBId: Value(pinBId)),
+    );
+  }
+
+  Future<void> updateWire(SchematicWire wire) async {
+    await (_db.update(
+      _db.schematicWires,
+    )..where((t) => t.id.equals(wire.id))).write(
+      SchematicWiresCompanion(points: Value(SchematicWire.encode(wire.points))),
+    );
+    await _touchProject(wire.projectId);
+  }
+
+  Future<void> deleteWire(String id) async {
+    await (_db.delete(_db.schematicWires)..where((t) => t.id.equals(id))).go();
+  }
+
+  /// Puts a deleted wire back, if its net is still there to hold it.
+  Future<void> restoreWire(SchematicWire wire) async {
+    final net = await (_db.select(
+      _db.nets,
+    )..where((t) => t.id.equals(wire.netId))).getSingleOrNull();
+    if (net == null) return;
+    await _db
+        .into(_db.schematicWires)
+        .insert(_wireCompanion(wire), mode: InsertMode.insertOrReplace);
+  }
+
+  SchematicWiresCompanion _wireCompanion(SchematicWire wire) =>
+      SchematicWiresCompanion.insert(
+        id: wire.id,
+        projectId: wire.projectId,
+        netId: wire.netId,
+        pinAId: Value(wire.pinAId),
+        pinBId: Value(wire.pinBId),
+        points: SchematicWire.encode(wire.points),
+        createdAt: DateTime.now(),
+      );
+
+  SchematicWire _toWire(SchematicWireRow row) => SchematicWire(
+    id: row.id,
+    projectId: row.projectId,
+    netId: row.netId,
+    pinAId: row.pinAId,
+    pinBId: row.pinBId,
+    points: SchematicWire.decode(row.points),
+  );
+
   /// The stable key for a wire between two pins, independent of the order
   /// they were tapped in or which net they ended up on.
   static String routeKey(String pinAId, String pinBId) =>
-      pinAId.compareTo(pinBId) <= 0
-      ? '$pinAId|$pinBId'
-      : '$pinBId|$pinAId';
+      pinAId.compareTo(pinBId) <= 0 ? '$pinAId|$pinBId' : '$pinBId|$pinAId';
 
   /// User adjustments to drawn wire routes, keyed by [routeKey].
   Future<Map<String, List<double>>> routeHints(String projectId) async {
@@ -399,9 +615,8 @@ class NetRepository {
     final second = pinAId.compareTo(pinBId) <= 0 ? pinBId : pinAId;
 
     final existing =
-        await (_db.select(_db.netRouteHints)..where(
-              (t) => t.pinAId.equals(first) & t.pinBId.equals(second),
-            ))
+        await (_db.select(_db.netRouteHints)
+              ..where((t) => t.pinAId.equals(first) & t.pinBId.equals(second)))
             .getSingleOrNull();
 
     final meaningful = offsets.any((value) => value.abs() >= 1e-6);
@@ -416,18 +631,21 @@ class NetRepository {
 
     final encoded = _encodeOffsets(offsets);
     if (existing == null) {
-      await _db.into(_db.netRouteHints).insert(
-        NetRouteHintsCompanion.insert(
-          id: newId(),
-          projectId: projectId,
-          pinAId: first,
-          pinBId: second,
-          turnOffsets: Value(encoded),
-        ),
-      );
+      await _db
+          .into(_db.netRouteHints)
+          .insert(
+            NetRouteHintsCompanion.insert(
+              id: newId(),
+              projectId: projectId,
+              pinAId: first,
+              pinBId: second,
+              turnOffsets: Value(encoded),
+            ),
+          );
       return;
     }
-    await (_db.update(_db.netRouteHints)..where((t) => t.id.equals(existing.id)))
+    await (_db.update(_db.netRouteHints)
+          ..where((t) => t.id.equals(existing.id)))
         .write(NetRouteHintsCompanion(turnOffsets: Value(encoded)));
   }
 
@@ -437,8 +655,7 @@ class NetRepository {
   static List<double> _decodeOffsets(String encoded) {
     if (encoded.isEmpty) return const [];
     return [
-      for (final part in encoded.split(','))
-        double.tryParse(part) ?? 0.0,
+      for (final part in encoded.split(',')) double.tryParse(part) ?? 0.0,
     ];
   }
 
@@ -446,26 +663,30 @@ class NetRepository {
 
   Future<String> _createNet(String projectId, {String? name}) async {
     final id = newId();
-    await _db.into(_db.nets).insert(
-      NetsCompanion.insert(
-        id: id,
-        projectId: projectId,
-        name: Value(name),
-        createdAt: DateTime.now(),
-      ),
-    );
+    await _db
+        .into(_db.nets)
+        .insert(
+          NetsCompanion.insert(
+            id: id,
+            projectId: projectId,
+            name: Value(name),
+            createdAt: DateTime.now(),
+          ),
+        );
     return id;
   }
 
   Future<void> _addNode(String netId, String pinId) async {
-    await _db.into(_db.netNodes).insert(
-      NetNodesCompanion.insert(
-        id: newId(),
-        netId: netId,
-        partPinId: pinId,
-        createdAt: DateTime.now(),
-      ),
-    );
+    await _db
+        .into(_db.netNodes)
+        .insert(
+          NetNodesCompanion.insert(
+            id: newId(),
+            netId: netId,
+            partPinId: pinId,
+            createdAt: DateTime.now(),
+          ),
+        );
   }
 
   /// Merges two nets and returns the id of the survivor.
@@ -499,6 +720,23 @@ class NetRepository {
 
     await (_db.update(_db.netNodes)..where((t) => t.netId.equals(loser.id)))
         .write(NetNodesCompanion(netId: Value(winner.id)));
+    // Everything else that belongs to the net comes across too. The board's
+    // copper points at nets with set-null, so without this a merge quietly
+    // left routed tracks on no net at all.
+    await (_db.update(_db.boardTracks)..where((t) => t.netId.equals(loser.id)))
+        .write(BoardTracksCompanion(netId: Value(winner.id)));
+    await (_db.update(_db.boardVias)..where((t) => t.netId.equals(loser.id)))
+        .write(BoardViasCompanion(netId: Value(winner.id)));
+    await (_db.update(_db.boardZones)..where((t) => t.netId.equals(loser.id)))
+        .write(BoardZonesCompanion(netId: Value(winner.id)));
+    await (_db.update(_db.schematicWires)
+          ..where((t) => t.netId.equals(loser.id)))
+        .write(SchematicWiresCompanion(netId: Value(winner.id)));
+    if (winner.netClassId == null && loser.netClassId != null) {
+      await (_db.update(_db.nets)..where((t) => t.id.equals(winner.id))).write(
+        NetsCompanion(netClassId: Value(loser.netClassId)),
+      );
+    }
     await (_db.delete(_db.nets)..where((t) => t.id.equals(loser.id))).go();
     return winner.id;
   }
@@ -596,9 +834,7 @@ class NetRepository {
     if (rows.length != 2) {
       throw const InvalidConnectionException('One or both pins do not exist');
     }
-    final projects = rows
-        .map((r) => r.readTable(_db.parts).projectId)
-        .toSet();
+    final projects = rows.map((r) => r.readTable(_db.parts).projectId).toSet();
     if (projects.length != 1) {
       throw const InvalidConnectionException(
         'Pins belong to different projects',

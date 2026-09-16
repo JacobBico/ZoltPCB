@@ -16,7 +16,11 @@ class Net {
     required this.createdAt,
     this.name,
     this.labelAt,
+    this.netClassId,
   });
+
+  /// The board net class this net routes with; null for the default.
+  final String? netClassId;
 
   final String id;
   final String projectId;
@@ -44,6 +48,7 @@ class Net {
     createdAt: createdAt,
     name: clearName ? null : (name ?? this.name),
     labelAt: clearLabelAt ? null : (labelAt ?? this.labelAt),
+    netClassId: netClassId,
   );
 
   @override
@@ -53,10 +58,12 @@ class Net {
       other.projectId == projectId &&
       other.name == name &&
       other.labelAt == labelAt &&
+      other.netClassId == netClassId &&
       other.createdAt == createdAt;
 
   @override
-  int get hashCode => Object.hash(id, projectId, name, labelAt, createdAt);
+  int get hashCode =>
+      Object.hash(id, projectId, name, labelAt, netClassId, createdAt);
 
   @override
   String toString() => 'Net($id, ${name ?? "<unnamed>"})';

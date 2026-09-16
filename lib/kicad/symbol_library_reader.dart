@@ -151,9 +151,9 @@ abstract final class SymbolLibraryReader {
       allowMalformed: true,
     );
     final version = RegExp(r'\(version\s+(\d+)\)').firstMatch(probe);
-    final generator = RegExp(r'\(generator\s+"?([^")\s]+)"?\)').firstMatch(
-      probe,
-    );
+    final generator = RegExp(
+      r'\(generator\s+"?([^")\s]+)"?\)',
+    ).firstMatch(probe);
     final generatorVersion = RegExp(
       r'\(generator_version\s+"?([^")\s]+)"?\)',
     ).firstMatch(probe);

@@ -13,6 +13,7 @@ class SchematicDocument {
     required this.nets,
     this.symbols = const {},
     this.routeHints = const {},
+    this.drawnWires = const [],
     this.generator = 'hintpcb',
     this.generatorVersion = '1.0',
   });
@@ -32,6 +33,9 @@ class SchematicDocument {
   /// the user arranged on the phone, rather than a fresh automatic route
   /// that would undo their tidying at the moment it leaves the device.
   final Map<String, List<double>> routeHints;
+
+  /// The wires as the user drew them, written exactly as drawn.
+  final List<SchematicWire> drawnWires;
 
   final String generator;
   final String generatorVersion;

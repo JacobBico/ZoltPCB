@@ -6,14 +6,17 @@ import 'package:hintpcb/domain/models/models.dart';
 import 'package:hintpcb/domain/pcb/pcb.dart';
 import 'package:hintpcb/kicad/board_writer.dart';
 
-BoardEdge _edge(BoardEdgeKind kind, List<Offset> points, {double width = 0.1}) =>
-    BoardEdge(
-      id: 'e-${kind.name}',
-      projectId: 'p',
-      kind: kind,
-      points: points,
-      width: width,
-    );
+BoardEdge _edge(
+  BoardEdgeKind kind,
+  List<Offset> points, {
+  double width = 0.1,
+}) => BoardEdge(
+  id: 'e-${kind.name}',
+  projectId: 'p',
+  kind: kind,
+  points: points,
+  width: width,
+);
 
 Board _board() => Board(
   id: 'b',

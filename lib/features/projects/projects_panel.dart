@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,6 +8,7 @@ import '../../app/providers.dart';
 import '../../core/theme/kicad_palette.dart';
 import '../../core/util/formatting.dart';
 import '../../core/widgets/panel.dart';
+import '../../data/import/kicad_project_importer.dart';
 import '../../domain/models/models.dart';
 import '../project/project_screen.dart';
 import 'project_editor_dialog.dart';
@@ -19,6 +23,95 @@ class ProjectsPanel extends ConsumerWidget {
   static Future<void> create(BuildContext context, WidgetRef ref) =>
       _createProject(context, ref);
 
+  /// Opens a project made in desktop KiCad: its schematic, and its board
+  /// and project file when they are picked with it.
+  static Future<void> openKicad(BuildContext context, WidgetRef ref) async {
+    void report(String message) => ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(message)));
+
+    final List<PlatformFile> picked;
+    try {
+      picked = await FilePicker.pickFiles(
+        dialogTitle: 'Pick the .kicad_sch, with the .kicad_pcb and .kicad_pro',
+        // No MIME type exists for KiCad files, so filtering by extension
+        // would hide them on most phones.
+        type: FileType.any,
+      );
+    } catch (error) {
+      if (context.mounted) report('Could not open the picker: $error');
+      return;
+    }
+    if (picked.isEmpty || !context.mounted) return;
+
+    PlatformFile? withExtension(String extension) => picked
+        .where((f) => f.name.toLowerCase().endsWith(extension))
+        .firstOrNull;
+    final schematic = withExtension('.kicad_sch');
+    if (schematic == null) {
+      report('Pick the .kicad_sch — the board and project files come with it');
+      return;
+    }
+    Future<String?> read(PlatformFile? file) async => file == null
+        ? null
+        : utf8.decode(await file.readAsBytes(), allowMalformed: true);
+
+    report('Opening ${schematic.name}…');
+    final KicadImportResult result;
+    try {
+      result = await ref
+          .read(kicadImporterProvider)
+          .import(
+            name: schematic.name.replaceFirst(
+              RegExp(r'\.kicad_sch$', caseSensitive: false),
+              '',
+            ),
+            schematic: (await read(schematic))!,
+            board: await read(withExtension('.kicad_pcb')),
+            projectFile: await read(withExtension('.kicad_pro')),
+          );
+    } on KicadImportException catch (error) {
+      if (context.mounted) report(error.message);
+      return;
+    } catch (error) {
+      if (context.mounted) report('Could not open that project: $error');
+      return;
+    }
+    if (!context.mounted) return;
+
+    report(
+      '${result.partCount} parts, ${result.netCount} nets'
+      '${result.footprintCount > 0 ? ', ${result.footprintCount} footprints, ${result.trackCount} tracks' : ''}',
+    );
+    if (result.warnings.isNotEmpty) {
+      await showDialog<void>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+          title: const Text('Opened, with notes'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Text(result.warnings.map((w) => '• $w').join('\n')),
+            ),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(dialog).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
+    if (!context.mounted) return;
+    await Navigator.of(context).push(
+      ProjectScreen.route(
+        result.project.id,
+        initialSection: ProjectSection.schematic,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final summaries = ref.watch(projectSummariesProvider);
@@ -30,10 +123,22 @@ class ProjectsPanel extends ConsumerWidget {
         message:
             'A project holds components, their pins and the nets between '
             'them. Everything stays on this device until you export it.',
-        action: FilledButton.icon(
-          onPressed: () => _createProject(context, ref),
-          icon: const Icon(Icons.add, size: 18),
-          label: const Text('NEW PROJECT'),
+        action: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.center,
+          children: [
+            FilledButton.icon(
+              onPressed: () => _createProject(context, ref),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('NEW PROJECT'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => openKicad(context, ref),
+              icon: const Icon(Icons.file_open_outlined, size: 16),
+              label: const Text('OPEN KICAD'),
+            ),
+          ],
         ),
       ),
       AsyncData(:final value) => _ProjectTable(summaries: value),
@@ -72,10 +177,7 @@ class ProjectsPanel extends ConsumerWidget {
     // list is already open when it appears. Closing it keeps it closed.
     ref.read(componentPickerOpenProvider.notifier).set(true);
     await Navigator.of(context).push(
-      ProjectScreen.route(
-        created.id,
-        initialSection: ProjectSection.schematic,
-      ),
+      ProjectScreen.route(created.id, initialSection: ProjectSection.schematic),
     );
   }
 }

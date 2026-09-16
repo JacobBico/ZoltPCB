@@ -49,9 +49,7 @@ abstract final class FootprintParser {
       name: name.contains(':') ? name.split(':').last : name,
       description: node.childAtom('descr') ?? properties['Description'] ?? '',
       keywords: node.childAtom('tags') ?? '',
-      pads: [
-        for (final pad in node.children('pad')) ?_parsePad(pad),
-      ],
+      pads: [for (final pad in node.children('pad')) ?_parsePad(pad)],
       graphics: _parseGraphics(node),
       attributes: _parseAttributes(node),
       formatVersion: node.childInteger('version') ?? 0,
@@ -62,9 +60,7 @@ abstract final class FootprintParser {
   static List<String> _parseAttributes(SList node) {
     final attr = node.child('attr');
     if (attr == null) return const [];
-    return [
-      for (var i = 1; i < attr.items.length; i++) ?attr.atom(i),
-    ];
+    return [for (var i = 1; i < attr.items.length; i++) ?attr.atom(i)];
   }
 
   static Pad? _parsePad(SList node) {
@@ -109,9 +105,7 @@ abstract final class FootprintParser {
 
   static List<String> _layerTokens(SList? node) {
     if (node == null) return const [];
-    return [
-      for (var i = 1; i < node.items.length; i++) ?node.atom(i),
-    ];
+    return [for (var i = 1; i < node.items.length; i++) ?node.atom(i)];
   }
 
   /// Expands KiCad's layer wildcards into the layers we actually draw.

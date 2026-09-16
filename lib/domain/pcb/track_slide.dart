@@ -95,8 +95,10 @@ bool _isIntact(List<Track> chain, TrackSlide slide) {
     final moved = after[original.id];
     // Taken out for having no length left: at the limit, not past it.
     if (moved == null) continue;
-    final was = Offset(original.endX - original.startX,
-        original.endY - original.startY);
+    final was = Offset(
+      original.endX - original.startX,
+      original.endY - original.startY,
+    );
     final now = Offset(moved.endX - moved.startX, moved.endY - moved.startY);
     if (was.dx * now.dx + was.dy * now.dy < -1e-9) return false;
   }
@@ -113,7 +115,6 @@ TrackSlide _slideChain(
   Iterable<Offset> anchors,
   TrackAngleLock lock,
 ) {
-
   final chainIds = {for (final segment in chain) segment.id};
 
   final ends = _endsOf(chain);
@@ -167,10 +168,7 @@ TrackSlide _slideChain(
           _same(Offset(segment.startX, segment.startY), end) ||
           _same(Offset(segment.endX, segment.endY), end),
     );
-    final atStart = _same(
-      Offset(endSegment.startX, endSegment.startY),
-      end,
-    );
+    final atStart = _same(Offset(endSegment.startX, endSegment.startY), end);
     final far = atStart
         ? Offset(endSegment.endX, endSegment.endY)
         : Offset(endSegment.startX, endSegment.startY);
@@ -216,7 +214,6 @@ TrackSlide _slideChain(
   return TrackSlide(moved: kept, removed: removed, added: added);
 }
 
-
 /// Where [from] can meet the line through [linePoint] along
 /// [lineDirection], travelling on a bearing [lock] allows.
 ///
@@ -235,8 +232,7 @@ Offset? _joinOnto({
   var bestScore = double.infinity;
 
   for (final bearing in _bearings(lock)) {
-    final cross =
-        bearing.dx * lineDirection.dy - bearing.dy * lineDirection.dx;
+    final cross = bearing.dx * lineDirection.dy - bearing.dy * lineDirection.dx;
     // Parallel to the run: it never meets it.
     if (cross.abs() < 1e-9) continue;
     // Square onto the run is the bare stub KiCad never draws when a 45 is
@@ -263,12 +259,7 @@ Offset? _joinOnto({
 
 /// The unit directions copper may travel in under [lock].
 List<Offset> _bearings(TrackAngleLock lock) {
-  const square = [
-    Offset(1, 0),
-    Offset(-1, 0),
-    Offset(0, 1),
-    Offset(0, -1),
-  ];
+  const square = [Offset(1, 0), Offset(-1, 0), Offset(0, 1), Offset(0, -1)];
   if (lock == TrackAngleLock.deg90) return square;
 
   final diagonal = math.sqrt1_2;
@@ -299,17 +290,13 @@ List<Track> _runContaining(Track track, List<Track> others) {
   final joints = _joints(track, others);
   final inCurve =
       joints.length == 2 &&
-      joints.every(
-        (turn) => turn > _straightEnough && turn < _gentleTurn,
-      );
+      joints.every((turn) => turn > _straightEnough && turn < _gentleTurn);
   final limit = inCurve ? _gentleTurn : _straightEnough;
 
   // The pieces of a curve are all about as short as each other, so a
   // segment many times longer is the straight the curve runs into, not
   // more of the curve.
-  final longest = inCurve
-      ? _lengthOf(track) * 3
-      : double.infinity;
+  final longest = inCurve ? _lengthOf(track) * 3 : double.infinity;
 
   final run = <Track>[track];
   final taken = {track.id};

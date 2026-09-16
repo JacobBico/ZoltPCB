@@ -11,20 +11,25 @@ import '../helpers/library_fixture.dart';
 import '../helpers/pump_app.dart';
 
 void main() {
-  testAppWithStorage('the browser explains itself when no library is imported',
-      (tester, db, storage) async {
-    await pumpApp(
-      tester,
-      const Scaffold(body: ComponentBrowserPanel()),
-      database: db,
-      storage: storage,
-    );
+  testAppWithStorage(
+    'the browser explains itself when no library is imported',
+    (tester, db, storage) async {
+      await pumpApp(
+        tester,
+        const Scaffold(body: ComponentBrowserPanel()),
+        database: db,
+        storage: storage,
+      );
 
-    expect(find.text('No components to search'), findsOneWidget);
-  });
+      expect(find.text('No components to search'), findsOneWidget);
+    },
+  );
 
-  testAppWithStorage('search finds symbols by name, description and keywords',
-      (tester, db, storage) async {
+  testAppWithStorage('search finds symbols by name, description and keywords', (
+    tester,
+    db,
+    storage,
+  ) async {
     final repo = SymbolLibraryRepository(db, storage);
     await repo.import(fileName: 'Device.kicad_sym', bytes: libraryBytes());
 
@@ -45,8 +50,11 @@ void main() {
     expect(find.text('R'), findsNothing);
   });
 
-  testAppWithStorage('selecting a component shows its pinout',
-      (tester, db, storage) async {
+  testAppWithStorage('selecting a component shows its pinout', (
+    tester,
+    db,
+    storage,
+  ) async {
     final repo = SymbolLibraryRepository(db, storage);
     await repo.import(fileName: 'Device.kicad_sym', bytes: libraryBytes());
 
@@ -76,8 +84,11 @@ void main() {
     expect(find.text('pwr_in'), findsNWidgets(2));
   });
 
-  testAppWithStorage('a derived symbol shows its inherited pins',
-      (tester, db, storage) async {
+  testAppWithStorage('a derived symbol shows its inherited pins', (
+    tester,
+    db,
+    storage,
+  ) async {
     final repo = SymbolLibraryRepository(db, storage);
     await repo.import(fileName: 'Device.kicad_sym', bytes: libraryBytes());
 
@@ -97,8 +108,11 @@ void main() {
     expect(find.text('passive'), findsNWidgets(2));
   });
 
-  testAppWithStorage('pick mode offers an add action per result',
-      (tester, db, storage) async {
+  testAppWithStorage('pick mode offers an add action per result', (
+    tester,
+    db,
+    storage,
+  ) async {
     final repo = SymbolLibraryRepository(db, storage);
     await repo.import(fileName: 'Device.kicad_sym', bytes: libraryBytes());
 
@@ -117,8 +131,11 @@ void main() {
     expect(picked.single.libraryNickname, 'Device');
   });
 
-  testAppWithStorage('the libraries panel lists what has been imported',
-      (tester, db, storage) async {
+  testAppWithStorage('the libraries panel lists what has been imported', (
+    tester,
+    db,
+    storage,
+  ) async {
     final repo = SymbolLibraryRepository(db, storage);
     await repo.import(fileName: 'Device.kicad_sym', bytes: libraryBytes());
     await repo.import(
@@ -140,8 +157,11 @@ void main() {
     expect(find.text('20251024'), findsNWidgets(2));
   });
 
-  testAppWithStorage('removing a library asks first, then removes it',
-      (tester, db, storage) async {
+  testAppWithStorage('removing a library asks first, then removes it', (
+    tester,
+    db,
+    storage,
+  ) async {
     final repo = SymbolLibraryRepository(db, storage);
     await repo.import(fileName: 'Device.kicad_sym', bytes: libraryBytes());
 
@@ -165,8 +185,11 @@ void main() {
     expect(find.text('No symbol libraries yet'), findsOneWidget);
   });
 
-  testAppWithStorage('the home rail reaches every section',
-      (tester, db, storage) async {
+  testAppWithStorage('the home rail reaches every section', (
+    tester,
+    db,
+    storage,
+  ) async {
     await pumpApp(tester, const HomeScreen(), database: db, storage: storage);
 
     expect(find.text('No projects yet'), findsOneWidget);

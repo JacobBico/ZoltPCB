@@ -51,8 +51,7 @@ void main() {
   test('each pin lands on the edge its stub points away from', () {
     final layout = PackageLayout.of(_quad());
 
-    String numberOn(PackageSide side) =>
-        layout.onSide(side).single.pin.number;
+    String numberOn(PackageSide side) => layout.onSide(side).single.pin.number;
 
     expect(numberOn(PackageSide.left), '1');
     expect(numberOn(PackageSide.right), '2');

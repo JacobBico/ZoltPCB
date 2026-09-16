@@ -124,16 +124,18 @@ void main() {
     final netList = await nets.getNets(project.id);
     final placements = await boards.getFootprints(project.id);
 
-    BoardScene build({List<Track> tracks = const [], List<Via> vias = const []}) =>
-        BoardScene.build(
-          board: board,
-          parts: partList,
-          nets: netList,
-          placements: placements,
-          definitions: {libId: definition},
-          tracks: tracks,
-          vias: vias,
-        );
+    BoardScene build({
+      List<Track> tracks = const [],
+      List<Via> vias = const [],
+    }) => BoardScene.build(
+      board: board,
+      parts: partList,
+      nets: netList,
+      placements: placements,
+      definitions: {libId: definition},
+      tracks: tracks,
+      vias: vias,
+    );
 
     return (scene: build, r1: r1, r2: r2, netId: net.id);
   }
@@ -174,18 +176,15 @@ void main() {
       final scene = d.scene();
 
       final connected = scene.pads.where((p) => p.isConnected).toList();
-      expect(
-        connected.map((p) => p.label).toSet(),
-        {'R1.2', 'R2.1'},
-      );
+      expect(connected.map((p) => p.label).toSet(), {'R1.2', 'R2.1'});
       expect(connected.every((p) => p.netId == d.netId), isTrue);
     });
 
     test('rotating a footprint carries its pads round with it', () async {
       final d = await divider();
-      var placement = (await boards.getFootprints(project.id)).firstWhere(
-        (f) => f.partId == d.r1.part.id,
-      );
+      var placement = (await boards.getFootprints(
+        project.id,
+      )).firstWhere((f) => f.partId == d.r1.part.id);
       placement = placement.copyWith(rotation: 90);
       await boards.updatePlacement(placement);
 
@@ -264,8 +263,7 @@ void main() {
       expect(scene.ratsnest, isEmpty);
     });
 
-    test('a track on the wrong layer does not reach a one-sided pad',
-        () async {
+    test('a track on the wrong layer does not reach a one-sided pad', () async {
       final d = await divider();
       final scene = d.scene(
         tracks: [
@@ -352,18 +350,20 @@ void main() {
       expect(withVia.ratsnest, hasLength(1));
     });
 
-    test('copper that never reaches this net\'s pads does not route it',
-        () async {
-      final d = await divider();
-      // Drawn from R1's *other* pad, off into empty board. It touches no pad
-      // of the divider's net, so it cannot count towards routing it, no
-      // matter what net it was drawn for.
-      final scene = d.scene(
-        tracks: [track(d.netId, x1: 9, y1: 10, x2: 9, y2: 25)],
-      );
+    test(
+      'copper that never reaches this net\'s pads does not route it',
+      () async {
+        final d = await divider();
+        // Drawn from R1's *other* pad, off into empty board. It touches no pad
+        // of the divider's net, so it cannot count towards routing it, no
+        // matter what net it was drawn for.
+        final scene = d.scene(
+          tracks: [track(d.netId, x1: 9, y1: 10, x2: 9, y2: 25)],
+        );
 
-      expect(scene.ratsnest, hasLength(1));
-    });
+        expect(scene.ratsnest, hasLength(1));
+      },
+    );
 
     test('a track\'s stored net gives way to the pads it connects', () async {
       // Net ids do not survive the schematic changing: a merge deletes one
@@ -417,8 +417,7 @@ void main() {
     // routed for the deleted net used to lose its net outright, which made
     // it stop counting as routed and turned it into a clearance error
     // against the very pads it connected.
-    test('a track keeps working when its net is merged into another',
-        () async {
+    test('a track keeps working when its net is merged into another', () async {
       final d = await divider();
 
       // Route the divider's net.

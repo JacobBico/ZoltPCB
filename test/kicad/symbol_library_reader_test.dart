@@ -4,8 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hintpcb/kicad/symbol_library_reader.dart';
 
-Uint8List bytes(String source) =>
-    Uint8List.fromList(utf8.encode(source));
+Uint8List bytes(String source) => Uint8List.fromList(utf8.encode(source));
 
 void main() {
   group('scanning spans', () {
@@ -57,9 +56,7 @@ void main() {
       final source = bytes(text);
       final spans = SymbolLibraryReader.scanSpans(source);
 
-      final first = utf8.decode(
-        source.sublist(spans[0].start, spans[0].end),
-      );
+      final first = utf8.decode(source.sublist(spans[0].start, spans[0].end));
       expect(first, '(symbol "A" (property "Value" "A"))');
 
       final parsed = SymbolLibraryReader.parseSpan(

@@ -34,75 +34,79 @@ void main() {
           .toList()
         ..sort((a, b) => a.path.compareTo(b.path));
 
-  test('every stock library parses without error', () {
-    expect(files, isNotEmpty, reason: 'expected libraries at $path');
+  test(
+    'every stock library parses without error',
+    () {
+      expect(files, isNotEmpty, reason: 'expected libraries at $path');
 
-    final stopwatch = Stopwatch()..start();
-    var symbolCount = 0;
-    var derivedCount = 0;
-    var pinCount = 0;
-    var multiUnitCount = 0;
-    var unitZeroPinCount = 0;
-    var totalBytes = 0;
-    final warnings = <String>[];
-    final failures = <String>[];
+      final stopwatch = Stopwatch()..start();
+      var symbolCount = 0;
+      var derivedCount = 0;
+      var pinCount = 0;
+      var multiUnitCount = 0;
+      var unitZeroPinCount = 0;
+      var totalBytes = 0;
+      final warnings = <String>[];
+      final failures = <String>[];
 
-    for (final file in files) {
-      final nickname = file.uri.pathSegments.last.replaceAll(
-        '.kicad_sym',
-        '',
-      );
-      final bytes = file.readAsBytesSync();
-      totalBytes += bytes.length;
-
-      try {
-        final library = SymbolLibraryReader.parseLibrary(
-          bytes,
-          nickname: nickname,
+      for (final file in files) {
+        final nickname = file.uri.pathSegments.last.replaceAll(
+          '.kicad_sym',
+          '',
         );
+        final bytes = file.readAsBytesSync();
+        totalBytes += bytes.length;
 
-        // The scan and the parse must agree on how many symbols there are.
-        expect(
-          library.symbols.length,
-          library.spans.length,
-          reason: '$nickname: span count disagrees with parsed count',
-        );
+        try {
+          final library = SymbolLibraryReader.parseLibrary(
+            bytes,
+            nickname: nickname,
+          );
 
-        for (final symbol in library.symbols) {
-          symbolCount++;
-          if (symbol.isDerived) derivedCount++;
-          if (symbol.isMultiUnit) multiUnitCount++;
-          pinCount += symbol.pinCount;
-          if (symbol.unitDrawings.any(
-            (d) => d.unit == 0 && d.pins.isNotEmpty,
-          )) {
-            unitZeroPinCount++;
+          // The scan and the parse must agree on how many symbols there are.
+          expect(
+            library.symbols.length,
+            library.spans.length,
+            reason: '$nickname: span count disagrees with parsed count',
+          );
+
+          for (final symbol in library.symbols) {
+            symbolCount++;
+            if (symbol.isDerived) derivedCount++;
+            if (symbol.isMultiUnit) multiUnitCount++;
+            pinCount += symbol.pinCount;
+            if (symbol.unitDrawings.any(
+              (d) => d.unit == 0 && d.pins.isNotEmpty,
+            )) {
+              unitZeroPinCount++;
+            }
           }
+          warnings.addAll(library.warnings.map((w) => '$nickname: $w'));
+        } catch (error, stack) {
+          failures.add('$nickname: $error\n$stack');
         }
-        warnings.addAll(library.warnings.map((w) => '$nickname: $w'));
-      } catch (error, stack) {
-        failures.add('$nickname: $error\n$stack');
       }
-    }
-    stopwatch.stop();
+      stopwatch.stop();
 
-    // ignore: avoid_print
-    print(
-      'corpus: ${files.length} libraries, '
-      '${(totalBytes / 1024 / 1024).toStringAsFixed(0)} MB, '
-      '$symbolCount symbols ($derivedCount derived, '
-      '$multiUnitCount multi-unit, $unitZeroPinCount with unit-0 pins), '
-      '$pinCount pins in ${stopwatch.elapsedMilliseconds} ms',
-    );
+      // ignore: avoid_print
+      print(
+        'corpus: ${files.length} libraries, '
+        '${(totalBytes / 1024 / 1024).toStringAsFixed(0)} MB, '
+        '$symbolCount symbols ($derivedCount derived, '
+        '$multiUnitCount multi-unit, $unitZeroPinCount with unit-0 pins), '
+        '$pinCount pins in ${stopwatch.elapsedMilliseconds} ms',
+      );
 
-    expect(failures, isEmpty, reason: failures.take(3).join('\n\n'));
-    expect(warnings, isEmpty, reason: warnings.take(10).join('\n'));
+      expect(failures, isEmpty, reason: failures.take(3).join('\n\n'));
+      expect(warnings, isEmpty, reason: warnings.take(10).join('\n'));
 
-    // Guards against a parser that silently stops finding things.
-    expect(symbolCount, greaterThan(20000));
-    expect(pinCount, greaterThan(400000));
-    expect(derivedCount, greaterThan(10000));
-  }, timeout: const Timeout(Duration(minutes: 10)));
+      // Guards against a parser that silently stops finding things.
+      expect(symbolCount, greaterThan(20000));
+      expect(pinCount, greaterThan(400000));
+      expect(derivedCount, greaterThan(10000));
+    },
+    timeout: const Timeout(Duration(minutes: 10)),
+  );
 
   test('symbols resolve to usable pin data', () {
     // Device:R — the simplest real symbol.

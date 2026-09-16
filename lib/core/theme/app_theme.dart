@@ -117,11 +117,7 @@ abstract final class AppTheme {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
         ),
       ),
-      dividerTheme: DividerThemeData(
-        color: p.border,
-        thickness: 1,
-        space: 1,
-      ),
+      dividerTheme: DividerThemeData(color: p.border, thickness: 1, space: 1),
       cardTheme: CardThemeData(
         color: p.surface,
         surfaceTintColor: Colors.transparent,
@@ -162,9 +158,7 @@ abstract final class AppTheme {
           foregroundColor: const Color(0xFF08201E),
           minimumSize: const Size(0, minTouchTarget),
           padding: const EdgeInsets.symmetric(horizontal: 18),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(3),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
           textStyle: const TextStyle(
             fontFamily: AppTypography.family,
             fontFamilyFallback: AppTypography.fallback,
@@ -180,9 +174,7 @@ abstract final class AppTheme {
           minimumSize: const Size(0, minTouchTarget),
           padding: const EdgeInsets.symmetric(horizontal: 16),
           side: BorderSide(color: p.borderStrong),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(3),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
           textStyle: const TextStyle(
             fontFamily: AppTypography.family,
             fontFamilyFallback: AppTypography.fallback,
@@ -196,9 +188,7 @@ abstract final class AppTheme {
           foregroundColor: p.textSecondary,
           minimumSize: const Size(0, minTouchTarget),
           padding: const EdgeInsets.symmetric(horizontal: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(3),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
           textStyle: const TextStyle(
             fontFamily: AppTypography.family,
             fontFamilyFallback: AppTypography.fallback,
@@ -213,10 +203,7 @@ abstract final class AppTheme {
           minimumSize: const Size(minTouchTarget, minTouchTarget),
         ),
       ),
-      iconTheme: IconThemeData(
-        color: p.textSecondary,
-        size: 20,
-      ),
+      iconTheme: IconThemeData(color: p.textSecondary, size: 20),
       listTileTheme: ListTileThemeData(
         iconColor: p.textSecondary,
         textColor: p.textPrimary,

@@ -25,6 +25,7 @@ Future<TrackWidthChoice?> showTrackWidthPicker(
   required List<double> widths,
   required double selected,
   required double rule,
+  List<NetClass> classes = const [],
 }) => showModalBottomSheet<TrackWidthChoice>(
   context: context,
   backgroundColor: KicadPalette.surface,
@@ -41,6 +42,26 @@ Future<TrackWidthChoice?> showTrackWidthPicker(
               style: Theme.of(sheet).textTheme.titleSmall,
             ),
           ),
+          for (final netClass in classes)
+            ListTile(
+              dense: true,
+              leading: Icon(
+                netClass.trackWidth == selected
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
+                size: 18,
+                color: netClass.trackWidth == selected
+                    ? KicadPalette.highlight
+                    : KicadPalette.textSecondary,
+              ),
+              title: Text(netClass.label),
+              subtitle: const Text('Net class'),
+              onTap: () => Navigator.of(
+                sheet,
+              ).pop(TrackWidthChoice(width: netClass.trackWidth)),
+            ),
+          if (classes.isNotEmpty)
+            Divider(height: 1, color: KicadPalette.border),
           for (final width in widths)
             ListTile(
               dense: true,
@@ -237,9 +258,7 @@ class _TrackSizesDialogState extends State<_TrackSizesDialog> {
                         if (_widths.isEmpty)
                           Text(
                             'Just the design rule',
-                            style: TextStyle(
-                              color: KicadPalette.textSecondary,
-                            ),
+                            style: TextStyle(color: KicadPalette.textSecondary),
                           ),
                       ],
                     ),
@@ -285,9 +304,7 @@ class _TrackSizesDialogState extends State<_TrackSizesDialog> {
                         if (_viaSizes.isEmpty)
                           Text(
                             'Just the design rule',
-                            style: TextStyle(
-                              color: KicadPalette.textSecondary,
-                            ),
+                            style: TextStyle(color: KicadPalette.textSecondary),
                           ),
                       ],
                     ),
@@ -328,9 +345,9 @@ class _TrackSizesDialogState extends State<_TrackSizesDialog> {
           child: const Text('CANCEL'),
         ),
         FilledButton(
-          onPressed: () => Navigator.of(context).pop(
-            TrackSizesResult(widths: _widths, viaSizes: _viaSizes),
-          ),
+          onPressed: () => Navigator.of(
+            context,
+          ).pop(TrackSizesResult(widths: _widths, viaSizes: _viaSizes)),
           child: const Text('SAVE'),
         ),
       ],

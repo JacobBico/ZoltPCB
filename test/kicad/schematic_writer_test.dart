@@ -38,6 +38,7 @@ void main() {
     parts: await parts.getPartsWithDetails(project.id),
     nets: await nets.getNets(project.id),
     routeHints: await nets.routeHints(project.id),
+    drawnWires: await nets.getWires(project.id),
   );
 
   Future<SList> exported() async =>
@@ -107,20 +108,22 @@ void main() {
       expect(value.atom(2), '10k');
     });
 
-    test('a multi-unit part writes one symbol per unit, same reference',
-        () async {
-      await parts.addPart(project.id, dualOpampSpec());
-      final symbols = (await exported()).children('symbol').toList();
+    test(
+      'a multi-unit part writes one symbol per unit, same reference',
+      () async {
+        await parts.addPart(project.id, dualOpampSpec());
+        final symbols = (await exported()).children('symbol').toList();
 
-      expect(symbols, hasLength(2));
-      expect(symbols.map((s) => s.childInteger('unit')), [1, 2]);
-      for (final symbol in symbols) {
-        final reference = symbol
-            .children('property')
-            .firstWhere((p) => p.atom(1) == 'Reference');
-        expect(reference.atom(2), 'U1');
-      }
-    });
+        expect(symbols, hasLength(2));
+        expect(symbols.map((s) => s.childInteger('unit')), [1, 2]);
+        for (final symbol in symbols) {
+          final reference = symbol
+              .children('property')
+              .firstWhere((p) => p.atom(1) == 'Reference');
+          expect(reference.atom(2), 'U1');
+        }
+      },
+    );
 
     test('a pin shared by every unit is written exactly once', () async {
       await parts.addPart(project.id, dualOpampSpec());
@@ -170,6 +173,54 @@ void main() {
   });
 
   group('connectivity', () {
+    test('a wire the user drew is written exactly as drawn', () async {
+      final r1 = await parts.addPart(project.id, resistorSpec());
+      final r2 = await parts.addPart(project.id, resistorSpec());
+      await parts.updateUnitPlacement(
+        r2.units.first.copyWith(x: 76.2, y: 50.8, placed: true),
+      );
+      await nets.connectPins(r1.pins.first.id, r2.pins.first.id);
+
+      final all = await parts.getPartsWithDetails(project.id);
+      Offset at(String partId, String pinId) {
+        final part = all.firstWhere((p) => p.part.id == partId);
+        final pin = part.pins.firstWhere((p) => p.id == pinId);
+        return Placement.ofUnit(part.units.first).apply(pin.x, pin.y);
+      }
+
+      final a = at(r1.part.id, r1.pins.first.id);
+      final b = at(r2.part.id, r2.pins.first.id);
+      final drawn = [
+        a,
+        Offset(a.dx, a.dy - 12.7),
+        Offset(b.dx, a.dy - 12.7),
+        b,
+      ];
+      await nets.addWire(
+        projectId: project.id,
+        points: drawn,
+        pinAId: r1.pins.first.id,
+        pinBId: r2.pins.first.id,
+      );
+
+      final segments = [
+        for (final wire in (await exported()).lists.where(
+          (l) => l.head == 'wire',
+        ))
+          [
+            for (final xy in wire.child('pts')!.lists)
+              Offset(xy.number(1)!, xy.number(2)!),
+          ],
+      ];
+      expect(segments, hasLength(3));
+      for (var i = 0; i < 3; i++) {
+        expect(segments[i].first.dx, closeTo(drawn[i].dx, 1e-3));
+        expect(segments[i].first.dy, closeTo(drawn[i].dy, 1e-3));
+        expect(segments[i].last.dx, closeTo(drawn[i + 1].dx, 1e-3));
+        expect(segments[i].last.dy, closeTo(drawn[i + 1].dy, 1e-3));
+      }
+    });
+
     test('a wired net carries its chosen name on a single label', () async {
       final r1 = await parts.addPart(project.id, resistorSpec());
       final r2 = await parts.addPart(project.id, resistorSpec());
@@ -220,8 +271,10 @@ void main() {
       for (final wire in (await exported()).children('wire')) {
         final points = wire.child('pts')!.children('xy').toList();
         expect(points, hasLength(2));
-        final sameX = (points[0].number(1)! - points[1].number(1)!).abs() < 1e-9;
-        final sameY = (points[0].number(2)! - points[1].number(2)!).abs() < 1e-9;
+        final sameX =
+            (points[0].number(1)! - points[1].number(1)!).abs() < 1e-9;
+        final sameY =
+            (points[0].number(2)! - points[1].number(2)!).abs() < 1e-9;
         expect(
           sameX || sameY,
           isTrue,
@@ -267,10 +320,7 @@ void main() {
       final r3 = await parts.addPart(project.id, resistorSpec());
       final u1 = await parts.addPart(project.id, dualOpampSpec());
 
-      final signal = await nets.connectPins(
-        r1.pins.first.id,
-        r2.pins.first.id,
-      );
+      final signal = await nets.connectPins(r1.pins.first.id, r2.pins.first.id);
       await nets.connectPins(r2.pins.first.id, r3.pins.first.id);
       await nets.renameNet(signal.id, 'SIG');
       await nets.connectPins(r1.pins.last.id, u1.pins.first.id);
@@ -292,9 +342,12 @@ void main() {
         // Every pin of an unlabelled net must be reached by a wire, or the
         // connection exists only on the phone.
         final reached = net.endpoints.every((e) {
-          final part = [r1, r2, r3, u1].firstWhere(
-            (p) => p.pins.any((pin) => pin.id == e.pin.id),
-          );
+          final part = [
+            r1,
+            r2,
+            r3,
+            u1,
+          ].firstWhere((p) => p.pins.any((pin) => pin.id == e.pin.id));
           final unit = part.units.first;
           final pin = part.pins.firstWhere((pin) => pin.id == e.pin.id);
           final at = Placement.ofUnit(unit).apply(pin.x, pin.y);
@@ -338,10 +391,7 @@ void main() {
       final libSymbols = (await exported()).child('lib_symbols')!;
       final names = libSymbols.children('symbol').map((s) => s.atom(1));
 
-      expect(names, containsAll([
-        'Device:R',
-        'Amplifier_Operational:NE5532',
-      ]));
+      expect(names, containsAll(['Device:R', 'Amplifier_Operational:NE5532']));
     });
 
     test('a symbol with no library falls back to the pin snapshot', () async {
@@ -369,9 +419,9 @@ void main() {
 
       // Checked against numeric tokens only: UUIDs are hex with hyphens and
       // would trip a naive search for scientific notation.
-      final numbers = RegExp(r'(?<=[\s(])-?[0-9][^\s()"]*')
-          .allMatches(text)
-          .map((m) => m.group(0)!);
+      final numbers = RegExp(
+        r'(?<=[\s(])-?[0-9][^\s()"]*',
+      ).allMatches(text).map((m) => m.group(0)!);
       for (final number in numbers) {
         expect(number, isNot(contains('e')), reason: number);
         expect(number, isNot(endsWith('0.')), reason: number);

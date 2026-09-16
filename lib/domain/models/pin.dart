@@ -48,11 +48,8 @@ enum PinGraphicStyle {
 
   final String token;
 
-  static PinGraphicStyle fromToken(String token) =>
-      PinGraphicStyle.values.firstWhere(
-        (t) => t.token == token,
-        orElse: () => PinGraphicStyle.line,
-      );
+  static PinGraphicStyle fromToken(String token) => PinGraphicStyle.values
+      .firstWhere((t) => t.token == token, orElse: () => PinGraphicStyle.line);
 }
 
 /// A pin belonging to a placed [Part].

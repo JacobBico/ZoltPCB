@@ -193,62 +193,56 @@ Future<String?> _askNickname(BuildContext context, String suggestion) {
   );
 }
 
-Future<void> _importSymbolLibrary(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
-    final List<PlatformFile> picked;
+Future<void> _importSymbolLibrary(BuildContext context, WidgetRef ref) async {
+  final List<PlatformFile> picked;
+  try {
+    picked = await FilePicker.pickFiles(
+      dialogTitle: 'Select .kicad_sym libraries',
+      // Android's document picker has no MIME type for .kicad_sym, so
+      // filtering by extension would hide the files on many devices.
+      type: FileType.any,
+    );
+  } catch (error) {
+    if (context.mounted) {
+      _report(context, 'Could not open the picker: $error', isError: true);
+    }
+    return;
+  }
+  if (picked.isEmpty) return;
+
+  final repository = ref.read(symbolLibraryRepositoryProvider);
+  final imported = <String>[];
+  final failed = <String>[];
+
+  for (final file in picked) {
     try {
-      picked = await FilePicker.pickFiles(
-        dialogTitle: 'Select .kicad_sym libraries',
-        // Android's document picker has no MIME type for .kicad_sym, so
-        // filtering by extension would hide the files on many devices.
-        type: FileType.any,
-      );
-    } catch (error) {
-      if (context.mounted) {
-        _report(context, 'Could not open the picker: $error', isError: true);
-      }
-      return;
-    }
-    if (picked.isEmpty) return;
-
-    final repository = ref.read(symbolLibraryRepositoryProvider);
-    final imported = <String>[];
-    final failed = <String>[];
-
-    for (final file in picked) {
-      try {
-        // readAsBytes rather than the path: files chosen through Android's
-        // Storage Access Framework arrive as content URIs with no readable
-        // filesystem path.
-        final bytes = await file.readAsBytes();
-        final info = await repository.import(
-          fileName: file.name,
-          bytes: bytes,
-        );
-        imported.add('${info.nickname} (${info.symbolCount})');
-      } on LibraryImportException catch (e) {
-        failed.add('${file.name}: ${e.message}');
-      } catch (e) {
-        failed.add('${file.name}: $e');
-      }
-    }
-
-    if (!context.mounted) return;
-    if (failed.isEmpty) {
-      _report(context, 'Imported ${imported.join(', ')}');
-    } else if (imported.isEmpty) {
-      _report(context, failed.first, isError: true);
-    } else {
-      _report(
-        context,
-        'Imported ${imported.length}, ${failed.length} failed: '
-        '${failed.first}',
-        isError: true,
-      );
+      // readAsBytes rather than the path: files chosen through Android's
+      // Storage Access Framework arrive as content URIs with no readable
+      // filesystem path.
+      final bytes = await file.readAsBytes();
+      final info = await repository.import(fileName: file.name, bytes: bytes);
+      imported.add('${info.nickname} (${info.symbolCount})');
+    } on LibraryImportException catch (e) {
+      failed.add('${file.name}: ${e.message}');
+    } catch (e) {
+      failed.add('${file.name}: $e');
     }
   }
+
+  if (!context.mounted) return;
+  if (failed.isEmpty) {
+    _report(context, 'Imported ${imported.join(', ')}');
+  } else if (imported.isEmpty) {
+    _report(context, failed.first, isError: true);
+  } else {
+    _report(
+      context,
+      'Imported ${imported.length}, ${failed.length} failed: '
+      '${failed.first}',
+      isError: true,
+    );
+  }
+}
 
 void _report(BuildContext context, String message, {bool isError = false}) {
   ScaffoldMessenger.of(context)
@@ -309,7 +303,10 @@ class _LibraryTable extends StatelessWidget {
                 child: Text('SIZE', style: style, textAlign: TextAlign.right),
               ),
               const SizedBox(width: 12),
-              SizedBox(width: _Columns.format, child: Text('FORMAT', style: style)),
+              SizedBox(
+                width: _Columns.format,
+                child: Text('FORMAT', style: style),
+              ),
               SizedBox(
                 width: _Columns.imported,
                 child: Text(

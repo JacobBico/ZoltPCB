@@ -29,7 +29,11 @@ void main() {
         final points = TrackRouter.route(from: Offset.zero, to: target);
         for (var i = 0; i < points.length - 1; i++) {
           expect(
-            TrackRouter.isLegal(points[i], points[i + 1], TrackAngleMode.diagonal),
+            TrackRouter.isLegal(
+              points[i],
+              points[i + 1],
+              TrackAngleMode.diagonal,
+            ),
             isTrue,
             reason: 'segment ${points[i]}->${points[i + 1]} for $target',
           );
@@ -57,10 +61,10 @@ void main() {
     });
 
     test('a straight run needs no corner either', () {
-      expect(
-        TrackRouter.route(from: Offset.zero, to: const Offset(5, 0)),
-        [Offset.zero, const Offset(5, 0)],
-      );
+      expect(TrackRouter.route(from: Offset.zero, to: const Offset(5, 0)), [
+        Offset.zero,
+        const Offset(5, 0),
+      ]);
     });
   });
 
@@ -172,17 +176,28 @@ void main() {
   });
 
   test('a route to where it started is a single point', () {
-    expect(TrackRouter.route(from: Offset.zero, to: Offset.zero), [Offset.zero]);
+    expect(TrackRouter.route(from: Offset.zero, to: Offset.zero), [
+      Offset.zero,
+    ]);
   });
 
   group('snapping', () {
     test('rounds onto the grid', () {
-      expect(TrackRouter.snap(const Offset(1.2, 3.4), 0.5), const Offset(1, 3.5));
-      expect(TrackRouter.snap(const Offset(-1.2, -3.4), 0.5), const Offset(-1, -3.5));
+      expect(
+        TrackRouter.snap(const Offset(1.2, 3.4), 0.5),
+        const Offset(1, 3.5),
+      );
+      expect(
+        TrackRouter.snap(const Offset(-1.2, -3.4), 0.5),
+        const Offset(-1, -3.5),
+      );
     });
 
     test('a grid of zero leaves the point alone', () {
-      expect(TrackRouter.snap(const Offset(1.234, 5.678), 0), const Offset(1.234, 5.678));
+      expect(
+        TrackRouter.snap(const Offset(1.234, 5.678), 0),
+        const Offset(1.234, 5.678),
+      );
     });
   });
 }

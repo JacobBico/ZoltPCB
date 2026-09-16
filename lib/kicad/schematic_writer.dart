@@ -55,10 +55,7 @@ class SchematicWriter {
       SAtom('kicad_sch'),
       S.of('version', [formatVersion]),
       SList([SAtom('generator'), S.text(document.generator)]),
-      SList([
-        SAtom('generator_version'),
-        S.text(document.generatorVersion),
-      ]),
+      SList([SAtom('generator_version'), S.text(document.generatorVersion)]),
       SList([SAtom('uuid'), S.text(sheetUuid)]),
       SList([SAtom('paper'), S.text(project.paper.kicadName)]),
       _titleBlock(project),
@@ -238,10 +235,7 @@ class SchematicWriter {
         below = -bounds.top + 1.27;
       }
     }
-    return (
-      placement.apply(0, above),
-      placement.apply(0, -below),
-    );
+    return (placement.apply(0, above), placement.apply(0, -below));
   }
 
   // --- connectivity ----------------------------------------------------
@@ -294,10 +288,7 @@ class SchematicWriter {
               S.of('width', [0]),
               S.of('type', [SAtom('default')]),
             ]),
-            SList([
-              SAtom('uuid'),
-              S.text(derivedId('wire:${wire.key}:$i')),
-            ]),
+            SList([SAtom('uuid'), S.text(derivedId('wire:${wire.key}:$i'))]),
           ]),
         );
       }
@@ -320,10 +311,7 @@ class SchematicWriter {
         items.add(
           S.list('no_connect', [
             S.of('at', [at.dx, at.dy]),
-            SList([
-              SAtom('uuid'),
-              S.text(derivedId('no_connect:${pin.id}')),
-            ]),
+            SList([SAtom('uuid'), S.text(derivedId('no_connect:${pin.id}'))]),
           ]),
         );
       }
@@ -381,7 +369,9 @@ class _Connectivity {
           );
           positions[pin.id] = at;
           bodyEnds[pin.id] = bodyEnd;
-          unitPoints..add(at)..add(bodyEnd);
+          unitPoints
+            ..add(at)
+            ..add(bodyEnd);
         }
 
         obstacles.add(
@@ -415,11 +405,20 @@ class _Connectivity {
       if (routable.length >= 2) pinsByNet[net.id] = routable;
     }
 
-    final routed = NetRouting.routeAll(
-      pinsByNet: pinsByNet,
-      obstacles: obstacles,
-      hints: document.routeHints,
-    );
+    final drawnByNet = <String, List<SchematicWire>>{};
+    for (final wire in document.drawnWires) {
+      (drawnByNet[wire.netId] ??= []).add(wire);
+    }
+    final routed = [
+      for (final entry in pinsByNet.entries)
+        ...NetRouting.routeNetWithDrawn(
+          entry.key,
+          entry.value,
+          drawn: drawnByNet[entry.key] ?? const [],
+          obstacles: obstacles,
+          hints: document.routeHints,
+        ),
+    ];
 
     final safe = _dropUnsafe(routed, positions, netByPin);
 

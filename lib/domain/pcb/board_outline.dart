@@ -224,9 +224,9 @@ class BoardOutline {
       other.kind == kind &&
       other.rect == rect &&
       other.points.length == points.length &&
-      Iterable<int>.generate(points.length).every(
-        (i) => other.points[i] == points[i],
-      );
+      Iterable<int>.generate(
+        points.length,
+      ).every((i) => other.points[i] == points[i]);
 
   @override
   int get hashCode => Object.hash(kind, rect, Object.hashAll(points));

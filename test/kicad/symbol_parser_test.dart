@@ -164,18 +164,20 @@ void main() {
       expect(symbol.pins.single.hidden, isTrue);
     });
 
-    test('the wrapped hide form is honoured, as written by KiCad 9 and newer',
-        () {
-      final symbol = parse('''
+    test(
+      'the wrapped hide form is honoured, as written by KiCad 9 and newer',
+      () {
+        final symbol = parse('''
 (symbol "P"
   (pin_names (offset 1.016) (hide yes))
   (symbol "P_1_1"
     (pin power_in line (at 0 0 0) (hide yes) (name "VCC") (number "1"))))
 ''');
 
-      expect(symbol.pinNamesHidden, isTrue);
-      expect(symbol.pins.single.hidden, isTrue);
-    });
+        expect(symbol.pinNamesHidden, isTrue);
+        expect(symbol.pins.single.hidden, isTrue);
+      },
+    );
 
     test('power symbols are recognised in both forms', () {
       expect(parse('(symbol "GND" (power))').isPower, isTrue);

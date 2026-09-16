@@ -188,9 +188,7 @@ void main() {
     });
 
     test('a track that leaves the board is reported once', () {
-      final scene = sceneWith(
-        tracks: [track(x1: 5, y1: 5, x2: 60, y2: 5)],
-      );
+      final scene = sceneWith(tracks: [track(x1: 5, y1: 5, x2: 60, y2: 5)]);
 
       expect(
         checkBoard(scene).where((v) => v.rule == DrcRule.offBoard),
@@ -237,9 +235,9 @@ void main() {
         unplaced: const [],
       );
 
-      final unrouted = checkBoard(scene).where(
-        (v) => v.rule == DrcRule.unrouted,
-      );
+      final unrouted = checkBoard(
+        scene,
+      ).where((v) => v.rule == DrcRule.unrouted);
       expect(unrouted, hasLength(1));
       expect(unrouted.single.isError, isFalse);
       expect(unrouted.single.message, contains('VCC'));

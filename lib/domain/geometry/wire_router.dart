@@ -93,8 +93,7 @@ abstract final class WireRouter {
     final fromHorizontal = fromExit.dx.abs() > fromExit.dy.abs();
     final toHorizontal = toExit.dx.abs() > toExit.dy.abs();
 
-    double offset(int index) =>
-        index < offsets.length ? offsets[index] : 0.0;
+    double offset(int index) => index < offsets.length ? offsets[index] : 0.0;
 
     final handles = <WireHandle>[];
 

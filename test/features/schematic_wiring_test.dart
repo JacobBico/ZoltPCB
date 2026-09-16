@@ -63,7 +63,9 @@ void main() {
       final wire = scene.wires.single;
 
       // Tap the free pin, then the wire — not another pin.
-      await tester.tapAt(canvas.topLeft + viewport.toScreen(free.sheetPosition));
+      await tester.tapAt(
+        canvas.topLeft + viewport.toScreen(free.sheetPosition),
+      );
       await settleApp(tester);
 
       final corner = wire.points[wire.points.length ~/ 2];
@@ -72,18 +74,17 @@ void main() {
 
       final after = await nets.getNets(project.id);
       expect(after, hasLength(1), reason: 'the pin should have joined the net');
-      expect(
-        after.single.endpoints.map((e) => e.pin.id),
-        contains(free.id),
-      );
+      expect(after.single.endpoints.map((e) => e.pin.id), contains(free.id));
     });
 
-    testAppWithStorage('a tap on empty sheet still cancels, as it always did', (
+    // "I feel like it is better to have them work in a similar way to how
+    // the pcb section works... only 90 degree wires in the schematics"
+    testAppWithStorage('a tap on empty sheet lays a corner; Cancel lets go', (
       tester,
       db,
       storage,
     ) async {
-      final project = await ProjectRepository(db).create(name: 'Cancel');
+      final project = await ProjectRepository(db).create(name: 'Corner');
       final parts = PartRepository(db);
       final r1 = await parts.addPart(project.id, resistorSpec());
 
@@ -111,7 +112,142 @@ void main() {
       // Somewhere with nothing on it at all.
       await tester.tapAt(canvas.bottomLeft + const Offset(30, -120));
       await settleApp(tester);
+      expect(container.read(pendingPinProvider), pin.id);
+      expect(_painter(tester).pendingWire, isNotNull);
+
+      await tester.tap(find.text('Cancel'));
+      await settleApp(tester);
       expect(container.read(pendingPinProvider), isNull);
+      expect(_painter(tester).pendingWire, isNull);
+    });
+
+    testAppWithStorage('pin, corner, pin: the wire is kept as drawn', (
+      tester,
+      db,
+      storage,
+    ) async {
+      final project = await ProjectRepository(db).create(name: 'Drawn');
+      final parts = PartRepository(db);
+      final nets = NetRepository(db);
+      final r1 = await parts.addPart(project.id, resistorSpec());
+      final r2 = await parts.addPart(project.id, resistorSpec());
+      await parts.updateUnitPlacement(
+        r1.units.first.copyWith(x: 50.8, y: 50.8, placed: true),
+      );
+      await parts.updateUnitPlacement(
+        r2.units.first.copyWith(x: 76.2, y: 50.8, placed: true),
+      );
+
+      await pumpApp(
+        tester,
+        Scaffold(body: SchematicPanel(project: project)),
+        database: db,
+        storage: storage,
+      );
+
+      Offset screen(Offset sheet) =>
+          tester.getRect(find.byType(SchematicPanel)).topLeft +
+          _painter(tester).viewport.toScreen(sheet);
+
+      final scene = _painter(tester).scene;
+      // The top pin of each resistor.
+      final from = scene.pins
+          .where((p) => p.partId == r1.part.id)
+          .reduce((a, b) => a.sheetPosition.dy < b.sheetPosition.dy ? a : b);
+      final to = scene.pins
+          .where((p) => p.partId == r2.part.id)
+          .reduce((a, b) => a.sheetPosition.dy < b.sheetPosition.dy ? a : b);
+      // Clear of both pins, and still on the test's small canvas.
+      final corner = Offset(
+        from.sheetPosition.dx,
+        from.sheetPosition.dy - 5.08,
+      );
+
+      await tester.tapAt(screen(from.sheetPosition));
+      await settleApp(tester);
+      await tester.tapAt(screen(corner));
+      await settleApp(tester);
+      await tester.tapAt(screen(to.sheetPosition));
+      await settleApp(tester);
+
+      final wires = await nets.getWires(project.id);
+      expect(wires, hasLength(1));
+      final points = wires.single.points;
+      bool near(Offset a, Offset b) => (a - b).distance < 1e-3;
+      expect(near(points.first, from.sheetPosition), isTrue);
+      expect(near(points.last, to.sheetPosition), isTrue);
+      expect(points.any((p) => near(p, corner)), isTrue);
+      for (var i = 0; i < points.length - 1; i++) {
+        final square =
+            (points[i].dx - points[i + 1].dx).abs() < 1e-6 ||
+            (points[i].dy - points[i + 1].dy).abs() < 1e-6;
+        expect(square, isTrue, reason: 'run $i is not at a right angle');
+      }
+      expect(await nets.getNets(project.id), hasLength(1));
+
+      // Drawn as laid, not re-routed: the scene shows the stored corners.
+      final shown = _painter(tester).scene.wires.single;
+      expect(shown.isDrawn, isTrue);
+      expect(shown.points, hasLength(points.length));
+      for (var i = 0; i < points.length; i++) {
+        expect(near(shown.points[i], points[i]), isTrue);
+      }
+    });
+
+    testAppWithStorage('sliding a routed wire keeps the shape it was given', (
+      tester,
+      db,
+      storage,
+    ) async {
+      final project = await ProjectRepository(db).create(name: 'Slide');
+      final parts = PartRepository(db);
+      final nets = NetRepository(db);
+      final r1 = await parts.addPart(project.id, resistorSpec());
+      final r2 = await parts.addPart(project.id, resistorSpec());
+      await parts.updateUnitPlacement(
+        r1.units.first.copyWith(x: 50.8, y: 50.8, placed: true),
+      );
+      await parts.updateUnitPlacement(
+        r2.units.first.copyWith(x: 88.9, y: 50.8, placed: true),
+      );
+      await nets.connectPins(r1.pins.first.id, r2.pins.first.id);
+
+      await pumpApp(
+        tester,
+        Scaffold(body: SchematicPanel(project: project)),
+        database: db,
+        storage: storage,
+      );
+
+      final wire = _painter(tester).scene.wires.single;
+      expect(wire.isDrawn, isFalse);
+      // The middle of the longest run.
+      var longest = 0;
+      for (var i = 1; i < wire.points.length - 1; i++) {
+        if ((wire.points[i + 1] - wire.points[i]).distance >
+            (wire.points[longest + 1] - wire.points[longest]).distance) {
+          longest = i;
+        }
+      }
+      final grab = (wire.points[longest] + wire.points[longest + 1]) / 2;
+      final horizontal =
+          (wire.points[longest].dy - wire.points[longest + 1].dy).abs() < 1e-6;
+      final push = horizontal ? const Offset(0, -40) : const Offset(40, 0);
+
+      final canvas = tester.getRect(find.byType(SchematicPanel));
+      final from = canvas.topLeft + _painter(tester).viewport.toScreen(grab);
+      final gesture = await tester.startGesture(from);
+      for (var i = 1; i <= 10; i++) {
+        await gesture.moveTo(from + push * (i / 10));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await gesture.up();
+      await settleApp(tester);
+
+      final stored = await nets.getWires(project.id);
+      expect(stored, hasLength(1));
+      expect(stored.single.points, isNot(wire.points));
+      expect(_painter(tester).scene.wires.single.isDrawn, isTrue);
     });
   });
 

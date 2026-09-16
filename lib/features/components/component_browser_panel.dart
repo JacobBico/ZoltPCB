@@ -21,6 +21,17 @@ class SelectedSymbol extends Notifier<String?> {
   void select(String? libId) => state = libId;
 }
 
+/// The chip highlighted in the microcontroller picker. Separate from
+/// [selectedSymbolProvider]: sharing it meant the picker opened showing
+/// whatever was last looked at under Components — a diode, as often as not.
+final selectedMcuProvider = NotifierProvider<SelectedSymbol, String?>(
+  SelectedSymbol.new,
+);
+
+/// Whether a library holds microcontrollers, by KiCad's naming.
+bool isMcuLibrary(String nickname) =>
+    nickname.startsWith('MCU') || nickname.startsWith('CPU');
+
 /// Search components and inspect their pinouts.
 ///
 /// Used in two modes: on its own for browsing, and with [onAdd] set when a
@@ -71,7 +82,11 @@ class ComponentBrowserPanel extends ConsumerWidget {
               VerticalDivider(width: 1, color: KicadPalette.border),
               Expanded(
                 flex: 58,
-                child: _SymbolDetail(onAdd: onAdd, addLabel: addLabel),
+                child: _SymbolDetail(
+                  onAdd: onAdd,
+                  addLabel: addLabel,
+                  microcontrollersOnly: microcontrollersOnly,
+                ),
               ),
             ],
           ),
@@ -109,11 +124,18 @@ class _SearchBarState extends ConsumerState<_SearchBar> {
 
   @override
   Widget build(BuildContext context) {
-    final libraries = ref.watch(symbolLibrariesProvider).value ?? const [];
-    final filter = ref.watch(symbolLibraryFilterProvider);
-    final results = ref.watch(
-      symbolSearchProvider(widget.microcontrollersOnly),
-    );
+    final mcu = widget.microcontrollersOnly;
+    final libraries = [
+      for (final library
+          in ref.watch(symbolLibrariesProvider).value ?? const [])
+        if (!mcu || isMcuLibrary(library.nickname)) library,
+    ];
+    final filterProvider = mcu
+        ? mcuLibraryFilterProvider
+        : symbolLibraryFilterProvider;
+    final chosen = ref.watch(filterProvider);
+    final filter = libraries.any((l) => l.id == chosen) ? chosen : null;
+    final results = ref.watch(symbolSearchProvider(mcu));
 
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
@@ -128,8 +150,8 @@ class _SearchBarState extends ConsumerState<_SearchBar> {
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
                 hintText: widget.microcontrollersOnly
-                  ? 'Search microcontrollers — STM32F103, ATmega328'
-                  : 'Search components — name, description, keywords',
+                    ? 'Search microcontrollers — STM32F103, ATmega328'
+                    : 'Search components — name, description, keywords',
                 prefixIcon: const Icon(Icons.search, size: 18),
                 suffixIcon: _controller.text.isEmpty
                     ? null
@@ -154,8 +176,11 @@ class _SearchBarState extends ConsumerState<_SearchBar> {
               dropdownColor: KicadPalette.surfaceRaised,
               decoration: const InputDecoration(isDense: true),
               items: [
-                const DropdownMenuItem(
-                  child: Text('All libraries', maxLines: 1),
+                DropdownMenuItem(
+                  child: Text(
+                    mcu ? 'All MCU libraries' : 'All libraries',
+                    maxLines: 1,
+                  ),
                 ),
                 for (final library in libraries)
                   DropdownMenuItem(
@@ -168,7 +193,7 @@ class _SearchBarState extends ConsumerState<_SearchBar> {
                   ),
               ],
               onChanged: (value) =>
-                  ref.read(symbolLibraryFilterProvider.notifier).set(value),
+                  ref.read(filterProvider.notifier).set(value),
             ),
           ),
           const SizedBox(width: 12),
@@ -206,7 +231,10 @@ class _ResultList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final results = ref.watch(symbolSearchProvider(microcontrollersOnly));
-    final selected = ref.watch(selectedSymbolProvider);
+    final selection = microcontrollersOnly
+        ? selectedMcuProvider
+        : selectedSymbolProvider;
+    final selected = ref.watch(selection);
 
     return switch (results) {
       AsyncData(:final value) when value.isEmpty => EmptyState(
@@ -228,8 +256,7 @@ class _ResultList extends ConsumerWidget {
           return _ResultRow(
             entry: entry,
             selected: entry.libId == selected,
-            onTap: () =>
-                ref.read(selectedSymbolProvider.notifier).select(entry.libId),
+            onTap: () => ref.read(selection.notifier).select(entry.libId),
             onAdd: onAdd == null ? null : () => onAdd!(entry),
             addLabel: addLabel,
           );
@@ -347,14 +374,21 @@ class _ResultRow extends StatelessWidget {
 }
 
 class _SymbolDetail extends ConsumerWidget {
-  const _SymbolDetail({this.onAdd, required this.addLabel});
+  const _SymbolDetail({
+    this.onAdd,
+    required this.addLabel,
+    this.microcontrollersOnly = false,
+  });
 
   final void Function(SymbolIndexEntry entry)? onAdd;
   final String addLabel;
+  final bool microcontrollersOnly;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final libId = ref.watch(selectedSymbolProvider);
+    final libId = ref.watch(
+      microcontrollersOnly ? selectedMcuProvider : selectedSymbolProvider,
+    );
     if (libId == null) {
       return const EmptyState(
         icon: Icons.touch_app_outlined,

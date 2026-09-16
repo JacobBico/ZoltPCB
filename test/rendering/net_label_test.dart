@@ -1,4 +1,3 @@
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hintpcb/data/db/database.dart';
 import 'package:hintpcb/data/repositories/net_repository.dart';
@@ -66,20 +65,22 @@ void main() {
     expect((await buildScene()).labels, isEmpty);
   });
 
-  test('a ground net draws no text, because the symbol already says so',
-      () async {
-    final resistor = await parts.addPart(project.id, resistorSpec());
-    final ground = await parts.addPart(project.id, groundSpec());
-    await parts.updateUnitPlacement(
-      ground.units.first.copyWith(x: 25.4, y: 45, placed: true),
-    );
-    // Connecting to a power symbol names the net after it — GND.
-    await nets.connectPins(resistor.pins.last.id, ground.pins.first.id);
+  test(
+    'a ground net draws no text, because the symbol already says so',
+    () async {
+      final resistor = await parts.addPart(project.id, resistorSpec());
+      final ground = await parts.addPart(project.id, groundSpec());
+      await parts.updateUnitPlacement(
+        ground.units.first.copyWith(x: 25.4, y: 45, placed: true),
+      );
+      // Connecting to a power symbol names the net after it — GND.
+      await nets.connectPins(resistor.pins.last.id, ground.pins.first.id);
 
-    final scene = await buildScene();
-    expect(scene.nets.single.net.name, 'GND');
-    expect(scene.labels, isEmpty);
-  });
+      final scene = await buildScene();
+      expect(scene.nets.single.net.name, 'GND');
+      expect(scene.labels, isEmpty);
+    },
+  );
 
   test('the label sits on the corner of the wire, not on a pin', () async {
     await lowPass();
@@ -122,8 +123,7 @@ void main() {
     NetLabel? at(Offset point) => scene.labelNear(
       point,
       halfHeightMm: SchematicPainter.labelHeightMm,
-      halfWidthMm: (label) =>
-          SchematicPainter.labelHalfWidthMm(label.text),
+      halfWidthMm: (label) => SchematicPainter.labelHalfWidthMm(label.text),
     );
 
     expect(at(const Offset(60, 70))?.netId, netId);

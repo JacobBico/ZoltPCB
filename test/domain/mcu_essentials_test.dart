@@ -1,8 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hintpcb/domain/symbols/mcu_essentials.dart';
 
-McuPinInfo _pin(String number, String name, [List<String> alternates = const []]) =>
-    McuPinInfo(number: number, name: name, alternates: alternates);
+McuPinInfo _pin(
+  String number,
+  String name, [
+  List<String> alternates = const [],
+]) => McuPinInfo(number: number, name: name, alternates: alternates);
 
 void main() {
   test('an STM32: oscillator from the alternates, BOOT0 pulled down', () {

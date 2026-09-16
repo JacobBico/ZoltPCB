@@ -78,18 +78,13 @@ extension NetRowMapper on NetRow {
     id: id,
     projectId: projectId,
     name: name,
-    labelAt: labelX == null || labelY == null
-        ? null
-        : Offset(labelX!, labelY!),
+    labelAt: labelX == null || labelY == null ? null : Offset(labelX!, labelY!),
+    netClassId: netClassId,
     createdAt: createdAt,
   );
 }
 
 extension NetNodeRowMapper on NetNodeRow {
-  NetNode toDomain() => NetNode(
-    id: id,
-    netId: netId,
-    partPinId: partPinId,
-    createdAt: createdAt,
-  );
+  NetNode toDomain() =>
+      NetNode(id: id, netId: netId, partPinId: partPinId, createdAt: createdAt);
 }

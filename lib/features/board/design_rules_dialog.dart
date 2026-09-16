@@ -168,9 +168,7 @@ class _DesignRulesDialogState extends State<_DesignRulesDialog> {
     child: TextFormField(
       controller: controller,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      inputFormatters: [
-        FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-      ],
+      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
       decoration: InputDecoration(
         labelText: label,
         suffixText: 'mm',
@@ -212,8 +210,6 @@ class _DesignRulesDialogState extends State<_DesignRulesDialog> {
       return;
     }
 
-    Navigator.of(context).pop(
-      BoardSettingsResult(rules: rules, gridMm: _grid),
-    );
+    Navigator.of(context).pop(BoardSettingsResult(rules: rules, gridMm: _grid));
   }
 }

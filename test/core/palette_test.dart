@@ -128,7 +128,11 @@ void main() {
   group('which parts get the zigzag', () {
     test('resistors of every kind', () {
       for (final reference in ['R1', 'R12', 'RV3', 'RT1', 'RN2', 'R?']) {
-        expect(SchematicPainter.isResistor(reference), isTrue, reason: reference);
+        expect(
+          SchematicPainter.isResistor(reference),
+          isTrue,
+          reason: reference,
+        );
       }
     });
 

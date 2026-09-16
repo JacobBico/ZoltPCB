@@ -28,9 +28,12 @@ void main() {
   }
 
   final libraries =
-      root.listSync().whereType<Directory>().where(
-        (d) => d.path.endsWith('.pretty'),
-      ).toList()..sort((a, b) => a.path.compareTo(b.path));
+      root
+          .listSync()
+          .whereType<Directory>()
+          .where((d) => d.path.endsWith('.pretty'))
+          .toList()
+        ..sort((a, b) => a.path.compareTo(b.path));
 
   String nicknameOf(Directory library) {
     final base = library.path.split('/').last;
@@ -154,7 +157,8 @@ void main() {
   });
 }
 
-FootprintDefinition _load(String path, String nickname) => FootprintParser.parse(
-  SExprParser.parseDocument(File(path).readAsStringSync()),
-  nickname,
-);
+FootprintDefinition _load(String path, String nickname) =>
+    FootprintParser.parse(
+      SExprParser.parseDocument(File(path).readAsStringSync()),
+      nickname,
+    );

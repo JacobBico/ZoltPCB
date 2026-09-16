@@ -19,11 +19,7 @@ void main() {
       revision: 'B',
     );
 
-    await pumpApp(
-      tester,
-      ProjectScreen(projectId: project.id),
-      database: db,
-    );
+    await pumpApp(tester, ProjectScreen(projectId: project.id), database: db);
 
     expect(find.text('Preamp'), findsOneWidget);
     // The top bar names the section now that the rail is hidden; the
@@ -48,11 +44,7 @@ void main() {
     final r2 = await parts.addPart(project.id, resistorSpec());
     await nets.connectPins(r1.pins.first.id, r2.pins.first.id);
 
-    await pumpApp(
-      tester,
-      ProjectScreen(projectId: project.id),
-      database: db,
-    );
+    await pumpApp(tester, ProjectScreen(projectId: project.id), database: db);
 
     expect(find.text('components'), findsOneWidget);
     expect(find.text('nets'), findsOneWidget);
@@ -105,12 +97,12 @@ void main() {
     );
 
     // Hidden to begin with: the section fills the screen.
-    expect(find.text('Export').hitTestable(), findsNothing);
+    expect(find.text('Nets').hitTestable(), findsNothing);
 
     await openRail(tester);
-    expect(find.text('Export').hitTestable(), findsOneWidget);
+    expect(find.text('Nets').hitTestable(), findsOneWidget);
 
-    await tester.tap(find.text('Export'));
+    await tester.tap(find.text('Nets'));
     await settleApp(tester);
 
     expect(
@@ -124,11 +116,7 @@ void main() {
     final projects = ProjectRepository(db);
     final project = await projects.create(name: 'Doomed');
 
-    await pumpApp(
-      tester,
-      ProjectScreen(projectId: project.id),
-      database: db,
-    );
+    await pumpApp(tester, ProjectScreen(projectId: project.id), database: db);
     expect(find.text('Doomed'), findsOneWidget);
 
     await projects.delete(project.id);

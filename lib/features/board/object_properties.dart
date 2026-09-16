@@ -238,9 +238,13 @@ class _FootprintPropertiesState extends State<_FootprintProperties> {
               ],
               Row(
                 children: [
-                  Expanded(child: _NumberField(controller: _x, label: 'X mm')),
+                  Expanded(
+                    child: _NumberField(controller: _x, label: 'X mm'),
+                  ),
                   const SizedBox(width: 10),
-                  Expanded(child: _NumberField(controller: _y, label: 'Y mm')),
+                  Expanded(
+                    child: _NumberField(controller: _y, label: 'Y mm'),
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: _NumberField(
@@ -276,8 +280,7 @@ class _FootprintPropertiesState extends State<_FootprintProperties> {
               const SizedBox(height: 4),
               CheckboxListTile(
                 value: _flipped,
-                onChanged: (value) =>
-                    setState(() => _flipped = value ?? false),
+                onChanged: (value) => setState(() => _flipped = value ?? false),
                 controlAffinity: ListTileControlAffinity.leading,
                 contentPadding: EdgeInsets.zero,
                 dense: true,
@@ -297,10 +300,7 @@ class _FootprintPropertiesState extends State<_FootprintProperties> {
           onPressed: () => Navigator.of(
             context,
           ).pop(const PropertiesDeleted<PlacedFootprintRef>()),
-          child: Text(
-            'UNPLACE',
-            style: TextStyle(color: KicadPalette.error),
-          ),
+          child: Text('UNPLACE', style: TextStyle(color: KicadPalette.error)),
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
@@ -413,9 +413,13 @@ class _TrackPropertiesState extends State<_TrackProperties> {
                   child: _NumberField(controller: _startY, label: 'From Y'),
                 ),
                 const SizedBox(width: 10),
-                Expanded(child: _NumberField(controller: _endX, label: 'To X')),
+                Expanded(
+                  child: _NumberField(controller: _endX, label: 'To X'),
+                ),
                 const SizedBox(width: 10),
-                Expanded(child: _NumberField(controller: _endY, label: 'To Y')),
+                Expanded(
+                  child: _NumberField(controller: _endY, label: 'To Y'),
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -453,8 +457,7 @@ class _TrackPropertiesState extends State<_TrackProperties> {
                 for (final width in const [0.15, 0.2, 0.25, 0.4, 0.6, 1.0])
                   ActionChip(
                     label: Text('$width'),
-                    onPressed: () =>
-                        setState(() => _width.text = _mm(width)),
+                    onPressed: () => setState(() => _width.text = _mm(width)),
                   ),
               ],
             ),
@@ -572,19 +575,20 @@ class _ViaPropertiesState extends State<_ViaProperties> {
           children: [
             Row(
               children: [
-                Expanded(child: _NumberField(controller: _x, label: 'X mm')),
+                Expanded(
+                  child: _NumberField(controller: _x, label: 'X mm'),
+                ),
                 const SizedBox(width: 10),
-                Expanded(child: _NumberField(controller: _y, label: 'Y mm')),
+                Expanded(
+                  child: _NumberField(controller: _y, label: 'Y mm'),
+                ),
               ],
             ),
             const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
-                  child: _NumberField(
-                    controller: _diameter,
-                    label: 'Pad ⌀ mm',
-                  ),
+                  child: _NumberField(controller: _diameter, label: 'Pad ⌀ mm'),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -646,9 +650,7 @@ class _NumberField extends StatelessWidget {
       decimal: true,
       signed: true,
     ),
-    inputFormatters: [
-      FilteringTextInputFormatter.allow(RegExp(r'[0-9.,\-]')),
-    ],
+    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,\-]'))],
     decoration: InputDecoration(labelText: label, isDense: true),
   );
 }

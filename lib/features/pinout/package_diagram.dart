@@ -155,10 +155,7 @@ class _DiagramGeometry {
       bodyHeight * 0.62,
     );
 
-    final size = Size(
-      bodyWidth + gutter * 2,
-      bodyHeight + gutterY * 2,
-    );
+    final size = Size(bodyWidth + gutter * 2, bodyHeight + gutterY * 2);
     final body = Rect.fromLTWH(gutter, gutterY, bodyWidth, bodyHeight);
 
     final positions = <(PackagePin, Offset)>[];
@@ -176,10 +173,8 @@ class _DiagramGeometry {
 
     place(
       left,
-      (i) => Offset(
-        body.left - stub,
-        span(i, left.length, body.top, body.height),
-      ),
+      (i) =>
+          Offset(body.left - stub, span(i, left.length, body.top, body.height)),
     );
     place(
       right,
@@ -190,10 +185,8 @@ class _DiagramGeometry {
     );
     place(
       top,
-      (i) => Offset(
-        span(i, top.length, body.left, body.width),
-        body.top - stub,
-      ),
+      (i) =>
+          Offset(span(i, top.length, body.left, body.width), body.top - stub),
     );
     place(
       bottom,

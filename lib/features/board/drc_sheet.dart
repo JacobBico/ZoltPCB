@@ -18,8 +18,7 @@ Future<void> showDrcSheet(
     context: context,
     backgroundColor: KicadPalette.surface,
     isScrollControlled: true,
-    builder: (context) =>
-        _DrcSheet(violations: violations, onShow: onShow),
+    builder: (context) => _DrcSheet(violations: violations, onShow: onShow),
   );
 }
 

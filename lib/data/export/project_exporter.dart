@@ -1,9 +1,14 @@
 import 'dart:io';
 
+import 'package:archive/archive.dart';
+
 import '../../domain/export/board_document.dart';
 import '../../domain/export/schematic_document.dart';
 import '../../domain/pcb/pcb.dart';
 import '../../domain/symbols/symbols.dart';
+import '../../fab/gerber_writer.dart';
+import '../../rendering/schematic_pdf.dart';
+import '../../rendering/schematic_scene.dart';
 import '../../kicad/board_project_writer.dart';
 import '../../kicad/board_writer.dart';
 import '../../kicad/bom_writer.dart';
@@ -20,7 +25,9 @@ enum ExportKind {
   schematic('KiCad schematic', '.kicad_sch'),
   board('KiCad board', '.kicad_pcb'),
   boardProject('KiCad project', '.kicad_pro'),
-  bom('Bill of materials', '.csv');
+  bom('Bill of materials', '.csv'),
+  fabrication('Gerbers and drill files', '.zip'),
+  pdf('Schematic PDF', '.pdf');
 
   const ExportKind(this.label, this.extension);
 
@@ -113,6 +120,7 @@ class ProjectExporter {
       nets: netList,
       symbols: symbols,
       routeHints: hints,
+      drawnWires: await nets.getWires(projectId),
     );
   }
 
@@ -152,6 +160,7 @@ class ProjectExporter {
       edges: await boards.getEdges(projectId),
       zones: await boards.getZones(projectId),
       texts: await boards.getTexts(projectId),
+      netClasses: await boards.getNetClasses(projectId),
     );
 
     return BoardDocument(
@@ -184,9 +193,7 @@ class ProjectExporter {
   Future<List<ExportedFile>> exportBoard(String projectId) async {
     final board = await buildBoardDocument(projectId);
     if (board == null) {
-      throw const ExportException(
-        'Nothing has been placed on the board yet',
-      );
+      throw const ExportException('Nothing has been placed on the board yet');
     }
     return _writeBoard(board);
   }
@@ -212,6 +219,64 @@ class ProjectExporter {
         BoardProjectWriter.write(board, fileName: projectFileName),
       ),
     ];
+  }
+
+  /// Gerbers and drill files, zipped the way a board house takes them.
+  Future<ExportedFile> exportFabrication(String projectId) async {
+    final board = await buildBoardDocument(projectId);
+    if (board == null) {
+      throw const ExportException('Nothing has been placed on the board yet');
+    }
+    final base = fileNameFor(board.project.name);
+    final archive = Archive();
+    for (final file in [
+      ...FabricationWriter.write(board.scene, baseName: base),
+      FabricationWriter.positions(board.scene, baseName: base),
+    ]) {
+      archive.addFile(ArchiveFile.string(file.name, file.content));
+    }
+    return _writeBytes(
+      ExportKind.fabrication,
+      '$base-gerbers.zip',
+      ZipEncoder().encodeBytes(archive),
+    );
+  }
+
+  /// The sheet as a PDF to share with someone who has no KiCad.
+  Future<ExportedFile> exportSchematicPdf(String projectId) async {
+    final document = await buildDocument(projectId);
+    final scene = SchematicScene.build(
+      paper: document.project.paper,
+      parts: document.parts,
+      nets: document.nets,
+      symbols: document.symbols,
+      routeHints: document.routeHints,
+      drawnWires: document.drawnWires,
+    );
+    final bytes = await renderSchematicPdf(scene, title: document.project.name);
+    return _writeBytes(
+      ExportKind.pdf,
+      '${fileNameFor(document.project.name)}.pdf',
+      bytes,
+    );
+  }
+
+  Future<ExportedFile> _writeBytes(
+    ExportKind kind,
+    String fileName,
+    List<int> bytes,
+  ) async {
+    if (!outputDirectory.existsSync()) {
+      await outputDirectory.create(recursive: true);
+    }
+    final file = File('${outputDirectory.path}/$fileName');
+    await file.writeAsBytes(bytes, flush: true);
+    return ExportedFile(
+      kind: kind,
+      path: file.path,
+      fileName: fileName,
+      byteSize: bytes.length,
+    );
   }
 
   Future<ExportedFile> exportSchematic(String projectId) async {

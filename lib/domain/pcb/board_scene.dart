@@ -5,6 +5,7 @@ import '../models/models.dart';
 import 'board.dart';
 import 'board_edge.dart';
 import 'board_layer.dart';
+import 'net_class.dart';
 import 'board_outline.dart';
 import 'board_text.dart';
 import 'board_zone.dart';
@@ -116,19 +117,11 @@ class PlacedFootprint {
   Rect get bounds {
     final definition = this.definition;
     if (definition == null) {
-      return Rect.fromCenter(
-        center: Offset(ref.x, ref.y),
-        width: 2,
-        height: 2,
-      );
+      return Rect.fromCenter(center: Offset(ref.x, ref.y), width: 2, height: 2);
     }
     final local = footprintBounds(definition);
     if (local == Rect.zero) {
-      return Rect.fromCenter(
-        center: Offset(ref.x, ref.y),
-        width: 2,
-        height: 2,
-      );
+      return Rect.fromCenter(center: Offset(ref.x, ref.y), width: 2, height: 2);
     }
     var rect = Rect.fromPoints(
       placement.apply(local.left, local.top),
@@ -181,7 +174,23 @@ class BoardScene {
     this.texts = const [],
     this.staleTrackIds = const {},
     this.staleViaIds = const {},
+    this.netClasses = const [],
+    this.netClassByNet = const {},
   });
+
+  /// The project's net classes, and the class each net routes with.
+  final List<NetClass> netClasses;
+  final Map<String, NetClass> netClassByNet;
+
+  NetClass? classOf(String? netId) =>
+      netId == null ? null : netClassByNet[netId];
+
+  /// The gap copper on [netId] needs from other nets: the design rule, or
+  /// the net's class clearance where that is wider.
+  double clearanceFor(String? netId) {
+    final own = classOf(netId)?.clearance ?? 0;
+    return own > board.rules.clearance ? own : board.rules.clearance;
+  }
 
   static BoardScene build({
     required Board board,
@@ -194,6 +203,7 @@ class BoardScene {
     List<BoardEdge> edges = const [],
     List<BoardZone> zones = const [],
     List<BoardText> texts = const [],
+    List<NetClass> netClasses = const [],
   }) {
     final partsById = {for (final part in parts) part.part.id: part};
 
@@ -271,6 +281,11 @@ class BoardScene {
     // stored id is a hint about intent, not a fact about connectivity.
     final resolved = _resolveCopperNets(allPads, tracks, vias);
 
+    final classById = {for (final c in netClasses) c.id: c};
+    final netClassByNet = <String, NetClass>{
+      for (final net in nets) net.net.id: ?classById[net.net.netClassId],
+    };
+
     return BoardScene(
       board: board,
       footprints: placed,
@@ -282,6 +297,8 @@ class BoardScene {
       edges: edges,
       zones: zones,
       texts: texts,
+      netClasses: netClasses,
+      netClassByNet: netClassByNet,
       staleTrackIds: resolved.staleTracks,
       staleViaIds: resolved.staleVias,
     );
@@ -316,13 +333,14 @@ class BoardScene {
   final Set<String> staleTrackIds;
   final Set<String> staleViaIds;
 
-  bool get hasStaleCopper =>
-      staleTrackIds.isNotEmpty || staleViaIds.isNotEmpty;
+  bool get hasStaleCopper => staleTrackIds.isNotEmpty || staleViaIds.isNotEmpty;
 
   /// Copper on no net at all: drawn for a connection the schematic no
   /// longer has.
-  List<Track> get orphanTracks =>
-      [for (final track in tracks) if (track.netId == null) track];
+  List<Track> get orphanTracks => [
+    for (final track in tracks)
+      if (track.netId == null) track,
+  ];
 
   /// The board edge — a rectangle, a circle or a polygon.
   BoardOutline get outline => board.outline;
@@ -516,10 +534,7 @@ class BoardScene {
     for (final via in vias) {
       if (via.netId != netId) continue;
       final at = Offset(via.x, via.y);
-      union(
-        pointNode(at, CopperLayer.front),
-        pointNode(at, CopperLayer.back),
-      );
+      union(pointNode(at, CopperLayer.front), pointNode(at, CopperLayer.back));
       bindToPads(at, CopperLayer.front);
       bindToPads(at, CopperLayer.back);
 
@@ -559,11 +574,7 @@ class BoardScene {
     Set<String> staleTracks,
     Set<String> staleVias,
   })
-  _resolveCopperNets(
-    List<PlacedPad> pads,
-    List<Track> tracks,
-    List<Via> vias,
-  ) {
+  _resolveCopperNets(List<PlacedPad> pads, List<Track> tracks, List<Via> vias) {
     if (tracks.isEmpty && vias.isEmpty) {
       return (
         tracks: tracks,

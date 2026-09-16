@@ -11,6 +11,7 @@ import '../../core/widgets/section_rail.dart';
 import '../../domain/models/models.dart';
 import '../board/board_panel.dart';
 import '../board/precision_board_panel.dart';
+import '../production/production_panel.dart';
 import '../projects/project_editor_dialog.dart';
 import 'components_panel.dart';
 import 'export_panel.dart';
@@ -24,6 +25,7 @@ enum ProjectSection {
   nets('Nets', Icons.account_tree_outlined),
   schematic('Schematic', Icons.grid_on_outlined),
   board('Board', Icons.developer_board_outlined),
+  production('Production', Icons.precision_manufacturing_outlined),
   export('Export', Icons.ios_share_outlined);
 
   const ProjectSection(this.label, this.icon);
@@ -165,7 +167,8 @@ class _ProjectScreenState extends ConsumerState<ProjectScreen> {
     ),
     // The board has no add button: everything on it comes from the
     // schematic, and its own verbs live on the canvas action bar.
-    ProjectSection.board => const SizedBox.shrink(),
+    ProjectSection.board ||
+    ProjectSection.production => const SizedBox.shrink(),
     ProjectSection.components || ProjectSection.nets => FilledButton.icon(
       onPressed: () => ProjectComponentsPanel.add(context, project),
       icon: const Icon(Icons.add, size: 18),
@@ -184,12 +187,11 @@ class _ProjectScreenState extends ConsumerState<ProjectScreen> {
     ProjectSection.nets => NetsPanel(project: project),
     ProjectSection.schematic => SchematicPanel(project: project),
     // Two board editors, chosen in Settings. See [BoardEditorStyle].
-    ProjectSection.board => switch (
-      ref.watch(appearanceProvider).boardEditor
-    ) {
+    ProjectSection.board => switch (ref.watch(appearanceProvider).boardEditor) {
       BoardEditorStyle.precision => PrecisionBoardPanel(project: project),
       BoardEditorStyle.classic => BoardPanel(project: project),
     },
+    ProjectSection.production => ProductionPanel(project: project),
     ProjectSection.export => ExportPanel(project: project),
   };
 

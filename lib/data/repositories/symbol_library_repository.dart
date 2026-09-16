@@ -1,4 +1,3 @@
-
 import 'package:drift/drift.dart';
 
 import '../../core/util/ids.dart';
@@ -69,9 +68,7 @@ class SymbolLibraryRepository {
       throw LibraryImportException('Not a readable .kicad_sym file: $error');
     }
     if (parsed.symbols.isEmpty) {
-      throw const LibraryImportException(
-        'That file contains no symbols',
-      );
+      throw const LibraryImportException('That file contains no symbols');
     }
 
     final storedName = '$nickname.kicad_sym';

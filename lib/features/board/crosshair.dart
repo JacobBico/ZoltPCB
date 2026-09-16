@@ -276,11 +276,7 @@ class CrosshairOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) => IgnorePointer(
     child: CustomPaint(
-      painter: _CrosshairPainter(
-        snap: snap,
-        viewport: viewport,
-        armed: armed,
-      ),
+      painter: _CrosshairPainter(snap: snap, viewport: viewport, armed: armed),
       size: Size.infinite,
     ),
   );

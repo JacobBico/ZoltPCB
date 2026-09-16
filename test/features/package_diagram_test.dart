@@ -54,7 +54,10 @@ void main() {
         child: SizedBox(
           width: available.width,
           height: available.height,
-          child: PackageDiagram(layout: PackageLayout.of(_mcu()), title: 'BIG48'),
+          child: PackageDiagram(
+            layout: PackageLayout.of(_mcu()),
+            title: 'BIG48',
+          ),
         ),
       ),
       database: db,

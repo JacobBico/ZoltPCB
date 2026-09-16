@@ -19,8 +19,7 @@ enum TrackAngleLock {
   /// The angular step allowed, in degrees. Zero means no constraint.
   final int step;
 
-  TrackAngleLock get next =>
-      values[(index + 1) % values.length];
+  TrackAngleLock get next => values[(index + 1) % values.length];
 
   /// [to], moved onto the nearest allowed direction from [from].
   ///
@@ -143,7 +142,8 @@ List<Offset> roundCorners(
     // A corner that does not turn has nothing to round.
     final cross =
         inDirection.dx * outDirection.dy - inDirection.dy * outDirection.dx;
-    final dot = inDirection.dx * outDirection.dx + inDirection.dy * outDirection.dy;
+    final dot =
+        inDirection.dx * outDirection.dx + inDirection.dy * outDirection.dy;
     if (cross.abs() < 1e-9 && dot < 0) {
       result.add(corner);
       continue;

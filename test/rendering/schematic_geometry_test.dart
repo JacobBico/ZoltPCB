@@ -121,19 +121,21 @@ void main() {
   });
 
   group('bounds', () {
-    SymbolDefinition symbolWith(List<SymbolGraphic> graphics, List<SymbolPin> pins) =>
-        SymbolDefinition(
-          libraryNickname: 'Test',
-          name: 'S',
-          unitDrawings: [
-            SymbolUnitDrawing(
-              unit: 1,
-              bodyStyle: 1,
-              graphics: graphics,
-              pins: pins,
-            ),
-          ],
-        );
+    SymbolDefinition symbolWith(
+      List<SymbolGraphic> graphics,
+      List<SymbolPin> pins,
+    ) => SymbolDefinition(
+      libraryNickname: 'Test',
+      name: 'S',
+      unitDrawings: [
+        SymbolUnitDrawing(
+          unit: 1,
+          bodyStyle: 1,
+          graphics: graphics,
+          pins: pins,
+        ),
+      ],
+    );
 
     test('covers graphics and pin stubs', () {
       final symbol = symbolWith(
@@ -166,10 +168,9 @@ void main() {
     });
 
     test('a circle contributes its full extent', () {
-      final symbol = symbolWith(
-        const [SymbolCircle(center: SymbolPoint(0, 0), radius: 2.5)],
-        const [],
-      );
+      final symbol = symbolWith(const [
+        SymbolCircle(center: SymbolPoint(0, 0), radius: 2.5),
+      ], const []);
       final bounds = symbolBounds(symbol, 1);
       expect(bounds.left, -2.5);
       expect(bounds.right, 2.5);

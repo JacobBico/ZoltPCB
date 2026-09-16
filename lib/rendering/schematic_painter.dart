@@ -20,7 +20,9 @@ class SchematicPainter extends CustomPainter {
     this.selectedUnitIds = const {},
     this.selectionBox,
     this.selectedWireKey,
+    this.selectedWireRun,
     this.pendingPinId,
+    this.pendingWire,
     this.highlightedNetId,
     this.showGrid = true,
     this.zigzagResistors = false,
@@ -58,7 +60,15 @@ class SchematicPainter extends CustomPainter {
   /// both that the wire is a thing you can grab and where to grab it.
   final String? selectedWireKey;
 
+  /// Which run of that wire is picked, when one is: only that run is drawn
+  /// as selected, since the commands apply to it alone.
+  final int? selectedWireRun;
+
   final String? pendingPinId;
+
+  /// The wire being drawn, pin first, corners after.
+  final List<Offset>? pendingWire;
+
   final String? highlightedNetId;
   final bool showGrid;
 
@@ -70,7 +80,33 @@ class SchematicPainter extends CustomPainter {
     _paintConnections(canvas);
     _paintUnits(canvas);
     _paintNetLabels(canvas);
+    _paintPendingWire(canvas);
     _paintSelectionBox(canvas);
+  }
+
+  void _paintPendingWire(Canvas canvas) {
+    final points = pendingWire;
+    if (points == null || points.length < 2) return;
+    final path = Path();
+    final first = viewport.toScreen(points.first);
+    path.moveTo(first.dx, first.dy);
+    for (final point in points.skip(1)) {
+      final screen = viewport.toScreen(point);
+      path.lineTo(screen.dx, screen.dy);
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = colors.highlight
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.4
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+    final corner = Paint()..color = colors.highlight;
+    for (final point in points.skip(1)) {
+      canvas.drawCircle(viewport.toScreen(point), 4, corner);
+    }
   }
 
   void _paintSelectionBox(Canvas canvas) {
@@ -164,7 +200,7 @@ class SchematicPainter extends CustomPainter {
   /// exporter says the same thing to KiCad using net labels.
   void _paintConnections(Canvas canvas) {
     for (final wire in scene.wires) {
-      final selected = wire.key == selectedWireKey;
+      final selected = wire.key == selectedWireKey && selectedWireRun == null;
       final highlighted = selected || wire.netId == highlightedNetId;
       final paint = Paint()
         ..color = highlighted
@@ -187,6 +223,9 @@ class SchematicPainter extends CustomPainter {
       canvas.drawPath(path, paint);
     }
 
+    _paintSelectedRun(canvas);
+    _paintJunctions(canvas);
+
     final dot = Paint()..color = colors.junction;
     final radius = math.max(2.0, viewport.lengthToScreen(0.4));
     for (final pins in scene.pinsByNet.values) {
@@ -197,6 +236,44 @@ class SchematicPainter extends CustomPainter {
     }
 
     _paintWireHandles(canvas);
+  }
+
+  /// Marks the corners of drawn wires: the points where segments meet, and
+  /// the ends of wires that stop in mid-air.
+  ///
+  /// Each is a junction — somewhere a wire can be pulled out of — so they
+  /// are worth seeing. Pins already have their own dots.
+  void _paintJunctions(Canvas canvas) {
+    final radius = math.max(1.5, viewport.lengthToScreen(0.35));
+    final paint = Paint()
+      ..color = colors.junction.withValues(alpha: 0.8)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
+
+    for (final wire in scene.wires) {
+      if (!wire.isDrawn) continue;
+      for (final point in wire.points) {
+        canvas.drawCircle(viewport.toScreen(point), radius, paint);
+      }
+    }
+  }
+
+  /// Picks out the one run of wire the commands apply to.
+  void _paintSelectedRun(Canvas canvas) {
+    final key = selectedWireKey;
+    final run = selectedWireRun;
+    if (key == null || run == null) return;
+    final wire = scene.wires.where((w) => w.key == key).firstOrNull;
+    if (wire == null || run + 1 >= wire.points.length) return;
+
+    canvas.drawLine(
+      viewport.toScreen(wire.points[run]),
+      viewport.toScreen(wire.points[run + 1]),
+      Paint()
+        ..color = colors.highlight
+        ..strokeWidth = 5
+        ..strokeCap = StrokeCap.round,
+    );
   }
 
   /// Marks the runs of the selected wire that can be dragged.
@@ -479,7 +556,9 @@ class SchematicPainter extends CustomPainter {
       !setEquals(old.selectedUnitIds, selectedUnitIds) ||
       old.selectionBox != selectionBox ||
       old.selectedWireKey != selectedWireKey ||
+      old.selectedWireRun != selectedWireRun ||
       old.pendingPinId != pendingPinId ||
+      !listEquals(old.pendingWire, pendingWire) ||
       old.highlightedNetId != highlightedNetId ||
       old.showGrid != showGrid;
 }

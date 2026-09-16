@@ -2,10 +2,7 @@ import 'dart:ui';
 
 /// The mapping between sheet millimetres and screen pixels.
 class SchematicViewport {
-  const SchematicViewport({
-    required this.pixelsPerMm,
-    required this.origin,
-  });
+  const SchematicViewport({required this.pixelsPerMm, required this.origin});
 
   /// Zoom, in device-independent pixels per millimetre.
   final double pixelsPerMm;
@@ -13,8 +10,10 @@ class SchematicViewport {
   /// Screen position of the sheet's top-left corner.
   final Offset origin;
 
-  Offset toScreen(Offset sheetMm) =>
-      Offset(origin.dx + sheetMm.dx * pixelsPerMm, origin.dy + sheetMm.dy * pixelsPerMm);
+  Offset toScreen(Offset sheetMm) => Offset(
+    origin.dx + sheetMm.dx * pixelsPerMm,
+    origin.dy + sheetMm.dy * pixelsPerMm,
+  );
 
   Offset toSheet(Offset screen) => Offset(
     (screen.dx - origin.dx) / pixelsPerMm,

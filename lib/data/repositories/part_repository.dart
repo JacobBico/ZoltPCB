@@ -67,10 +67,11 @@ class PartRepository {
   /// on a phone are small enough that a full reload is cheaper than keeping
   /// three joined streams in sync.
   Stream<List<PartWithDetails>> watchPartsWithDetails(String projectId) {
-    return _db.watchAggregate(
-      {_db.parts, _db.partUnits, _db.partPins},
-      () => getPartsWithDetails(projectId),
-    );
+    return _db.watchAggregate({
+      _db.parts,
+      _db.partUnits,
+      _db.partPins,
+    }, () => getPartsWithDetails(projectId));
   }
 
   Future<List<PartWithDetails>> getPartsWithDetails(String projectId) async {
@@ -152,10 +153,7 @@ class PartRepository {
 
   /// Adds a component to a project, creating its units and snapshotting its
   /// pins. Runs in a transaction so a designator is never half-allocated.
-  Future<PartWithDetails> addPart(
-    String projectId,
-    NewPartSpec spec,
-  ) async {
+  Future<PartWithDetails> addPart(String projectId, NewPartSpec spec) async {
     return _db.transaction(() async {
       final reference =
           spec.reference ??
@@ -176,22 +174,24 @@ class PartRepository {
       final partId = newId();
       final unitCount = spec.unitCount < 1 ? 1 : spec.unitCount;
 
-      await _db.into(_db.parts).insert(
-        PartsCompanion.insert(
-          id: partId,
-          projectId: projectId,
-          libId: spec.libId,
-          reference: reference,
-          value: Value(spec.value),
-          footprint: Value(spec.footprint),
-          datasheet: Value(spec.datasheet),
-          description: Value(spec.description),
-          unitCount: Value(unitCount),
-          inBom: Value(spec.inBom),
-          onBoard: Value(spec.onBoard),
-          createdAt: now,
-        ),
-      );
+      await _db
+          .into(_db.parts)
+          .insert(
+            PartsCompanion.insert(
+              id: partId,
+              projectId: projectId,
+              libId: spec.libId,
+              reference: reference,
+              value: Value(spec.value),
+              footprint: Value(spec.footprint),
+              datasheet: Value(spec.datasheet),
+              description: Value(spec.description),
+              unitCount: Value(unitCount),
+              inBom: Value(spec.inBom),
+              onBoard: Value(spec.onBoard),
+              createdAt: now,
+            ),
+          );
 
       // Units are given a position on the sheet as they are created, so a
       // part is visible on the canvas the moment it is added rather than
@@ -256,6 +256,79 @@ class PartRepository {
     await _touchProject(part.projectId);
   }
 
+  /// Numbers every part afresh, prefix by prefix, in reading order across
+  /// the sheet — top row first, left to right — the way a finished
+  /// schematic is annotated.
+  ///
+  /// Returns the new reference of every part that changed, keyed by part id,
+  /// together with the old one, so the whole thing can be put back.
+  Future<Map<String, (String, String)>> renumberReferences(
+    String projectId,
+  ) async {
+    final all = await getPartsWithDetails(projectId);
+    final byPrefix = <String, List<PartWithDetails>>{};
+    for (final part in all) {
+      final prefix = part.part.referencePrefix.isEmpty
+          ? 'U'
+          : part.part.referencePrefix;
+      (byPrefix[prefix] ??= []).add(part);
+    }
+
+    final changes = <String, (String, String)>{};
+    for (final entry in byPrefix.entries) {
+      final ordered = [...entry.value]..sort(_readingOrder);
+      // Power symbols keep KiCad's two-digit style: #PWR01, #PWR02.
+      final width = entry.key.startsWith('#') ? 2 : 0;
+      for (var i = 0; i < ordered.length; i++) {
+        final next = '${entry.key}${'${i + 1}'.padLeft(width, '0')}';
+        final part = ordered[i].part;
+        if (part.reference != next) changes[part.id] = (part.reference, next);
+      }
+    }
+    await applyReferences({
+      for (final e in changes.entries) e.key: e.value.$2,
+    }, projectId);
+    return changes;
+  }
+
+  /// Sets references in one go, stepping through placeholders so two parts
+  /// swapping numbers never collide on the unique designator.
+  Future<void> applyReferences(
+    Map<String, String> references,
+    String projectId,
+  ) async {
+    if (references.isEmpty) return;
+    await _db.transaction(() async {
+      for (final id in references.keys) {
+        await (_db.update(_db.parts)..where((t) => t.id.equals(id))).write(
+          PartsCompanion(reference: Value('~renumber~$id')),
+        );
+      }
+      for (final entry in references.entries) {
+        await (_db.update(_db.parts)..where((t) => t.id.equals(entry.key)))
+            .write(PartsCompanion(reference: Value(entry.value)));
+      }
+    });
+    await _touchProject(projectId);
+  }
+
+  static int _readingOrder(PartWithDetails a, PartWithDetails b) {
+    Offset at(PartWithDetails p) {
+      final placed = p.units.where((u) => u.placed).toList();
+      if (placed.isEmpty) return const Offset(1e9, 1e9);
+      return Offset(placed.first.x, placed.first.y);
+    }
+
+    final pa = at(a);
+    final pb = at(b);
+    // Rows a couple of grid squares tall, so parts almost level read as one
+    // row rather than being ordered by a fraction of a millimetre.
+    final rowA = (pa.dy / 12.7).floor();
+    final rowB = (pb.dy / 12.7).floor();
+    if (rowA != rowB) return rowA.compareTo(rowB);
+    return pa.dx.compareTo(pb.dx);
+  }
+
   Future<void> updateUnitPlacement(PartUnit unit) async {
     await (_db.update(_db.partUnits)..where((t) => t.id.equals(unit.id))).write(
       PartUnitsCompanion(
@@ -271,8 +344,9 @@ class PartRepository {
   }
 
   Future<void> setPinNoConnect(String pinId, bool noConnect) async {
-    await (_db.update(_db.partPins)..where((t) => t.id.equals(pinId)))
-        .write(PartPinsCompanion(noConnect: Value(noConnect)));
+    await (_db.update(_db.partPins)..where((t) => t.id.equals(pinId))).write(
+      PartPinsCompanion(noConnect: Value(noConnect)),
+    );
   }
 
   /// Everything needed to put a deleted part back, including which nets its
@@ -311,93 +385,91 @@ class PartRepository {
   Future<void> restorePart(PartSnapshot snapshot) async {
     final part = snapshot.details.part;
     await _db.transaction(() async {
-      await _db.into(_db.parts).insert(
-        PartsCompanion.insert(
-          id: part.id,
-          projectId: part.projectId,
-          libId: part.libId,
-          reference: part.reference,
-          value: Value(part.value),
-          footprint: Value(part.footprint),
-          datasheet: Value(part.datasheet),
-          description: Value(part.description),
-          unitCount: Value(part.unitCount),
-          inBom: Value(part.inBom),
-          onBoard: Value(part.onBoard),
-          dnp: Value(part.dnp),
-          fieldsHidden: Value(part.fieldsHidden),
-          createdAt: part.createdAt,
-        ),
-        mode: InsertMode.insertOrReplace,
-      );
+      await _db
+          .into(_db.parts)
+          .insert(
+            PartsCompanion.insert(
+              id: part.id,
+              projectId: part.projectId,
+              libId: part.libId,
+              reference: part.reference,
+              value: Value(part.value),
+              footprint: Value(part.footprint),
+              datasheet: Value(part.datasheet),
+              description: Value(part.description),
+              unitCount: Value(part.unitCount),
+              inBom: Value(part.inBom),
+              onBoard: Value(part.onBoard),
+              dnp: Value(part.dnp),
+              fieldsHidden: Value(part.fieldsHidden),
+              createdAt: part.createdAt,
+            ),
+            mode: InsertMode.insertOrReplace,
+          );
 
       await _db.batch((batch) {
-        batch.insertAll(
-          _db.partUnits,
-          [
-            for (final unit in snapshot.details.units)
-              PartUnitsCompanion.insert(
-                id: unit.id,
-                partId: unit.partId,
-                unitNumber: unit.unitNumber,
-                bodyStyle: Value(unit.bodyStyle),
-                x: Value(unit.x),
-                y: Value(unit.y),
-                rotation: Value(unit.rotation),
-                mirrorX: Value(unit.mirrorX),
-                mirrorY: Value(unit.mirrorY),
-                placed: Value(unit.placed),
-              ),
-          ],
-          mode: InsertMode.insertOrReplace,
-        );
-        batch.insertAll(
-          _db.partPins,
-          [
-            for (final pin in snapshot.details.pins)
-              PartPinsCompanion.insert(
-                id: pin.id,
-                partId: pin.partId,
-                number: pin.number,
-                electricalType: pin.electricalType,
-                unit: Value(pin.unit),
-                bodyStyle: Value(pin.bodyStyle),
-                name: Value(pin.name),
-                graphicStyle: Value(pin.graphicStyle),
-                x: Value(pin.x),
-                y: Value(pin.y),
-                length: Value(pin.length),
-                angle: Value(pin.angle),
-                noConnect: Value(pin.noConnect),
-                hidden: Value(pin.hidden),
-              ),
-          ],
-          mode: InsertMode.insertOrReplace,
-        );
+        batch.insertAll(_db.partUnits, [
+          for (final unit in snapshot.details.units)
+            PartUnitsCompanion.insert(
+              id: unit.id,
+              partId: unit.partId,
+              unitNumber: unit.unitNumber,
+              bodyStyle: Value(unit.bodyStyle),
+              x: Value(unit.x),
+              y: Value(unit.y),
+              rotation: Value(unit.rotation),
+              mirrorX: Value(unit.mirrorX),
+              mirrorY: Value(unit.mirrorY),
+              placed: Value(unit.placed),
+            ),
+        ], mode: InsertMode.insertOrReplace);
+        batch.insertAll(_db.partPins, [
+          for (final pin in snapshot.details.pins)
+            PartPinsCompanion.insert(
+              id: pin.id,
+              partId: pin.partId,
+              number: pin.number,
+              electricalType: pin.electricalType,
+              unit: Value(pin.unit),
+              bodyStyle: Value(pin.bodyStyle),
+              name: Value(pin.name),
+              graphicStyle: Value(pin.graphicStyle),
+              x: Value(pin.x),
+              y: Value(pin.y),
+              length: Value(pin.length),
+              angle: Value(pin.angle),
+              noConnect: Value(pin.noConnect),
+              hidden: Value(pin.hidden),
+            ),
+        ], mode: InsertMode.insertOrReplace);
       });
 
       for (final entry in snapshot.connections.entries) {
         final connection = entry.value;
         // The net may have been tidied away when the part went; put it back
         // under its original id so anything else pointing at it still fits.
-        await _db.into(_db.nets).insert(
-          NetsCompanion.insert(
-            id: connection.netId,
-            projectId: part.projectId,
-            name: Value(connection.netName),
-            createdAt: connection.netCreatedAt,
-          ),
-          mode: InsertMode.insertOrIgnore,
-        );
-        await _db.into(_db.netNodes).insert(
-          NetNodesCompanion.insert(
-            id: newId(),
-            netId: connection.netId,
-            partPinId: entry.key,
-            createdAt: DateTime.now(),
-          ),
-          mode: InsertMode.insertOrIgnore,
-        );
+        await _db
+            .into(_db.nets)
+            .insert(
+              NetsCompanion.insert(
+                id: connection.netId,
+                projectId: part.projectId,
+                name: Value(connection.netName),
+                createdAt: connection.netCreatedAt,
+              ),
+              mode: InsertMode.insertOrIgnore,
+            );
+        await _db
+            .into(_db.netNodes)
+            .insert(
+              NetNodesCompanion.insert(
+                id: newId(),
+                netId: connection.netId,
+                partPinId: entry.key,
+                createdAt: DateTime.now(),
+              ),
+              mode: InsertMode.insertOrIgnore,
+            );
       }
     });
     await _touchProject(part.projectId);
@@ -487,12 +559,11 @@ class PartRepository {
   Future<String> _nextReference(String projectId, String prefix) async {
     final normalized = prefix.trim().isEmpty ? 'U' : prefix.trim();
     final rows =
-        await (_db.select(_db.parts)
-              ..where(
-                (t) =>
-                    t.projectId.equals(projectId) &
-                    t.reference.like('$normalized%'),
-              ))
+        await (_db.select(_db.parts)..where(
+              (t) =>
+                  t.projectId.equals(projectId) &
+                  t.reference.like('$normalized%'),
+            ))
             .get();
 
     final pattern = RegExp('^${RegExp.escape(normalized)}([0-9]+)\$');

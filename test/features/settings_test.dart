@@ -12,11 +12,7 @@ void main() {
   tearDown(() => KicadPalette.current = AppPalettes.kicad);
 
   testApp('choosing a theme applies it and remembers it', (tester, db) async {
-    await pumpApp(
-      tester,
-      const Scaffold(body: SettingsPanel()),
-      database: db,
-    );
+    await pumpApp(tester, const Scaffold(body: SettingsPanel()), database: db);
 
     expect(find.text('Halloween'), findsOneWidget);
     await tester.tap(find.text('Halloween'));
@@ -33,11 +29,7 @@ void main() {
   });
 
   testApp('choosing the US resistor remembers it', (tester, db) async {
-    await pumpApp(
-      tester,
-      const Scaffold(body: SettingsPanel()),
-      database: db,
-    );
+    await pumpApp(tester, const Scaffold(body: SettingsPanel()), database: db);
 
     // Below the theme grid on a landscape phone, as it is for a person.
     await tester.scrollUntilVisible(
@@ -51,7 +43,10 @@ void main() {
     final container = ProviderScope.containerOf(
       tester.element(find.byType(SettingsPanel)),
     );
-    expect(container.read(appearanceProvider).resistorStyle, ResistorStyle.ansi);
+    expect(
+      container.read(appearanceProvider).resistorStyle,
+      ResistorStyle.ansi,
+    );
     expect(
       await SettingsRepository(db).get(SettingsRepository.resistorStyleKey),
       'ansi',
@@ -63,11 +58,7 @@ void main() {
       db,
     ).set(SettingsRepository.paletteKey, 'blueprint');
 
-    await pumpApp(
-      tester,
-      const Scaffold(body: SettingsPanel()),
-      database: db,
-    );
+    await pumpApp(tester, const Scaffold(body: SettingsPanel()), database: db);
     final container = ProviderScope.containerOf(
       tester.element(find.byType(SettingsPanel)),
     );
@@ -79,11 +70,7 @@ void main() {
   });
 
   testApp('every palette is offered', (tester, db) async {
-    await pumpApp(
-      tester,
-      const Scaffold(body: SettingsPanel()),
-      database: db,
-    );
+    await pumpApp(tester, const Scaffold(body: SettingsPanel()), database: db);
 
     for (final palette in AppPalettes.all) {
       await tester.scrollUntilVisible(

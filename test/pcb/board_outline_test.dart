@@ -19,11 +19,7 @@ void main() {
 
     test('a board cannot be dragged down to nothing', () {
       final outline = BoardOutline.rectangle(rect);
-      final collapsed = outline.withHandleAt(
-        0,
-        rect.bottomRight,
-        minimum: 2,
-      );
+      final collapsed = outline.withHandleAt(0, rect.bottomRight, minimum: 2);
 
       expect(collapsed.bounds.width, greaterThanOrEqualTo(2));
       expect(collapsed.bounds.height, greaterThanOrEqualTo(2));

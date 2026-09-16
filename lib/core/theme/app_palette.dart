@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 /// One complete set of app colours.
 ///
 /// Everything that paints reads from the palette in force — the chrome, both
@@ -119,7 +120,8 @@ class AppPalette {
   /// the accent so it always belongs to the palette, and never borrowed from
   /// the symbol colour, which in most palettes is the one that reads as
   /// "wrong".
-  Color get selectedContainer => Color.lerp(surface, wire, isDark ? 0.24 : 0.18)!;
+  Color get selectedContainer =>
+      Color.lerp(surface, wire, isDark ? 0.24 : 0.18)!;
 
   @override
   bool operator ==(Object other) => other is AppPalette && other.id == id;
@@ -136,7 +138,8 @@ abstract final class AppPalettes {
   static const kicad = AppPalette(
     id: 'kicad',
     name: 'KiCad',
-    description: 'Dark canvas, red symbols, teal wires — the desktop editor, as close as a phone gets.',
+    description:
+        'Dark canvas, red symbols, teal wires — the desktop editor, as close as a phone gets.',
     brightness: Brightness.dark,
     background: Color(0xFF131318),
     surface: Color(0xFF1C1C22),

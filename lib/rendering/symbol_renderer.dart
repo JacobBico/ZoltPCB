@@ -177,13 +177,13 @@ class SymbolRenderer {
   }
 
   Path? _pathFor(SymbolGraphic graphic, Placement placement) {
-    Offset screen(SymbolPoint p) =>
-        viewport.toScreen(placement.applyPoint(p));
+    Offset screen(SymbolPoint p) => viewport.toScreen(placement.applyPoint(p));
 
     switch (graphic) {
       case SymbolPolyline(:final points):
         if (points.isEmpty) return null;
-        final path = Path()..moveTo(screen(points.first).dx, screen(points.first).dy);
+        final path = Path()
+          ..moveTo(screen(points.first).dx, screen(points.first).dy);
         for (final point in points.skip(1)) {
           final o = screen(point);
           path.lineTo(o.dx, o.dy);
@@ -207,13 +207,12 @@ class SymbolRenderer {
           ..close();
 
       case SymbolCircle(:final center, :final radius):
-        return Path()
-          ..addOval(
-            Rect.fromCircle(
-              center: screen(center),
-              radius: viewport.lengthToScreen(radius),
-            ),
-          );
+        return Path()..addOval(
+          Rect.fromCircle(
+            center: screen(center),
+            radius: viewport.lengthToScreen(radius),
+          ),
+        );
 
       case SymbolArc(:final start, :final mid, :final end):
         final arc = arcThroughPoints(screen(start), screen(mid), screen(end));
@@ -224,8 +223,7 @@ class SymbolRenderer {
             ..moveTo(a.dx, a.dy)
             ..lineTo(b.dx, b.dy);
         }
-        return Path()
-          ..addArc(arc.bounds, arc.startAngle, arc.sweepAngle);
+        return Path()..addArc(arc.bounds, arc.startAngle, arc.sweepAngle);
 
       case SymbolBezier(:final points):
         if (points.length < 4) return null;
@@ -256,7 +254,8 @@ class SymbolRenderer {
     FillType.none => null,
     FillType.outline => Paint()..color = outline,
     FillType.background => Paint()..color = colors.symbolFill,
-    FillType.color => fill.color == null ? null : (Paint()..color = fill.color!),
+    FillType.color =>
+      fill.color == null ? null : (Paint()..color = fill.color!),
   };
 
   // --- pins ------------------------------------------------------------
@@ -402,11 +401,7 @@ class SymbolRenderer {
     );
   }
 
-  void _paintTextBox(
-    Canvas canvas,
-    SymbolTextBox box,
-    Placement placement,
-  ) {
+  void _paintTextBox(Canvas canvas, SymbolTextBox box, Placement placement) {
     if (viewport.pixelsPerMm < 3.2) return;
     _drawLabel(
       canvas,

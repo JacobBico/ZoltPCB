@@ -34,10 +34,8 @@ void main() {
     return result;
   }
 
-  Finder field(String label) => find.ancestor(
-    of: find.text(label),
-    matching: find.byType(TextField),
-  );
+  Finder field(String label) =>
+      find.ancestor(of: find.text(label), matching: find.byType(TextField));
 
   testApp('typed width and height give exactly that rectangle', (
     tester,

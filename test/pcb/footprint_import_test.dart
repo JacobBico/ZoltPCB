@@ -116,18 +116,20 @@ void main() {
     expect(entry.libId, startsWith('Capacitor_SMD:'));
   });
 
-  test('every imported footprint keeps the geometry it was packed with',
-      () async {
-    await importZip('Resistor_SMD.zip', zipOf('Resistor_SMD', limit: 30));
+  test(
+    'every imported footprint keeps the geometry it was packed with',
+    () async {
+      await importZip('Resistor_SMD.zip', zipOf('Resistor_SMD', limit: 30));
 
-    for (final entry in await repository.search('')) {
-      final loaded = await repository.loadFootprint(entry.libId);
-      expect(loaded, isNotNull, reason: entry.libId);
-      expect(
-        loaded!.padCount,
-        entry.padCount,
-        reason: '${entry.libId} pad count changed on the way through',
-      );
-    }
-  });
+      for (final entry in await repository.search('')) {
+        final loaded = await repository.loadFootprint(entry.libId);
+        expect(loaded, isNotNull, reason: entry.libId);
+        expect(
+          loaded!.padCount,
+          entry.padCount,
+          reason: '${entry.libId} pad count changed on the way through',
+        );
+      }
+    },
+  );
 }

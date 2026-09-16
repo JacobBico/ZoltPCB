@@ -96,9 +96,7 @@ void main() {
       // Tap where the canvas actually drew the first pin.
       final pin = painter.scene.pins.first;
       final screen = painter.viewport.toScreen(pin.sheetPosition);
-      await tester.tapAt(
-        tester.getTopLeft(painterFinder.first) + screen,
-      );
+      await tester.tapAt(tester.getTopLeft(painterFinder.first) + screen);
       await settleApp(tester);
 
       // The action bar takes over from the old status strip: it names the
@@ -173,7 +171,10 @@ void main() {
 
       // Panel headings render in small caps.
       expect(find.text('WORTH CHECKING FIRST'), findsOneWidget);
-      expect(find.textContaining('Library missing for Device:R'), findsOneWidget);
+      expect(
+        find.textContaining('Library missing for Device:R'),
+        findsOneWidget,
+      );
     });
   });
 
@@ -192,9 +193,7 @@ void main() {
           storage: storage,
         );
 
-        await tester.tap(
-          find.byKey(ValueKey('pin-${added.pins.first.id}')),
-        );
+        await tester.tap(find.byKey(ValueKey('pin-${added.pins.first.id}')));
         await settleApp(tester);
 
         // The pending pin lives in one provider, so both views agree about
@@ -215,10 +214,10 @@ void _placementTests() {
       db,
       storage,
     ) async {
-      await SymbolLibraryRepository(db, storage).import(
-        fileName: 'Device.kicad_sym',
-        bytes: libraryBytes(),
-      );
+      await SymbolLibraryRepository(
+        db,
+        storage,
+      ).import(fileName: 'Device.kicad_sym', bytes: libraryBytes());
       final project = await ProjectRepository(db).create(name: 'Seen');
       // Start from one part so the canvas exists and is framed on it.
       await PartRepository(db).addPart(project.id, resistorSpec());
@@ -286,7 +285,8 @@ void _placementTests() {
           expect(
             rects[i].overlaps(rects[j]),
             isFalse,
-            reason: '${scene.units[i].part.reference} overlaps '
+            reason:
+                '${scene.units[i].part.reference} overlaps '
                 '${scene.units[j].part.reference}',
           );
         }

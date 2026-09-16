@@ -286,10 +286,12 @@ class _PinoutExplorerState extends State<PinoutExplorer> {
               ),
             ),
             Text(
-              used > 0 ? '$used/$count used' : '$count pin${count == 1 ? "" : "s"}',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: KicadPalette.textSecondary),
+              used > 0
+                  ? '$used/$count used'
+                  : '$count pin${count == 1 ? "" : "s"}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: KicadPalette.textSecondary,
+              ),
             ),
           ],
         ),

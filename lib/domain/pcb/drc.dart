@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'board_layer.dart';
 import 'board_scene.dart';
 
 /// How much a rule violation matters.
@@ -186,9 +187,125 @@ List<DrcViolation> checkBoard(BoardScene scene) {
 /// by at most a fraction of the pad's own radius, and it turns four
 /// shape-versus-shape problems into one.
 List<DrcViolation> _clearanceViolations(BoardScene scene) {
-  final clearance = scene.board.rules.clearance;
-  if (clearance <= 0) return const [];
+  final items = _copperItems(scene);
+  final violations = <DrcViolation>[];
+  final reported = <String>{};
 
+  for (var i = 0; i < items.length; i++) {
+    for (var j = i + 1; j < items.length; j++) {
+      final a = items[i];
+      final b = items[j];
+
+      // Same net is meant to touch; different layers cannot.
+      if (a.netId != null && a.netId == b.netId) continue;
+      if (!a.layers.any(b.layers.contains)) continue;
+
+      // Whichever of the two nets asks for more room gets it.
+      final clearance = math.max(
+        scene.clearanceFor(a.netId),
+        scene.clearanceFor(b.netId),
+      );
+      if (clearance <= 0) continue;
+
+      final gap =
+          _segmentDistance(a.a, a.b, b.a, b.b) - (a.width + b.width) / 2;
+      if (gap >= clearance - 1e-9) continue;
+
+      // One complaint per pair of things, not one per frame of geometry.
+      final key = '${a.what}|${b.what}|${a.a}|${b.a}';
+      if (!reported.add(key)) continue;
+
+      violations.add(
+        DrcViolation(
+          rule: DrcRule.clearance,
+          severity: DrcSeverity.error,
+          message:
+              '${a.what} and ${b.what} are ${_mm(math.max(0, gap))} apart, '
+              'closer than the ${_mm(clearance)} clearance',
+          position: Offset.lerp(a.a, b.a, 0.5)!,
+          netId: a.netId ?? b.netId,
+        ),
+      );
+    }
+  }
+  return violations;
+}
+
+/// Where a track being routed comes too close to another net's copper.
+class RouteClash {
+  const RouteClash({required this.segment, required this.at});
+
+  /// Which run of the route: between corners segment and segment + 1.
+  final int segment;
+
+  /// The spot on the other copper that is too close.
+  final Offset at;
+}
+
+/// Checks a route while it is still being drawn.
+///
+/// Reported, not enforced: the route shows red where it is too close and
+/// the user decides what to do about it. Refusing the corner would be the
+/// board deciding for them, and on a phone that reads as the crosshair
+/// having stopped working.
+List<RouteClash> routeClashes(
+  BoardScene scene, {
+  required List<Offset> route,
+  required double width,
+  required CopperLayer layer,
+  String? netId,
+}) {
+  if (route.length < 2) return const [];
+  final token = layer.layer.token;
+  final clashes = <RouteClash>[];
+  final items = _copperItems(scene);
+
+  for (var i = 0; i < route.length - 1; i++) {
+    final a = route[i];
+    final b = route[i + 1];
+    if ((b - a).distance < 1e-9) continue;
+
+    for (final item in items) {
+      if (!item.layers.contains(token)) continue;
+      if (netId != null && item.netId == netId) continue;
+      // A route not yet on a net starts on copper that is not on one
+      // either; that copper is where it came from, not an obstacle.
+      if (netId == null &&
+          _segmentDistance(item.a, item.b, route.first, route.first) <=
+              item.width / 2 + 1e-6) {
+        continue;
+      }
+
+      final clearance = math.max(
+        scene.clearanceFor(netId),
+        scene.clearanceFor(item.netId),
+      );
+      final gap =
+          _segmentDistance(a, b, item.a, item.b) - (width + item.width) / 2;
+      if (gap >= clearance - 1e-9) continue;
+
+      clashes.add(
+        RouteClash(segment: i, at: _nearestOn(item.a, item.b, (a + b) / 2)),
+      );
+    }
+  }
+  return clashes;
+}
+
+Offset _nearestOn(Offset a, Offset b, Offset p) {
+  final d = b - a;
+  final length = d.dx * d.dx + d.dy * d.dy;
+  if (length < 1e-12) return a;
+  final t = (((p - a).dx * d.dx + (p - a).dy * d.dy) / length).clamp(0.0, 1.0);
+  return a + d * t;
+}
+
+/// Every piece of copper on the board as a thick segment.
+///
+/// A pad is treated as the segment down its long axis, as wide as its short
+/// side, which is exact for an oval pad, and close enough for a rectangle
+/// that it overstates the pad by at most a fraction of its own radius.
+List<_CopperItem> _copperItems(BoardScene scene) {
   final items = <_CopperItem>[];
 
   for (final track in scene.tracks) {
@@ -238,41 +355,7 @@ List<DrcViolation> _clearanceViolations(BoardScene scene) {
       ),
     );
   }
-
-  final violations = <DrcViolation>[];
-  final reported = <String>{};
-
-  for (var i = 0; i < items.length; i++) {
-    for (var j = i + 1; j < items.length; j++) {
-      final a = items[i];
-      final b = items[j];
-
-      // Same net is meant to touch; different layers cannot.
-      if (a.netId != null && a.netId == b.netId) continue;
-      if (!a.layers.any(b.layers.contains)) continue;
-
-      final gap =
-          _segmentDistance(a.a, a.b, b.a, b.b) - (a.width + b.width) / 2;
-      if (gap >= clearance - 1e-9) continue;
-
-      // One complaint per pair of things, not one per frame of geometry.
-      final key = '${a.what}|${b.what}|${a.a}|${b.a}';
-      if (!reported.add(key)) continue;
-
-      violations.add(
-        DrcViolation(
-          rule: DrcRule.clearance,
-          severity: DrcSeverity.error,
-          message:
-              '${a.what} and ${b.what} are ${_mm(math.max(0, gap))} apart, '
-              'closer than the ${_mm(clearance)} clearance',
-          position: Offset.lerp(a.a, b.a, 0.5)!,
-          netId: a.netId ?? b.netId,
-        ),
-      );
-    }
-  }
-  return violations;
+  return items;
 }
 
 class _CopperItem {
@@ -299,14 +382,8 @@ String _mm(double value) => '${value.toStringAsFixed(2)} mm';
 double _segmentDistance(Offset a1, Offset a2, Offset b1, Offset b2) {
   if (_segmentsIntersect(a1, a2, b1, b2)) return 0;
   return math.min(
-    math.min(
-      distanceToSegment(a1, b1, b2),
-      distanceToSegment(a2, b1, b2),
-    ),
-    math.min(
-      distanceToSegment(b1, a1, a2),
-      distanceToSegment(b2, a1, a2),
-    ),
+    math.min(distanceToSegment(a1, b1, b2), distanceToSegment(a2, b1, b2)),
+    math.min(distanceToSegment(b1, a1, a2), distanceToSegment(b2, a1, a2)),
   );
 }
 

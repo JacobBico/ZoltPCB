@@ -31,5 +31,7 @@ class SettingsRepository {
 
   Future<void> set(String key, String value) => _db
       .into(_db.appSettings)
-      .insertOnConflictUpdate(AppSettingsCompanion.insert(key: key, value: value));
+      .insertOnConflictUpdate(
+        AppSettingsCompanion.insert(key: key, value: value),
+      );
 }

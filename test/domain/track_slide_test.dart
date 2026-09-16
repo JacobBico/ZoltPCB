@@ -105,16 +105,14 @@ void main() {
       );
 
       // Something leaves the pad, and it is not a bare vertical.
-      final fromPad = _resulting(tracks, slide)
-          .where((s) => (s.$1 - padA).distance < 1e-4)
-          .toList();
+      final fromPad = _resulting(
+        tracks,
+        slide,
+      ).where((s) => (s.$1 - padA).distance < 1e-4).toList();
       expect(fromPad, isNotEmpty, reason: 'the run came off its pad');
       for (final (from, to) in fromPad) {
         final d = to - from;
-        expect(
-          isLegalBearing(d.dx, d.dy, TrackAngleLock.deg45),
-          isTrue,
-        );
+        expect(isLegalBearing(d.dx, d.dy, TrackAngleLock.deg45), isTrue);
       }
     });
 
@@ -204,8 +202,13 @@ void main() {
       final points = roundCorners(skeleton, radius: 2);
       return [
         for (var i = 0; i < points.length - 1; i++)
-          _track('s$i', points[i].dx, points[i].dy, points[i + 1].dx,
-              points[i + 1].dy),
+          _track(
+            's$i',
+            points[i].dx,
+            points[i].dy,
+            points[i + 1].dx,
+            points[i + 1].dy,
+          ),
       ];
     }
 

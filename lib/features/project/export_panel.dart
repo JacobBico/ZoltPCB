@@ -52,6 +52,18 @@ class _ExportPanelState extends ConsumerState<ExportPanel> {
         board: ref.watch(boardSceneProvider(widget.project.id)).value,
         onExport: _export,
         onShare: _share,
+        onFabrication: () => _makeAndShare(
+          'Gerbers',
+          () => ref
+              .read(projectExporterProvider)
+              .exportFabrication(widget.project.id),
+        ),
+        onPdf: () => _makeAndShare(
+          'Schematic PDF',
+          () => ref
+              .read(projectExporterProvider)
+              .exportSchematicPdf(widget.project.id),
+        ),
       ),
       AsyncError(:final error) => EmptyState(
         icon: Icons.error_outline,
@@ -60,6 +72,30 @@ class _ExportPanelState extends ConsumerState<ExportPanel> {
       ),
       _ => const SizedBox.shrink(),
     };
+  }
+
+  /// Writes one file and hands it straight to the share sheet — a zip for
+  /// the board house, a PDF for whoever asked to see the circuit.
+  Future<void> _makeAndShare(
+    String what,
+    Future<ExportedFile> Function() make,
+  ) async {
+    setState(() => _busy = true);
+    try {
+      final file = await make();
+      if (!mounted) return;
+      setState(() => _lastExport = [file]);
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path)],
+          subject: '${widget.project.name} — $what',
+        ),
+      );
+    } catch (error) {
+      if (mounted) _report('$what failed: $error', isError: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _export() async {
@@ -136,6 +172,8 @@ class _ExportBody extends StatelessWidget {
     required this.board,
     required this.onExport,
     required this.onShare,
+    required this.onFabrication,
+    required this.onPdf,
   });
 
   final Project project;
@@ -150,6 +188,8 @@ class _ExportBody extends StatelessWidget {
 
   final VoidCallback onExport;
   final VoidCallback onShare;
+  final VoidCallback onFabrication;
+  final VoidCallback onPdf;
 
   @override
   Widget build(BuildContext context) {
@@ -167,8 +207,7 @@ class _ExportBody extends StatelessWidget {
   }
 
   /// Whether there is a board worth writing. Nothing placed means no file.
-  bool get hasBoard =>
-      board != null && board!.footprints.isNotEmpty;
+  bool get hasBoard => board != null && board!.footprints.isNotEmpty;
 
   Widget _summary(BuildContext context) {
     final base = ProjectExporter.fileNameFor(project.name);
@@ -262,6 +301,30 @@ class _ExportBody extends StatelessWidget {
             icon: const Icon(Icons.ios_share, size: 16),
             label: const Text('SHARE'),
           ),
+          const SizedBox(height: 16),
+          const PanelHeading('To order or to show'),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: busy || !hasBoard ? null : onFabrication,
+            icon: const Icon(Icons.precision_manufacturing_outlined, size: 16),
+            label: const Text('GERBERS + DRILL'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: busy ? null : onPdf,
+            icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+            label: const Text('SCHEMATIC PDF'),
+          ),
+          if (hasBoard && board!.zones.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Pours are filled with their clearance, and join pads solidly '
+              '— no thermal reliefs.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: KicadPalette.textSecondary,
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Text(
             'Files are written to this app\'s storage, then shared with '

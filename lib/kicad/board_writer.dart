@@ -106,8 +106,18 @@ class BoardWriter {
       SAtom('user'),
       S.text('User.Comments'),
     ]),
-    SList([SAtom('21'), S.text('Eco1.User'), SAtom('user'), S.text('User.Eco1')]),
-    SList([SAtom('23'), S.text('Eco2.User'), SAtom('user'), S.text('User.Eco2')]),
+    SList([
+      SAtom('21'),
+      S.text('Eco1.User'),
+      SAtom('user'),
+      S.text('User.Eco1'),
+    ]),
+    SList([
+      SAtom('23'),
+      S.text('Eco2.User'),
+      SAtom('user'),
+      S.text('User.Eco2'),
+    ]),
     SList([SAtom('25'), S.text('Edge.Cuts'), SAtom('user')]),
     SList([SAtom('27'), S.text('Margin'), SAtom('user')]),
     SList([
@@ -223,7 +233,9 @@ class BoardWriter {
         }
       }
       if (item is SList && item.head == 'pad') {
-        placed.add(_withNet(item, footprint, numbers));
+        placed.add(
+          _withNet(_rotatedPad(item, ref.rotation), footprint, numbers),
+        );
         continue;
       }
       placed.add(item);
@@ -344,9 +356,7 @@ class BoardWriter {
 
   static String _number(double value) {
     final text = value.toStringAsFixed(4);
-    return text.contains('.')
-        ? text.replaceFirst(RegExp(r'\.?0+$'), '')
-        : text;
+    return text.contains('.') ? text.replaceFirst(RegExp(r'\.?0+$'), '') : text;
   }
 
   /// Free silkscreen text.
@@ -379,6 +389,26 @@ class BoardWriter {
     ...property.items.skip(3),
   ]);
 
+  /// A pad's angle as a board states it: with the footprint's own rotation
+  /// added. A library footprint stores each pad relative to itself; the
+  /// board file does not, so a pad copied across unchanged opens in KiCad
+  /// facing the way the library drew it rather than the way it was placed.
+  SList _rotatedPad(SList pad, double rotation) {
+    if (rotation % 360 == 0) return pad;
+    return SList([
+      for (final item in pad.items)
+        if (item is SList && item.head == 'at')
+          SList([
+            SAtom('at'),
+            item.items[1],
+            item.items[2],
+            S.number(((item.number(3) ?? 0) + rotation) % 360),
+          ])
+        else
+          item,
+    ]);
+  }
+
   /// Adds the pad's net, which is the whole point of exporting a board.
   SList _withNet(
     SList pad,
@@ -402,11 +432,7 @@ class BoardWriter {
     ];
     return SList([
       ...items,
-      SList([
-        SAtom('net'),
-        SAtom('$netNumber'),
-        S.text(placed!.netName ?? ''),
-      ]),
+      SList([SAtom('net'), SAtom('$netNumber'), S.text(placed!.netName ?? '')]),
     ]);
   }
 
@@ -599,8 +625,7 @@ class BoardWriter {
           ]),
           S.list('polygon', [
             S.list('pts', [
-              for (final point in zone.points)
-                S.of('xy', [point.dx, point.dy]),
+              for (final point in zone.points) S.of('xy', [point.dx, point.dy]),
             ]),
           ]),
         ]),

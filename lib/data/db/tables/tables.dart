@@ -8,8 +8,9 @@ class Projects extends Table {
   TextColumn get id => text()();
   TextColumn get name => text().withLength(min: 1, max: 120)();
   TextColumn get description => text().withDefault(const Constant(''))();
-  TextColumn get paper =>
-      text().map(const PaperSizeConverter()).withDefault(const Constant('A4'))();
+  TextColumn get paper => text()
+      .map(const PaperSizeConverter())
+      .withDefault(const Constant('A4'))();
   TextColumn get company => text().withDefault(const Constant(''))();
   TextColumn get revision => text().withDefault(const Constant(''))();
   DateTimeColumn get createdAt => dateTime()();
@@ -128,6 +129,66 @@ class Nets extends Table {
   /// corner of the net's own wire, which is where it reads best.
   RealColumn get labelX => real().nullable()();
   RealColumn get labelY => real().nullable()();
+
+  /// The net class the board routes this net with; null for the default.
+  TextColumn get netClassId => text().nullable().references(
+    NetClasses,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
+
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// A named set of routing rules — "Power traces, 0.5 mm" — that nets can
+/// be put in, so a track picks its width from the net it is on.
+@TableIndex(name: 'idx_net_classes_project', columns: {#projectId})
+@DataClassName('NetClassRow')
+class NetClasses extends Table {
+  TextColumn get id => text()();
+  TextColumn get projectId =>
+      text().references(Projects, #id, onDelete: KeyAction.cascade)();
+  TextColumn get name => text()();
+  RealColumn get trackWidth => real()();
+
+  /// Null uses the board's design rule.
+  RealColumn get clearance => real().nullable()();
+
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// A schematic wire exactly as the user drew it: a run of 90° corners.
+///
+/// Connectivity still lives in the net; this is its drawing. The pin ids
+/// are the ends it is attached to, so it follows a part that is moved and
+/// goes when the pin does.
+@TableIndex(name: 'idx_schematic_wires_project', columns: {#projectId})
+@DataClassName('SchematicWireRow')
+class SchematicWires extends Table {
+  TextColumn get id => text()();
+  TextColumn get projectId =>
+      text().references(Projects, #id, onDelete: KeyAction.cascade)();
+  TextColumn get netId =>
+      text().references(Nets, #id, onDelete: KeyAction.cascade)();
+  TextColumn get pinAId => text().nullable().references(
+    PartPins,
+    #id,
+    onDelete: KeyAction.cascade,
+  )();
+  TextColumn get pinBId => text().nullable().references(
+    PartPins,
+    #id,
+    onDelete: KeyAction.cascade,
+  )();
+
+  /// Corners in sheet millimetres, `x,y;x,y;…`, from the A end to the B end.
+  TextColumn get points => text()();
 
   DateTimeColumn get createdAt => dateTime()();
 

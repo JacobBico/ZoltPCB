@@ -78,4 +78,3 @@ double _wrapAngle(double radians) {
   }
   return value;
 }
-

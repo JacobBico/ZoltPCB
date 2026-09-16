@@ -9,8 +9,10 @@ void main() {
   });
 
   test('yesterday is named', () {
-    expect(formatTimestamp(DateTime(2026, 3, 8, 23, 59), now: now),
-        'yesterday');
+    expect(
+      formatTimestamp(DateTime(2026, 3, 8, 23, 59), now: now),
+      'yesterday',
+    );
   });
 
   test('earlier this year shows day and month', () {

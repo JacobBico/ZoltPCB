@@ -13,6 +13,7 @@ class CanvasAction {
 
   final String label;
   final IconData icon;
+
   /// Null when the command is unavailable, e.g. undo with nothing to undo.
   final VoidCallback? onPressed;
   final bool danger;
@@ -57,24 +58,34 @@ class CanvasActionBar extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(
-                title,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: hinting
-                      ? KicadPalette.textPrimary
-                      : KicadPalette.highlight,
-                  fontStyle: hinting ? FontStyle.italic : null,
+            if (title.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                // Capped, so a long message cannot push the commands off
+                // the side of a phone screen. The bar scrolls, but a button
+                // that has to be found by scrolling may as well not be there.
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 190),
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: hinting
+                          ? KicadPalette.textPrimary
+                          : KicadPalette.highlight,
+                      fontStyle: hinting ? FontStyle.italic : null,
+                    ),
+                  ),
                 ),
               ),
-            ),
-            Container(
-              width: 1,
-              height: 22,
-              color: KicadPalette.border,
-              margin: const EdgeInsets.only(right: 2),
-            ),
+              Container(
+                width: 1,
+                height: 22,
+                color: KicadPalette.border,
+                margin: const EdgeInsets.only(right: 2),
+              ),
+            ],
             for (final action in actions) _ActionButton(action: action),
           ],
         ),

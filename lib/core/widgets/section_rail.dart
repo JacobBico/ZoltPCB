@@ -209,7 +209,6 @@ class OverlayRail extends StatelessWidget {
   }
 }
 
-
 /// A rail entry that navigates away rather than switching section.
 class RailLeaveItem extends StatelessWidget {
   const RailLeaveItem({

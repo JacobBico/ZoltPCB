@@ -47,8 +47,7 @@ class _FootprintSidebarState extends ConsumerState<FootprintSidebar> {
 
   /// How many pads the part needs: one per distinct pin number, which is
   /// how KiCad matches a symbol to a footprint.
-  int get _padCount =>
-      widget.part.pins.map((p) => p.number).toSet().length;
+  int get _padCount => widget.part.pins.map((p) => p.number).toSet().length;
 
   @override
   void initState() {
@@ -222,45 +221,49 @@ class _FootprintSidebarState extends ConsumerState<FootprintSidebar> {
     ),
   );
 
-  Widget _filters(List<FootprintLibraryInfo> libraries, ThemeData theme) =>
-      SizedBox(
-        height: 40,
-        child: ListView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          children: [
-            if (_filter != null && !_filter!.isEmpty) ...[
-              FilterChip(
-                label: Text('Suits ${_filter!.patterns.first}'
-                    '${_filter!.patterns.length > 1 ? ' +${_filter!.patterns.length - 1}' : ''}'),
-                tooltip: _filter!.patterns.join('  '),
-                selected: _matchFilter,
-                onSelected: (value) => setState(() => _matchFilter = value),
-              ),
-              const SizedBox(width: 8),
-            ],
-            FilterChip(
-              label: Text('$_padCount pads'),
-              selected: _matchPads,
-              onSelected: (value) => setState(() => _matchPads = value),
+  Widget _filters(
+    List<FootprintLibraryInfo> libraries,
+    ThemeData theme,
+  ) => SizedBox(
+    height: 40,
+    child: ListView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      children: [
+        if (_filter != null && !_filter!.isEmpty) ...[
+          FilterChip(
+            label: Text(
+              'Suits ${_filter!.patterns.first}'
+              '${_filter!.patterns.length > 1 ? ' +${_filter!.patterns.length - 1}' : ''}',
             ),
-            const SizedBox(width: 8),
-            ChoiceChip(
-              label: const Text('All'),
-              selected: _libraryId == null,
-              onSelected: (_) => setState(() => _libraryId = null),
-            ),
-            for (final library in libraries) ...[
-              const SizedBox(width: 8),
-              ChoiceChip(
-                label: Text(library.nickname),
-                selected: _libraryId == library.id,
-                onSelected: (_) => setState(() => _libraryId = library.id),
-              ),
-            ],
-          ],
+            tooltip: _filter!.patterns.join('  '),
+            selected: _matchFilter,
+            onSelected: (value) => setState(() => _matchFilter = value),
+          ),
+          const SizedBox(width: 8),
+        ],
+        FilterChip(
+          label: Text('$_padCount pads'),
+          selected: _matchPads,
+          onSelected: (value) => setState(() => _matchPads = value),
         ),
-      );
+        const SizedBox(width: 8),
+        ChoiceChip(
+          label: const Text('All'),
+          selected: _libraryId == null,
+          onSelected: (_) => setState(() => _libraryId = null),
+        ),
+        for (final library in libraries) ...[
+          const SizedBox(width: 8),
+          ChoiceChip(
+            label: Text(library.nickname),
+            selected: _libraryId == library.id,
+            onSelected: (_) => setState(() => _libraryId = library.id),
+          ),
+        ],
+      ],
+    ),
+  );
 
   Widget _row(ThemeData theme, FootprintIndexEntry entry) {
     final selected = entry.libId == widget.currentLibId;
