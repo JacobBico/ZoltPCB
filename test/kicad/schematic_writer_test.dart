@@ -456,4 +456,80 @@ void main() {
       expect(value.atom(2), '10k 1% "tight"');
     });
   });
+
+  // Opened in KiCad: "R1 and 100 are like right above and below the
+  // resistor ... the power nets are labelled ... you never label power
+  // sources"
+  group('as a schematic is drawn', () {
+    test('the designator and value sit beside the symbol', () async {
+      final r1 = await parts.addPart(project.id, resistorSpec());
+      await parts.updateUnitPlacement(
+        r1.units.first.copyWith(x: 50.8, y: 50.8, placed: true),
+      );
+
+      final symbol = (await exported())
+          .children('symbol')
+          .firstWhere((c) => c.child('property')?.atom(2) == 'R1');
+      final at = symbol.child('at')!;
+      final reference = symbol
+          .children('property')
+          .firstWhere((c) => c.atom(1) == 'Reference');
+      final value = symbol
+          .children('property')
+          .firstWhere((c) => c.atom(1) == 'Value');
+
+      expect(
+        reference.child('at')!.number(1),
+        isNot(closeTo(at.number(1)!, 0.01)),
+        reason: 'the designator is beside the body, not in line with it',
+      );
+      expect(
+        value.child('at')!.number(1),
+        reference.child('at')!.number(1),
+        reason: 'and the value is under it, in the same column',
+      );
+      expect(
+        symbol.child('fields_autoplaced')?.atom(1),
+        'no',
+        reason: 'so KiCad leaves them where they were put',
+      );
+      for (final field in [reference, value]) {
+        expect(
+          field.child('effects')?.child('justify')?.atom(1),
+          'left',
+          reason: 'text runs away from the symbol, not back across it',
+        );
+      }
+    });
+
+    test(
+      'a power net carries no label, and no #PWR designator shows',
+      () async {
+        final r1 = await parts.addPart(project.id, resistorSpec());
+        final power = await parts.addPart(project.id, groundSpec());
+        await nets.connectPins(r1.pins.first.id, power.pins.first.id);
+
+        final root = await exported();
+        expect(
+          root.children('label'),
+          isEmpty,
+          reason: 'the symbol names the supply; a label repeats it',
+        );
+
+        final symbol = root
+            .children('symbol')
+            .firstWhere(
+              (c) => (c.child('property')?.atom(2) ?? '').startsWith('#PWR'),
+            );
+        final reference = symbol
+            .children('property')
+            .firstWhere((c) => c.atom(1) == 'Reference');
+        expect(
+          reference.child('hide')?.atom(1),
+          'yes',
+          reason: 'KiCad keeps #PWR designators out of sight',
+        );
+      },
+    );
+  });
 }

@@ -76,6 +76,45 @@ class _ExportPanelState extends ConsumerState<ExportPanel> {
 
   /// Writes one file and hands it straight to the share sheet — a zip for
   /// the board house, a PDF for whoever asked to see the circuit.
+  /// Where a file goes to be handed to another app.
+  ///
+  /// The cache, because that is what the share sheet is allowed to read
+  /// from; the app's own documents folder is private to it, and a file
+  /// left there can be reached by nothing else on the phone.
+  Directory get _shareDirectory =>
+      Directory('${Directory.systemTemp.path}/hintpcb_share');
+
+  /// Hands one file to another app, with its type spelled out.
+  ///
+  /// Android decides what a share is by what it is given: a share carrying
+  /// text is a text message to most apps, whatever files came with it, and
+  /// a file whose type it cannot work out is one the Files app will not
+  /// take. So this sends the file, its type, and no text.
+  Future<void> _handOver(ExportedFile file, String what) async {
+    final directory = _shareDirectory;
+    if (!directory.existsSync()) await directory.create(recursive: true);
+    final copy = await File(
+      file.path,
+    ).copy('${directory.path}/${file.fileName}');
+
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(copy.path, mimeType: _mimeFor(file.fileName))],
+        subject: '${widget.project.name} — $what',
+      ),
+    );
+  }
+
+  static String _mimeFor(String fileName) {
+    final name = fileName.toLowerCase();
+    if (name.endsWith('.zip')) return 'application/zip';
+    if (name.endsWith('.pdf')) return 'application/pdf';
+    if (name.endsWith('.csv')) return 'text/csv';
+    // KiCad's own files are text, whatever the extension says, and calling
+    // them text is what lets a file manager or mail app accept them.
+    return 'text/plain';
+  }
+
   Future<void> _makeAndShare(
     String what,
     Future<ExportedFile> Function() make,
@@ -85,12 +124,7 @@ class _ExportPanelState extends ConsumerState<ExportPanel> {
       final file = await make();
       if (!mounted) return;
       setState(() => _lastExport = [file]);
-      await SharePlus.instance.share(
-        ShareParams(
-          files: [XFile(file.path)],
-          subject: '${widget.project.name} — $what',
-        ),
-      );
+      await _handOver(file, what);
     } catch (error) {
       if (mounted) _report('$what failed: $error', isError: true);
     } finally {
@@ -106,7 +140,11 @@ class _ExportPanelState extends ConsumerState<ExportPanel> {
           .exportAll(widget.project.id);
       if (!mounted) return;
       setState(() => _lastExport = files);
-      _report('Wrote ${files.map((f) => f.fileName).join(' and ')}');
+      // Said plainly: the folder they go in belongs to the app and nothing
+      // else on the phone can open it, so SHARE is how they get out.
+      _report(
+        'Wrote ${files.length} files — use SHARE to send them out of the app',
+      );
     } catch (error) {
       if (mounted) _report('Export failed: $error', isError: true);
     } finally {
@@ -114,36 +152,26 @@ class _ExportPanelState extends ConsumerState<ExportPanel> {
     }
   }
 
+  /// Sends the whole export out as one zip.
+  ///
+  /// One file rather than several: a share sheet given a handful of files
+  /// with no recognised type hands most apps nothing at all, which is why
+  /// the schematic never arrived in a mail or a chat.
   Future<void> _share() async {
-    final files = _lastExport.isEmpty ? await _exportForShare() : _lastExport;
-    if (files.isEmpty || !mounted) return;
-
+    setState(() => _busy = true);
     try {
+      final bundle = await ref
+          .read(projectExporterProvider)
+          .exportBundle(widget.project.id, into: _shareDirectory);
+      if (!mounted) return;
       await SharePlus.instance.share(
         ShareParams(
-          files: [for (final file in files) XFile(file.path)],
+          files: [XFile(bundle.path, mimeType: 'application/zip')],
           subject: '${widget.project.name} — HintPCB export',
-          text:
-              '${widget.project.name}: KiCad schematic and BOM exported from '
-              'HintPCB.',
         ),
       );
     } catch (error) {
       if (mounted) _report('Could not share: $error', isError: true);
-    }
-  }
-
-  Future<List<ExportedFile>> _exportForShare() async {
-    setState(() => _busy = true);
-    try {
-      final files = await ref
-          .read(projectExporterProvider)
-          .exportAll(widget.project.id);
-      if (mounted) setState(() => _lastExport = files);
-      return files;
-    } catch (error) {
-      if (mounted) _report('Export failed: $error', isError: true);
-      return const [];
     } finally {
       if (mounted) setState(() => _busy = false);
     }

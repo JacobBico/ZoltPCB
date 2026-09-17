@@ -120,7 +120,10 @@ class _PartEditorDialogState extends State<_PartEditorDialog> {
             width: 130,
             child: TextFormField(
               controller: _reference,
-              decoration: const InputDecoration(labelText: 'Reference'),
+              decoration: const InputDecoration(
+                labelText: 'Reference',
+                isDense: true,
+              ),
               validator: (value) =>
                   (value == null || value.trim().isEmpty) ? 'Required' : null,
             ),
@@ -133,9 +136,14 @@ class _PartEditorDialogState extends State<_PartEditorDialog> {
               // keyboard opening over the keys would defeat the point.
               readOnly: _keypad,
               showCursor: true,
-              autofocus: _keypad,
+              // Not focused on opening: focusing a field scrolls it into
+              // view, which slid the fields up under the title and cut the
+              // "Reference" and "Value" labels in half. The keypad types
+              // into the field whether or not it holds focus.
+              autofocus: false,
               decoration: InputDecoration(
                 labelText: 'Value',
+                isDense: true,
                 suffixIcon: IconButton(
                   tooltip: _keypad ? 'Use the keyboard' : 'Use the keypad',
                   icon: Icon(
@@ -151,38 +159,48 @@ class _PartEditorDialogState extends State<_PartEditorDialog> {
           ),
         ],
       ),
-      const SizedBox(height: 12),
+      const SizedBox(height: 8),
       TextFormField(
         controller: _footprint,
         decoration: const InputDecoration(
           labelText: 'Footprint',
           hintText: 'Library:Footprint_Name',
+          isDense: true,
         ),
       ),
-      const SizedBox(height: 4),
-      CheckboxListTile(
-        value: _dnp,
-        onChanged: (value) => setState(() => _dnp = value ?? false),
-        controlAffinity: ListTileControlAffinity.leading,
-        contentPadding: EdgeInsets.zero,
-        dense: true,
-        title: const Text('Do not populate'),
-        subtitle: const Text(
-          'Kept in the schematic, left off the assembled board',
-        ),
-      ),
-      // The label is the value and designator as drawn, so whether it
-      // shows belongs with editing them rather than on a button of its own.
-      CheckboxListTile(
-        value: _fieldsHidden,
-        onChanged: (value) => setState(() => _fieldsHidden = value ?? false),
-        controlAffinity: ListTileControlAffinity.leading,
-        contentPadding: EdgeInsets.zero,
-        dense: true,
-        title: const Text('Hide label on the sheet'),
-        subtitle: const Text(
-          'Still exported and in the BOM — only the drawing leaves it off',
-        ),
+      const SizedBox(height: 2),
+      // Side by side, and a line of explanation each: stacked, with two
+      // lines apiece, they pushed the dialog past the height of a phone in
+      // landscape and left it scrolling by a finger's width.
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: CheckboxListTile(
+              value: _dnp,
+              onChanged: (value) => setState(() => _dnp = value ?? false),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: const Text('Do not populate'),
+              subtitle: const Text('Drawn, but left off the board'),
+            ),
+          ),
+          // The label is the value and designator as drawn, so whether it
+          // shows belongs here rather than on a button of its own.
+          Expanded(
+            child: CheckboxListTile(
+              value: _fieldsHidden,
+              onChanged: (value) =>
+                  setState(() => _fieldsHidden = value ?? false),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: const Text('Hide label'),
+              subtitle: const Text('Exported and in the BOM either way'),
+            ),
+          ),
+        ],
       ),
     ],
   );
@@ -190,6 +208,11 @@ class _PartEditorDialogState extends State<_PartEditorDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      // A phone in landscape has little height to give away, and the
+      // default margins take 24 above and below before the dialog starts.
+      insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 8),
+      titlePadding: const EdgeInsets.fromLTRB(24, 14, 24, 0),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       title: Text(
         widget.part.libId,
         maxLines: 1,
@@ -198,7 +221,7 @@ class _PartEditorDialogState extends State<_PartEditorDialog> {
       // Room for the floating labels. A TextFormField draws "Reference"
       // and "Value" above its own box, and at the old 12 they sat right
       // under the title and read as cut off by it.
-      contentPadding: const EdgeInsets.fromLTRB(24, 22, 24, 0),
+      contentPadding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
       content: SizedBox(
         width: _keypad ? 700 : 560,
         child: SingleChildScrollView(

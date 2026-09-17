@@ -190,6 +190,43 @@ class ProjectExporter {
     return files;
   }
 
+  /// Everything the project exports, in one zip.
+  ///
+  /// Sharing several files at once is unreliable on Android — a share sheet
+  /// hands some apps only the text, and a `.kicad_sch` has no file type any
+  /// of them recognise — whereas one zip is something every app will take.
+  /// It is written to [into] (the cache, where the share sheet is allowed
+  /// to read from) rather than beside the exported files.
+  Future<ExportedFile> exportBundle(
+    String projectId, {
+    required Directory into,
+  }) async {
+    final files = await exportAll(projectId);
+    if (files.isEmpty) {
+      throw const ExportException('There is nothing to export yet');
+    }
+
+    final archive = Archive();
+    for (final file in files) {
+      archive.addFile(
+        ArchiveFile.bytes(file.fileName, await File(file.path).readAsBytes()),
+      );
+    }
+
+    final document = await buildDocument(projectId);
+    final name = '${fileNameFor(document.project.name)}.zip';
+    if (!into.existsSync()) await into.create(recursive: true);
+    final zip = File('${into.path}/$name');
+    await zip.writeAsBytes(ZipEncoder().encodeBytes(archive));
+
+    return ExportedFile(
+      kind: ExportKind.schematic,
+      path: zip.path,
+      fileName: name,
+      byteSize: await zip.length(),
+    );
+  }
+
   Future<List<ExportedFile>> exportBoard(String projectId) async {
     final board = await buildBoardDocument(projectId);
     if (board == null) {

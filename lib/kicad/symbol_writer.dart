@@ -93,6 +93,7 @@ abstract final class SymbolWriter {
     double angle = 0,
     bool hide = false,
     double size = defaultTextSize,
+    String? justify,
   }) {
     return SList([
       SAtom('property'),
@@ -102,7 +103,7 @@ abstract final class SymbolWriter {
       if (hide) S.flag('hide', true),
       S.flag('show_name', false),
       S.flag('do_not_autoplace', false),
-      effects(size: size),
+      effects(size: size, justify: justify),
     ]);
   }
 

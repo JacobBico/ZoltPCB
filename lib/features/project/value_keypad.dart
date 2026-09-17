@@ -172,7 +172,9 @@ class _Key extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(4),
           child: Container(
-            height: dense ? 32 : 40,
+            // Sized for a phone in landscape, where the whole dialog has
+            // barely 300 logical pixels of height to live in.
+            height: dense ? 28 : 34,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(4),

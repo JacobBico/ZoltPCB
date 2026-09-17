@@ -136,19 +136,28 @@ class SchematicWriter {
       S.flag('in_bom', part.part.inBom),
       S.flag('on_board', part.part.onBoard),
       S.flag('dnp', part.part.dnp),
-      S.flag('fields_autoplaced', true),
+      S.flag('fields_autoplaced', false),
       SList([SAtom('uuid'), S.text(unit.id)]),
       SymbolWriter.property(
         'Reference',
         part.part.reference,
         x: fieldAnchors.$1.dx,
         y: fieldAnchors.$1.dy,
+        // Written from that point rightwards. Text is centred on its
+        // position unless told otherwise, which puts half of it back over
+        // the symbol however far to the side the point is.
+        justify: 'left',
+        // A power symbol's designator is bookkeeping — #PWR01 and the like
+        // — and KiCad keeps it out of sight. Only its value, the name of
+        // the supply, belongs on the drawing.
+        hide: part.part.reference.startsWith('#'),
       ),
       SymbolWriter.property(
         'Value',
         part.part.value,
         x: fieldAnchors.$2.dx,
         y: fieldAnchors.$2.dy,
+        justify: 'left',
       ),
       SymbolWriter.property(
         'Footprint',
@@ -220,8 +229,10 @@ class SchematicWriter {
     PartUnit unit,
     Placement placement,
   ) {
-    var above = 2.54;
-    var below = 2.54;
+    // Beside the body, one above the other — where a schematic puts them,
+    // and where the app draws them. Above and below the symbol puts the
+    // designator and the value in line with the wires leaving its pins.
+    var beside = 2.54;
     if (symbol != null) {
       final bounds = symbolBounds(
         symbol,
@@ -229,13 +240,9 @@ class SchematicWriter {
         bodyStyle: unit.bodyStyle,
         includePins: false,
       );
-      if (bounds != Rect.zero) {
-        // Symbol space is Y-up, so the top of the body is the larger Y.
-        above = bounds.bottom + 1.27;
-        below = -bounds.top + 1.27;
-      }
+      if (bounds != Rect.zero) beside = bounds.right + 1.27;
     }
-    return (placement.apply(0, above), placement.apply(0, -below));
+    return (placement.apply(beside, 1.27), placement.apply(beside, -1.27));
   }
 
   // --- connectivity ----------------------------------------------------
@@ -246,6 +253,13 @@ class SchematicWriter {
     for (final net in document.nets) {
       final name = net.displayName;
       final drawn = connectivity.spannedNetIds.contains(net.id);
+
+      // A supply is named by the symbol sitting on it. Labelling it as well
+      // says the same thing twice, and a label on a power net is not
+      // something a schematic is ever drawn with.
+      if (net.endpoints.any((e) => e.part.reference.startsWith('#PWR'))) {
+        continue;
+      }
 
       // A net the wires already join needs a label only to carry a name the
       // user chose. Labelling every pin of a wired net would bury the
