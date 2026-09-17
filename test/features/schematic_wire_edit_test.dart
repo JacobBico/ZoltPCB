@@ -4,6 +4,9 @@ import 'package:hintpcb/data/repositories/net_repository.dart';
 import 'package:hintpcb/data/repositories/part_repository.dart';
 import 'package:hintpcb/data/repositories/project_repository.dart';
 import 'package:hintpcb/domain/models/models.dart';
+import 'package:hintpcb/app/appearance.dart';
+import 'package:hintpcb/domain/geometry/polyline_wiring.dart';
+import 'package:hintpcb/domain/geometry/segment_wiring.dart';
 import 'package:hintpcb/features/project/schematic_panel.dart';
 import 'package:hintpcb/rendering/schematic_painter.dart';
 
@@ -15,6 +18,36 @@ SchematicPainter _painter(WidgetTester tester) => tester
     .map((w) => w.painter)
     .whereType<SchematicPainter>()
     .single;
+
+/// Whether any wire has an end exactly at [at].
+bool _endsAt(List<SchematicWire> wires, Offset at) => wires.any(
+  (w) =>
+      (w.points.first - at).distance < 0.01 ||
+      (w.points.last - at).distance < 0.01,
+);
+
+/// Whether [at] lies anywhere on the drawing.
+bool _covers(List<SchematicWire> wires, Offset at) {
+  for (final wire in wires) {
+    for (var i = 0; i < wire.points.length - 1; i++) {
+      if (SegmentWiring.distanceToSegment(
+            at,
+            wire.points[i],
+            wire.points[i + 1],
+          ) <
+          0.01) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/// Whether the drawing is all in one piece — nothing left behind. Wires
+/// meet by ending on one another and by crossing, which is what the wiring
+/// rules count too.
+bool _allJoined(List<SchematicWire> wires) =>
+    PolylineWiring.allJoined([for (final w in wires) w.points]);
 
 void main() {
   // "if we want to unwire that small section, then we unwire the entirety of
@@ -172,11 +205,18 @@ void main() {
         joined,
         reason: 'the end on a pin stayed on it, and now they are one net',
       );
-      final wire = (await nets.getWires(project.id)).single;
-      expect(wire.pinAId, pin(r1, '1'), reason: 'still anchored where it was');
-      expect(wire.pinBId, pin(r2, '1'), reason: 'and joined where it landed');
-      expect(wire.points.first, const Offset(50.8, 46.99));
-      expect(wire.points.last, const Offset(63.5, 38.1));
+      final wires = await nets.getWires(project.id);
+      expect(
+        _endsAt(wires, const Offset(50.8, 46.99)),
+        isTrue,
+        reason: 'still reaches the pin it was drawn from',
+      );
+      expect(
+        _endsAt(wires, const Offset(63.5, 38.1)),
+        isTrue,
+        reason: 'and reaches the pin it landed on',
+      );
+      expect(_allJoined(wires), isTrue, reason: 'all in one piece');
     },
   );
 
@@ -246,4 +286,711 @@ void main() {
     expect(branch.points.first, const Offset(50.8, 38.1));
     expect(branch.points.last, const Offset(63.5, 38.1));
   });
+
+  // "when drag downwards it SHOULD also drag down the wire that its attached
+  // to right? Not just the individual wire itself, it is like directly
+  // disconnecting from the circuit"
+  testAppWithStorage('a dragged wire takes the wire it is joined to with it', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final project = await ProjectRepository(db).create(name: 'Follow');
+    final parts = PartRepository(db);
+    final nets = NetRepository(db);
+    final r1 = await parts.addPart(project.id, resistorSpec());
+    await parts.updateUnitPlacement(
+      r1.units.first.copyWith(x: 50.8, y: 50.8, placed: true),
+    );
+    final r3 = await parts.addPart(project.id, resistorSpec());
+    await parts.updateUnitPlacement(
+      r3.units.first.copyWith(x: 101.6, y: 88.9, placed: true),
+    );
+    String pin(PartWithDetails part, String number) =>
+        part.pins.firstWhere((p) => p.number == number).id;
+
+    final netId = await nets.netForPin(project.id, pin(r1, '1'));
+    // Up out of the pin, then along: two wires meeting at a corner.
+    final up = await nets.addWire(
+      projectId: project.id,
+      points: const [Offset(50.8, 46.99), Offset(50.8, 60.96)],
+      pinAId: pin(r1, '1'),
+      netId: netId,
+    );
+    final along = await nets.addWire(
+      projectId: project.id,
+      points: const [Offset(50.8, 60.96), Offset(63.5, 60.96)],
+      netId: netId,
+    );
+
+    await pumpApp(
+      tester,
+      Scaffold(body: SchematicPanel(project: project)),
+      database: db,
+      storage: storage,
+    );
+
+    Offset screen(Offset sheet) =>
+        tester.getRect(find.byType(SchematicPanel)).topLeft +
+        _painter(tester).viewport.toScreen(sheet);
+
+    // Drag the horizontal wire down.
+    final from = screen(const Offset(57.15, 60.96));
+    final to = screen(const Offset(57.15, 68.58));
+    final gesture = await tester.startGesture(from);
+    for (var i = 1; i <= 10; i++) {
+      await gesture.moveTo(Offset.lerp(from, to, i / 10)!);
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await gesture.up();
+    await settleApp(tester);
+
+    final after = {
+      for (final wire in await nets.getWires(project.id)) wire.id: wire,
+    };
+    expect(
+      after[along!.id]!.points.first.dy,
+      closeTo(68.58, 0.01),
+      reason: 'the wire dragged moved',
+    );
+    expect(
+      after[up!.id]!.points.last,
+      after[along.id]!.points.first,
+      reason: 'and the wire it was joined to came with it',
+    );
+    expect(
+      after[up.id]!.points.first,
+      const Offset(50.8, 46.99),
+      reason: 'while its pinned end stayed on the pin',
+    );
+  });
+
+  // "another junction point be created because it is essentially INSIDE the
+  // already existing vertical wire, but this is misleading"
+  testAppWithStorage('a branch drawn back along its own wire is not drawn', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final project = await ProjectRepository(db).create(name: 'Inside');
+    final parts = PartRepository(db);
+    final nets = NetRepository(db);
+    final r1 = await parts.addPart(project.id, resistorSpec());
+    await parts.updateUnitPlacement(
+      r1.units.first.copyWith(x: 50.8, y: 50.8, placed: true),
+    );
+    final r3 = await parts.addPart(project.id, resistorSpec());
+    await parts.updateUnitPlacement(
+      r3.units.first.copyWith(x: 101.6, y: 88.9, placed: true),
+    );
+    String pin(PartWithDetails part, String number) =>
+        part.pins.firstWhere((p) => p.number == number).id;
+
+    await nets.addWire(
+      projectId: project.id,
+      points: const [Offset(50.8, 46.99), Offset(50.8, 66.04)],
+      pinAId: pin(r1, '1'),
+      netId: await nets.netForPin(project.id, pin(r1, '1')),
+    );
+
+    await pumpApp(
+      tester,
+      Scaffold(body: SchematicPanel(project: project)),
+      database: db,
+      storage: storage,
+    );
+
+    Offset screen(Offset sheet) =>
+        tester.getRect(find.byType(SchematicPanel)).topLeft +
+        _painter(tester).viewport.toScreen(sheet);
+
+    // From the loose end, back up inside the wire itself.
+    final from = screen(const Offset(50.8, 66.04));
+    final to = screen(const Offset(50.8, 58.42));
+    final gesture = await tester.startGesture(from);
+    for (var i = 1; i <= 10; i++) {
+      await gesture.moveTo(Offset.lerp(from, to, i / 10)!);
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await gesture.up();
+    await settleApp(tester);
+
+    expect(
+      await nets.getWires(project.id),
+      hasLength(1),
+      reason: 'nothing drawn on top of what is already there',
+    );
+    expect(find.textContaining('Already wired'), findsOneWidget);
+  });
+
+  // "I still move the wire and it clearly shows that the other wire was left
+  // behind even though that is NOT how it should be"
+  // "since they are junctions, they shouldnt be moving" — the place they
+  // meet slides along the branch instead, and they stay joined.
+  testAppWithStorage('a junction slides along the wire it is on', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final project = await ProjectRepository(db).create(name: 'Tee');
+    final parts = PartRepository(db);
+    final nets = NetRepository(db);
+    final r1 = await parts.addPart(project.id, resistorSpec());
+    await parts.updateUnitPlacement(
+      r1.units.first.copyWith(x: 50.8, y: 50.8, placed: true),
+    );
+    final r3 = await parts.addPart(project.id, resistorSpec());
+    await parts.updateUnitPlacement(
+      r3.units.first.copyWith(x: 101.6, y: 88.9, placed: true),
+    );
+    final pin = r1.pins.firstWhere((p) => p.number == '1').id;
+    final netId = await nets.netForPin(project.id, pin);
+
+    // A wire down from the pin, with another meeting it half way along.
+    await nets.addWire(
+      projectId: project.id,
+      points: const [Offset(50.8, 46.99), Offset(50.8, 71.12)],
+      pinAId: pin,
+      netId: netId,
+    );
+    final branch = await nets.addWire(
+      projectId: project.id,
+      points: const [Offset(50.8, 60.96), Offset(63.5, 60.96)],
+      netId: netId,
+    );
+
+    await pumpApp(
+      tester,
+      Scaffold(body: SchematicPanel(project: project)),
+      database: db,
+      storage: storage,
+    );
+
+    Offset screen(Offset sheet) =>
+        tester.getRect(find.byType(SchematicPanel)).topLeft +
+        _painter(tester).viewport.toScreen(sheet);
+
+    // Drag the wire they both belong to sideways.
+    final from = screen(const Offset(50.8, 66.04));
+    final to = screen(const Offset(58.42, 66.04));
+    final gesture = await tester.startGesture(from);
+    for (var i = 1; i <= 10; i++) {
+      await gesture.moveTo(Offset.lerp(from, to, i / 10)!);
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await gesture.up();
+    await settleApp(tester);
+
+    final wires = await nets.getWires(project.id);
+    final after = {for (final wire in wires) wire.id: wire};
+    expect(
+      after[branch!.id]!.points,
+      [const Offset(50.8, 60.96), const Offset(63.5, 60.96)],
+      reason: 'the branch stayed put: the junction slid along it',
+    );
+    expect(
+      _allJoined(wires),
+      isTrue,
+      reason: 'and they are still joined, now crossing rather than meeting',
+    );
+  });
+
+  // "if there is a wire just floating and I decide to extend it ... now this
+  // straight piece of wire is seen as two pieces of wire, when it
+  // realistically is just one"
+  testAppWithStorage('carrying a wire straight on makes it one longer wire', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final project = await ProjectRepository(db).create(name: 'Extend');
+    final parts = PartRepository(db);
+    final nets = NetRepository(db);
+    final r1 = await parts.addPart(project.id, resistorSpec());
+    await parts.updateUnitPlacement(
+      r1.units.first.copyWith(x: 50.8, y: 50.8, placed: true),
+    );
+    final r3 = await parts.addPart(project.id, resistorSpec());
+    await parts.updateUnitPlacement(
+      r3.units.first.copyWith(x: 101.6, y: 88.9, placed: true),
+    );
+    final pin = r1.pins.firstWhere((p) => p.number == '1').id;
+    await nets.addWire(
+      projectId: project.id,
+      points: const [Offset(60.96, 60.96), Offset(71.12, 60.96)],
+      netId: await nets.netForPin(project.id, pin),
+    );
+
+    await pumpApp(
+      tester,
+      Scaffold(body: SchematicPanel(project: project)),
+      database: db,
+      storage: storage,
+    );
+
+    Offset screen(Offset sheet) =>
+        tester.getRect(find.byType(SchematicPanel)).topLeft +
+        _painter(tester).viewport.toScreen(sheet);
+
+    // Out of its end, carrying straight on.
+    final from = screen(const Offset(71.12, 60.96));
+    final to = screen(const Offset(81.28, 60.96));
+    final gesture = await tester.startGesture(from);
+    for (var i = 1; i <= 10; i++) {
+      await gesture.moveTo(Offset.lerp(from, to, i / 10)!);
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await gesture.up();
+    await settleApp(tester);
+
+    final wires = await nets.getWires(project.id);
+    expect(wires, hasLength(1), reason: 'one wire, not two in a line');
+    expect(wires.single.points, [
+      const Offset(60.96, 60.96),
+      const Offset(81.28, 60.96),
+    ]);
+  });
+
+  // The whole thing as it is actually done: draw a wire out of a pin, pull a
+  // branch out of its end, then drag that branch. "it SHOULD also drag down
+  // the wire that its attached to".
+  testAppWithStorage('wires drawn and branched stay joined when dragged', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final project = await ProjectRepository(db).create(name: 'Drawn');
+    final parts = PartRepository(db);
+    final nets = NetRepository(db);
+    final r1 = await parts.addPart(project.id, resistorSpec());
+    await parts.updateUnitPlacement(
+      r1.units.first.copyWith(x: 50.8, y: 50.8, placed: true),
+    );
+    final r2 = await parts.addPart(project.id, resistorSpec());
+    await parts.updateUnitPlacement(
+      r2.units.first.copyWith(x: 101.6, y: 88.9, placed: true),
+    );
+
+    await pumpApp(
+      tester,
+      Scaffold(body: SchematicPanel(project: project)),
+      database: db,
+      storage: storage,
+    );
+
+    Offset screen(Offset sheet) =>
+        tester.getRect(find.byType(SchematicPanel)).topLeft +
+        _painter(tester).viewport.toScreen(sheet);
+
+    Future<void> drag(Offset fromSheet, Offset toSheet) async {
+      final from = screen(fromSheet);
+      final to = screen(toSheet);
+      final gesture = await tester.startGesture(from);
+      for (var i = 1; i <= 12; i++) {
+        await gesture.moveTo(Offset.lerp(from, to, i / 12)!);
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await gesture.up();
+      await settleApp(tester);
+    }
+
+    // Out of R1 pin 2, downwards, finished in mid-air.
+    await drag(const Offset(50.8, 54.61), const Offset(50.8, 66.04));
+    await tester.tap(find.text('Finish'));
+    await settleApp(tester);
+
+    // A branch out of its end, to the right.
+    await drag(const Offset(50.8, 66.04), const Offset(63.5, 66.04));
+    expect(await nets.getWires(project.id), hasLength(2));
+
+    // Now drag that branch down: the wire it came out of follows.
+    await drag(const Offset(57.15, 66.04), const Offset(57.15, 73.66));
+
+    final wires = await nets.getWires(project.id);
+    final down = wires.firstWhere((w) => w.pinAId != null);
+    final across = wires.firstWhere((w) => w.pinAId == null);
+    expect(
+      across.points.first.dy,
+      closeTo(73.66, 0.01),
+      reason: 'the branch moved',
+    );
+    expect(
+      down.points.last,
+      across.points.first,
+      reason: 'and the wire it hangs off came with it',
+    );
+    expect(
+      down.points.first,
+      const Offset(50.8, 54.61),
+      reason: 'still on the pin it was drawn from',
+    );
+  });
+
+  // A wire resting part-way along another, dragged clear off the end of it.
+  testAppWithStorage('a wire dragged off the one it rested on pulls it along', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final project = await ProjectRepository(db).create(name: 'Off');
+    final parts = PartRepository(db);
+    final nets = NetRepository(db);
+    final r1 = await parts.addPart(project.id, resistorSpec());
+    await parts.updateUnitPlacement(
+      r1.units.first.copyWith(x: 50.8, y: 50.8, placed: true),
+    );
+    final r2 = await parts.addPart(project.id, resistorSpec());
+    await parts.updateUnitPlacement(
+      r2.units.first.copyWith(x: 101.6, y: 88.9, placed: true),
+    );
+    final pin = r1.pins.firstWhere((p) => p.number == '1').id;
+    final netId = await nets.netForPin(project.id, pin);
+    final down = await nets.addWire(
+      projectId: project.id,
+      points: const [Offset(50.8, 46.99), Offset(50.8, 66.04)],
+      pinAId: pin,
+      netId: netId,
+    );
+    // Meets it half way along, not at its end.
+    final across = await nets.addWire(
+      projectId: project.id,
+      points: const [Offset(50.8, 60.96), Offset(63.5, 60.96)],
+      netId: netId,
+    );
+
+    await pumpApp(
+      tester,
+      Scaffold(body: SchematicPanel(project: project)),
+      database: db,
+      storage: storage,
+    );
+
+    Offset screen(Offset sheet) =>
+        tester.getRect(find.byType(SchematicPanel)).topLeft +
+        _painter(tester).viewport.toScreen(sheet);
+
+    // Down past the end of the wire it was resting on.
+    final from = screen(const Offset(57.15, 60.96));
+    final to = screen(const Offset(57.15, 71.12));
+    final gesture = await tester.startGesture(from);
+    for (var i = 1; i <= 12; i++) {
+      await gesture.moveTo(Offset.lerp(from, to, i / 12)!);
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await gesture.up();
+    await settleApp(tester);
+
+    final after = {
+      for (final wire in await nets.getWires(project.id)) wire.id: wire,
+    };
+    expect(after[across!.id]!.points.first.dy, closeTo(71.12, 0.01));
+    expect(
+      after[down!.id]!.points.last,
+      after[across.id]!.points.first,
+      reason: 'the wire it had been resting on stretched after it',
+    );
+  });
+
+  // "if you start dragging your floating wire with the connection already
+  // connected, it will actually bring the wire down with it ... but doesnt
+  // work the other way around" — the corner of the wire left behind.
+  testAppWithStorage(
+    'a wire met at its corner is dragged along too (classic)',
+    (tester, db, storage) async {
+      final project = await ProjectRepository(db).create(name: 'Corner');
+      final parts = PartRepository(db);
+      final nets = NetRepository(db);
+      final r1 = await parts.addPart(project.id, resistorSpec());
+      await parts.updateUnitPlacement(
+        r1.units.first.copyWith(x: 50.8, y: 50.8, placed: true),
+      );
+      final r2 = await parts.addPart(project.id, resistorSpec());
+      await parts.updateUnitPlacement(
+        r2.units.first.copyWith(x: 101.6, y: 88.9, placed: true),
+      );
+      final pin = r1.pins.firstWhere((p) => p.number == '2').id;
+      final netId = await nets.netForPin(project.id, pin);
+
+      // An L out of the pin: down, then right, with its corner at 50.8,66.04.
+      final ell = await nets.addWire(
+        projectId: project.id,
+        points: const [
+          Offset(50.8, 54.61),
+          Offset(50.8, 66.04),
+          Offset(63.5, 66.04),
+        ],
+        pinAId: pin,
+        netId: netId,
+      );
+      // Another wire starting at that same corner, going up.
+      final upward = await nets.addWire(
+        projectId: project.id,
+        points: const [Offset(50.8, 66.04), Offset(50.8, 60.96)],
+        netId: netId,
+      );
+
+      await pumpApp(
+        tester,
+        Scaffold(body: SchematicPanel(project: project)),
+        database: db,
+        storage: storage,
+        wiring: WiringModel.polyline,
+      );
+
+      Offset screen(Offset sheet) =>
+          tester.getRect(find.byType(SchematicPanel)).topLeft +
+          _painter(tester).viewport.toScreen(sheet);
+
+      // Drag the horizontal arm of the L downwards: the wire meeting its
+      // corner has to come with it.
+      final from = screen(const Offset(57.15, 66.04));
+      final to = screen(const Offset(57.15, 76.2));
+      final gesture = await tester.startGesture(from);
+      for (var i = 1; i <= 12; i++) {
+        await gesture.moveTo(Offset.lerp(from, to, i / 12)!);
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await gesture.up();
+      await settleApp(tester);
+
+      final after = {
+        for (final wire in await nets.getWires(project.id)) wire.id: wire,
+      };
+      expect(after[ell!.id]!.points.last.dy, closeTo(76.2, 0.01));
+      expect(
+        after[upward!.id]!.points.first.dy,
+        closeTo(76.2, 0.01),
+        reason: 'the wire on the corner came down with it',
+      );
+      expect(
+        after[upward.id]!.points.last,
+        const Offset(50.8, 60.96),
+        reason: 'its far end stayed where it was',
+      );
+    },
+  );
+
+  // "when I put two wires together, they still ACT as two separate wires,
+  // when they should be one long wire"
+  testAppWithStorage('two wires dragged into line become one', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final project = await ProjectRepository(db).create(name: 'Join');
+    final parts = PartRepository(db);
+    final nets = NetRepository(db);
+    final r1 = await parts.addPart(project.id, resistorSpec());
+    await parts.updateUnitPlacement(
+      r1.units.first.copyWith(x: 50.8, y: 50.8, placed: true),
+    );
+    final r2 = await parts.addPart(project.id, resistorSpec());
+    await parts.updateUnitPlacement(
+      r2.units.first.copyWith(x: 101.6, y: 88.9, placed: true),
+    );
+    final pin = r1.pins.firstWhere((p) => p.number == '1').id;
+    final netId = await nets.netForPin(project.id, pin);
+
+    // Two loose wires in a line, one a couple of grid squares below.
+    await nets.addWire(
+      projectId: project.id,
+      points: const [Offset(60.96, 60.96), Offset(71.12, 60.96)],
+      netId: netId,
+    );
+    await nets.addWire(
+      projectId: project.id,
+      points: const [Offset(71.12, 71.12), Offset(81.28, 71.12)],
+      netId: netId,
+    );
+
+    await pumpApp(
+      tester,
+      Scaffold(body: SchematicPanel(project: project)),
+      database: db,
+      storage: storage,
+    );
+
+    Offset screen(Offset sheet) =>
+        tester.getRect(find.byType(SchematicPanel)).topLeft +
+        _painter(tester).viewport.toScreen(sheet);
+
+    // Bring the lower one up into line with the upper one.
+    final from = screen(const Offset(76.2, 71.12));
+    final to = screen(const Offset(76.2, 60.96));
+    final gesture = await tester.startGesture(from);
+    for (var i = 1; i <= 16; i++) {
+      await gesture.moveTo(Offset.lerp(from, to, i / 16)!);
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await gesture.up();
+    await settleApp(tester);
+
+    final wires = await nets.getWires(project.id);
+    expect(wires, hasLength(1), reason: 'one wire, end to end in a line');
+    expect(wires.single.points, [
+      const Offset(60.96, 60.96),
+      const Offset(81.28, 60.96),
+    ]);
+  });
+
+  // The segment model on the case from the screenshots: a wire meeting the
+  // corner of another, dragged away. "it must drag a wire along side it"
+  testAppWithStorage('in the segment model nothing is left behind', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final project = await ProjectRepository(db).create(name: 'Segments');
+    final parts = PartRepository(db);
+    final nets = NetRepository(db);
+    final r1 = await parts.addPart(project.id, resistorSpec());
+    await parts.updateUnitPlacement(
+      r1.units.first.copyWith(x: 50.8, y: 50.8, placed: true),
+    );
+    final r2 = await parts.addPart(project.id, resistorSpec());
+    await parts.updateUnitPlacement(
+      r2.units.first.copyWith(x: 101.6, y: 88.9, placed: true),
+    );
+    final pin = r1.pins.firstWhere((p) => p.number == '2').id;
+    final netId = await nets.netForPin(project.id, pin);
+
+    // Down out of the pin, then along, then a wire up from that corner.
+    await nets.addWire(
+      projectId: project.id,
+      points: const [Offset(50.8, 54.61), Offset(50.8, 66.04)],
+      pinAId: pin,
+      netId: netId,
+    );
+    await nets.addWire(
+      projectId: project.id,
+      points: const [Offset(50.8, 66.04), Offset(63.5, 66.04)],
+      netId: netId,
+    );
+    await nets.addWire(
+      projectId: project.id,
+      points: const [Offset(50.8, 66.04), Offset(50.8, 60.96)],
+      netId: netId,
+    );
+
+    await pumpApp(
+      tester,
+      Scaffold(body: SchematicPanel(project: project)),
+      database: db,
+      storage: storage,
+      wiring: WiringModel.segments,
+    );
+
+    Offset screen(Offset sheet) =>
+        tester.getRect(find.byType(SchematicPanel)).topLeft +
+        _painter(tester).viewport.toScreen(sheet);
+
+    final from = screen(const Offset(57.15, 66.04));
+    final to = screen(const Offset(57.15, 76.2));
+    final gesture = await tester.startGesture(from);
+    for (var i = 1; i <= 12; i++) {
+      await gesture.moveTo(Offset.lerp(from, to, i / 12)!);
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await gesture.up();
+    await settleApp(tester);
+
+    final wires = await nets.getWires(project.id);
+    expect(
+      _covers(wires, const Offset(57.15, 76.2)),
+      isTrue,
+      reason: 'the piece dragged went where it was dragged',
+    );
+    expect(_allJoined(wires), isTrue, reason: 'and the net is in one piece');
+    expect(
+      _endsAt(wires, const Offset(50.8, 54.61)),
+      isTrue,
+      reason: 'still on the pin it came from',
+    );
+    expect(
+      wires.every((w) => w.points.length == 2),
+      isTrue,
+      reason: 'every wire is one straight piece',
+    );
+  });
+
+  // The same shapes the rules are put through in bulk, driven through the
+  // canvas, so the plumbing is covered as well as the geometry.
+  for (final drag in const [
+    (
+      'the upright of an L, sideways',
+      Offset(50.8, 60.96),
+      Offset(58.42, 60.96),
+    ),
+    ('the arm of an L, downwards', Offset(57.15, 66.04), Offset(57.15, 73.66)),
+    ('the arm of an L, upwards', Offset(57.15, 66.04), Offset(57.15, 58.42)),
+  ]) {
+    testAppWithStorage('dragging ${drag.$1} keeps the net in one piece', (
+      tester,
+      db,
+      storage,
+    ) async {
+      final project = await ProjectRepository(db).create(name: 'Joined');
+      final parts = PartRepository(db);
+      final nets = NetRepository(db);
+      final r1 = await parts.addPart(project.id, resistorSpec());
+      await parts.updateUnitPlacement(
+        r1.units.first.copyWith(x: 50.8, y: 50.8, placed: true),
+      );
+      final r2 = await parts.addPart(project.id, resistorSpec());
+      await parts.updateUnitPlacement(
+        r2.units.first.copyWith(x: 101.6, y: 88.9, placed: true),
+      );
+      final pin = r1.pins.firstWhere((p) => p.number == '2').id;
+      final netId = await nets.netForPin(project.id, pin);
+
+      // Down from the pin, along, and a branch back up from the corner.
+      await nets.addWire(
+        projectId: project.id,
+        points: const [Offset(50.8, 54.61), Offset(50.8, 66.04)],
+        pinAId: pin,
+        netId: netId,
+      );
+      await nets.addWire(
+        projectId: project.id,
+        points: const [Offset(50.8, 66.04), Offset(63.5, 66.04)],
+        netId: netId,
+      );
+
+      await pumpApp(
+        tester,
+        Scaffold(body: SchematicPanel(project: project)),
+        database: db,
+        storage: storage,
+      );
+
+      Offset screen(Offset sheet) =>
+          tester.getRect(find.byType(SchematicPanel)).topLeft +
+          _painter(tester).viewport.toScreen(sheet);
+
+      final from = screen(drag.$2);
+      final to = screen(drag.$3);
+      final gesture = await tester.startGesture(from);
+      for (var i = 1; i <= 12; i++) {
+        await gesture.moveTo(Offset.lerp(from, to, i / 12)!);
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await gesture.up();
+      await settleApp(tester);
+
+      final wires = await nets.getWires(project.id);
+      expect(_allJoined(wires), isTrue, reason: 'left behind: $wires');
+      expect(
+        _endsAt(wires, const Offset(50.8, 54.61)),
+        isTrue,
+        reason: 'still on the pin it was drawn from',
+      );
+      for (final wire in wires) {
+        expect(
+          PolylineWiring.square(wire.points),
+          isTrue,
+          reason: 'a run went diagonal: ${wire.points}',
+        );
+      }
+    });
+  }
 }

@@ -11,6 +11,8 @@ import '../../app/providers.dart';
 import '../../data/repositories/circuit_paster.dart';
 import '../../data/repositories/part_repository.dart';
 import '../../domain/geometry/drawn_wire_geometry.dart';
+import '../../domain/geometry/polyline_wiring.dart';
+import '../../domain/geometry/segment_wiring.dart';
 import '../../domain/symbols/mcu_essentials.dart';
 import '../../domain/erc/erc.dart';
 import 'erc_sheet.dart';
@@ -108,6 +110,12 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   Map<String, Offset>? _draggingUnits;
   Map<String, Offset> _dragOriginals = const {};
 
+  /// How far the group being dragged has moved, which is what the wires
+  /// travelling with it follow. A group can be wires alone, with no part in
+  /// it to take the shift from.
+  Offset _draggingShift = Offset.zero;
+  bool _groupDragging = false;
+
   /// Drawn wires travelling with the parts being dragged: every pin they end
   /// on is on a moving part, so they move whole rather than stretch.
   List<SchematicWire> _dragWires = const [];
@@ -119,6 +127,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
 
   /// Parts swept up together, which move and delete as one.
   Set<String> _selectedUnitIds = const {};
+
+  /// Wires swept up with them. A box round a piece of circuit takes the
+  /// wiring too — anything else would be picking the drawing apart.
+  Set<String> _selectedWireIds = const {};
 
   /// In Select mode a drag sweeps a box instead of panning the sheet.
   bool _boxSelecting = false;
@@ -133,6 +145,21 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   // the finger lifts, not once per frame.
   String? _draggingWireKey;
   List<Offset>? _draggingWirePoints;
+
+  /// The wires joined to the one being dragged, stretched to stay joined to
+  /// it, by their id.
+  Map<String, List<Offset>> _draggingNeighbours = const {};
+
+  // In the segment model a drag is worked out for the whole net at once:
+  // the piece under the finger moves and everything sharing its ends comes
+  // with it. Held here while the finger is down, written when it lifts.
+  List<WireSegment>? _draggingSegments;
+  String? _draggingSegmentNet;
+
+  /// The wires last tidied into segments, so it is done once rather than
+  /// every frame.
+  Object? _tidiedWires;
+  bool _tidying = false;
 
   /// Corners tapped out so far for the wire being drawn from the pending
   /// pin, in sheet millimetres.
@@ -206,23 +233,26 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     var scene = _sceneFor(parts, nets, symbols, hints, drawn);
 
     final live = _draggingUnits;
-    if (live != null && live.isNotEmpty) {
-      var drawnLive = drawn;
-      final first = live.keys.first;
-      final carried = {for (final wire in _dragWires) wire.id};
-      if (carried.isNotEmpty && _dragOriginals[first] != null) {
-        final shift = live[first]! - _dragOriginals[first]!;
-        drawnLive = [
-          for (final wire in drawn)
-            if (carried.contains(wire.id))
-              wire.copyWith(points: [for (final p in wire.points) p + shift])
-            else
-              wire,
-        ];
-      }
+    final carried = {for (final wire in _dragWires) wire.id};
+    final moving =
+        (live != null && live.isNotEmpty) ||
+        (carried.isNotEmpty && _draggingShift != Offset.zero);
+    if (moving) {
+      final shift = _draggingShift;
+      final drawnLive = carried.isEmpty
+          ? drawn
+          : [
+              for (final wire in drawn)
+                if (carried.contains(wire.id))
+                  wire.copyWith(
+                    points: [for (final p in wire.points) p + shift],
+                  )
+                else
+                  wire,
+            ];
       scene = SchematicScene.build(
         paper: widget.project.paper,
-        parts: _withUnitsAt(parts, live),
+        parts: _withUnitsAt(parts, live ?? const {}),
         nets: nets,
         symbols: symbols,
         routeHints: hints,
@@ -230,10 +260,48 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       );
     }
 
+    // A segment drag is worked out for the whole net, so the sheet is drawn
+    // from the pieces as they now stand rather than by nudging one wire.
+    if (_draggingSegments case final segments?
+        when _draggingSegmentNet != null) {
+      final netId = _draggingSegmentNet!;
+      var index = 0;
+      scene = SchematicScene.build(
+        paper: widget.project.paper,
+        parts: parts,
+        nets: nets,
+        symbols: symbols,
+        routeHints: hints,
+        drawnWires: [
+          for (final wire in drawn)
+            if (wire.netId != netId) wire,
+          for (final segment in segments)
+            SchematicWire(
+              id: segment.id ?? 'dragging-${index++}',
+              projectId: widget.project.id,
+              netId: netId,
+              points: [segment.a, segment.b],
+              pinAId: segment.pinA,
+              pinBId: segment.pinB,
+            ),
+        ],
+      );
+    }
+
     final wireKey = _draggingWireKey;
     final wirePoints = _draggingWirePoints;
     if (wireKey != null && wirePoints != null) {
       scene = scene.withWirePoints(wireKey, wirePoints);
+      for (final neighbour in _draggingNeighbours.entries) {
+        scene = scene.withWirePoints(neighbour.key, neighbour.value);
+      }
+    }
+
+    if (ref.watch(appearanceProvider).wiring == WiringModel.segments) {
+      final tidied = scene;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _tidyIntoSegments(drawn, tidied),
+      );
     }
 
     final draggingLabel = _candidateLabel;
@@ -566,6 +634,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
                         colors: colors,
                         selectedUnitId: _selectedUnitId,
                         selectedUnitIds: _selectedUnitIds,
+                        selectedWireIds: _selectedWireIds,
                         selectionBox: _boxFrom != null && _boxTo != null
                             ? Rect.fromPoints(_boxFrom!, _boxTo!)
                             : null,
@@ -619,6 +688,15 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     );
   }
 
+  /// `2 parts · 1 wire selected`, and the sensible variants of it.
+  static String _selectionTitle(int parts, int wires) {
+    final bits = [
+      if (parts > 0) '$parts ${parts == 1 ? "part" : "parts"}',
+      if (wires > 0) '$wires ${wires == 1 ? "wire" : "wires"}',
+    ];
+    return '${bits.join(' · ')} selected';
+  }
+
   /// Which selection is current, as one comparable key; null when nothing is.
   String? get _selectionKey {
     if (_selectedUnitIds.isNotEmpty) {
@@ -659,9 +737,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     final group = scene.units
         .where((u) => _selectedUnitIds.contains(u.unit.id))
         .toList();
-    if (group.isNotEmpty) {
+    final wires = _selectedWireIds.length;
+    if (group.isNotEmpty || wires > 0) {
       return CanvasActionBar(
-        title: _hint ?? '${group.length} selected',
+        title: _hint ?? _selectionTitle(group.length, wires),
         hinting: _hint != null,
         actions: [
           if (editedHere) undoHere,
@@ -673,13 +752,15 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
           CanvasAction(
             label: 'Copy',
             icon: Icons.content_copy,
-            onPressed: () => _copyGroup(scene, group),
+            // A copy is of parts and their wiring: wires on their own have
+            // nothing to be wired to once they are put down.
+            onPressed: group.isEmpty ? null : () => _copyGroup(scene, group),
           ),
           CanvasAction(
             label: 'Delete',
             icon: Icons.delete_outline,
             danger: true,
-            onPressed: () => _deleteGroup(group),
+            onPressed: () => _deleteSelection(scene, group),
           ),
         ],
       );
@@ -1104,6 +1185,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     setState(() {
       _boxSelecting = !_boxSelecting;
       _selectedUnitIds = const {};
+      _selectedWireIds = const {};
       _selectedUnitId = null;
       _selectedWireKey = null;
       _selectedWireRun = null;
@@ -1171,13 +1253,41 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     ];
   }
 
+  /// The wires a selection takes with it: the ones swept up in their own
+  /// right, and the ones belonging to the parts in it.
+  List<SchematicWire> _selectionWires(SchematicScene scene) =>
+      _selectionWiresOf(scene, _dragOriginals.keys.toSet());
+
+  List<SchematicWire> _selectionWiresOf(
+    SchematicScene scene,
+    Set<String> unitIds,
+  ) {
+    final drawn =
+        ref.read(schematicWiresProvider(widget.project.id)).value ??
+        const <SchematicWire>[];
+    final carried = _wiresCarriedBy(scene, unitIds);
+    final ids = {for (final wire in carried) wire.id};
+    return [
+      ...carried,
+      for (final wire in drawn)
+        if (_selectedWireIds.contains(wire.id) && !ids.contains(wire.id)) wire,
+    ];
+  }
+
   /// Turns a group a quarter about its middle, wires and all, as one step.
   Future<void> _rotateGroup(
     SchematicScene scene,
     List<PlacedUnit> group,
   ) async {
     final ids = {for (final unit in group) unit.unit.id};
-    final area = _areaOf(scene, ids);
+    final wiresBefore = _selectionWiresOf(scene, ids);
+    var area = _areaOf(scene, ids);
+    for (final wire in wiresBefore) {
+      for (final point in wire.points) {
+        final at = Rect.fromCenter(center: point, width: 0, height: 0);
+        area = area == null ? at : area.expandToInclude(at);
+      }
+    }
     if (area == null) return;
     // On the grid, so parts on the grid stay on it once turned.
     final centre = _snapToGrid(area.center);
@@ -1199,7 +1309,6 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
           placed: true,
         ),
     ];
-    final wiresBefore = _wiresCarriedBy(scene, ids);
     final wiresAfter = [
       for (final wire in wiresBefore)
         wire.copyWith(points: [for (final p in wire.points) turn(p)]),
@@ -1216,7 +1325,9 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
 
     await write(after, wiresAfter);
     _record(
-      'Rotate ${group.length} parts',
+      group.isEmpty
+          ? 'Rotate ${wiresAfter.length} wires'
+          : 'Rotate ${group.length} parts',
       undo: () => write(before, wiresBefore),
       redo: () => write(after, wiresAfter),
     );
@@ -1231,7 +1342,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     final clip = CircuitClip.of(
       parts: parts,
       nets: nets,
-      wires: _wiresCarriedBy(scene, ids),
+      wires: _selectionWiresOf(scene, ids),
       unitIds: ids,
       area: _areaOf(scene, ids)?.inflate(0.01),
     );
@@ -1240,35 +1351,78 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     _notify('Copied ${clip.summary} — tap where it goes');
   }
 
-  /// Deletes every part with a unit in [group], as one undoable step.
-  Future<void> _deleteGroup(List<PlacedUnit> group) async {
-    final repository = ref.read(partRepositoryProvider);
+  /// Deletes everything selected — parts and the wires swept up with them —
+  /// as one undoable step.
+  ///
+  /// A wire taken away parts the pins it joined, unless another wire still
+  /// reaches them. The nets are what the design is, so a drawing with the
+  /// wire gone has to say the pins are no longer joined.
+  Future<void> _deleteSelection(
+    SchematicScene scene,
+    List<PlacedUnit> group,
+  ) async {
+    final parts = ref.read(partRepositoryProvider);
+    final nets = ref.read(netRepositoryProvider);
+    final projectId = widget.project.id;
     final partIds = {for (final unit in group) unit.part.id}.toList();
+    final drawn =
+        ref.read(schematicWiresProvider(projectId)).value ??
+        const <SchematicWire>[];
+    final wires = [
+      for (final wire in drawn)
+        if (_selectedWireIds.contains(wire.id)) wire,
+    ];
 
-    // Every snapshot first. Deleting one part tidies away a net it shared
-    // with another, and a snapshot taken after that would have lost it.
+    // Everything as it stands, before any of it goes: deleting a part
+    // tidies away nets it was on, and a snapshot taken afterwards has lost
+    // them.
+    final connections = await nets.capture(projectId, [
+      for (final wire in wires)
+        for (final pin in scene.pinsByNet[wire.netId] ?? const <PlacedPin>[])
+          pin.id,
+    ]);
     final snapshots = <PartSnapshot>[];
     for (final id in partIds) {
-      final snapshot = await repository.capturePart(id);
+      final snapshot = await parts.capturePart(id);
       if (snapshot != null) snapshots.add(snapshot);
     }
-    for (final id in partIds) {
-      await repository.deletePart(id);
+
+    Future<void> remove() async {
+      for (final wire in wires) {
+        await nets.deleteWire(wire.id);
+        for (final pin in [wire.pinAId, wire.pinBId].nonNulls) {
+          final held = drawn.any(
+            (other) =>
+                !_selectedWireIds.contains(other.id) &&
+                (other.pinAId == pin || other.pinBId == pin),
+          );
+          if (!held) await nets.disconnectPin(pin);
+        }
+      }
+      for (final id in partIds) {
+        await parts.deletePart(id);
+      }
     }
+
+    await remove();
     if (!mounted) return;
-    setState(() => _selectedUnitIds = const {});
+    setState(() {
+      _selectedUnitIds = const {};
+      _selectedWireIds = const {};
+    });
     _record(
-      'Delete ${partIds.length} parts',
+      switch ((partIds.length, wires.length)) {
+        (final units, 0) => 'Delete $units parts',
+        (0, final count) => 'Delete $count ${count == 1 ? "wire" : "wires"}',
+        (final units, final count) => 'Delete $units parts, $count wires',
+      },
       undo: () async {
         for (final snapshot in snapshots) {
-          await repository.restorePart(snapshot);
+          await parts.restorePart(snapshot);
         }
+        await nets.restore(connections);
       },
-      redo: () async {
-        for (final id in partIds) {
-          await repository.deletePart(id);
-        }
-      },
+      redo: remove,
     );
   }
 
@@ -1625,17 +1779,28 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     final sheet = viewport.toSheet(local);
     _lastTapSheet = sheet;
 
-    // Selecting, a tap adds a part to the group or takes it back out.
-    if (_boxSelecting || _selectedUnitIds.isNotEmpty) {
+    // Selecting, a tap adds a part or a wire to the group, or takes it
+    // back out. A tap on nothing lets the whole group go.
+    if (_boxSelecting ||
+        _selectedUnitIds.isNotEmpty ||
+        _selectedWireIds.isNotEmpty) {
       final unit = scene.unitAt(sheet);
+      final wire = unit != null
+          ? null
+          : scene.wireRunNear(sheet, _wireToleranceMm(viewport))?.wire.drawnId;
       setState(() {
-        if (unit == null) {
-          _selectedUnitIds = const {};
-        } else {
+        if (unit != null) {
           final id = unit.unit.id;
           _selectedUnitIds = _selectedUnitIds.contains(id)
               ? ({..._selectedUnitIds}..remove(id))
               : {..._selectedUnitIds, id};
+        } else if (wire != null) {
+          _selectedWireIds = _selectedWireIds.contains(wire)
+              ? ({..._selectedWireIds}..remove(wire))
+              : {..._selectedWireIds, wire};
+        } else {
+          _selectedUnitIds = const {};
+          _selectedWireIds = const {};
         }
       });
       return;
@@ -2045,17 +2210,28 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
 
       final unit = scene.unitAt(sheet);
 
-      // A drag on any part of a group moves the whole group.
-      if (unit != null && _selectedUnitIds.contains(unit.unit.id)) {
-        _candidateUnitId = unit.unit.id;
+      // A drag anywhere on the group — a symbol in it, or one of its
+      // wires — moves the whole group.
+      final grabbedUnit =
+          unit != null && _selectedUnitIds.contains(unit.unit.id);
+      final grabbedWire =
+          _selectedWireIds.isNotEmpty &&
+          _selectedWireIds.contains(
+            scene.wireRunNear(sheet, _wireToleranceMm(viewport))?.wire.drawnId,
+          );
+      if (grabbedUnit || grabbedWire) {
+        _groupDragging = true;
+        _candidateUnitId = grabbedUnit ? unit.unit.id : null;
         _dragStartSheet = sheet;
-        _dragOriginalPosition = Offset(unit.unit.x, unit.unit.y);
+        _dragOriginalPosition = grabbedUnit
+            ? Offset(unit.unit.x, unit.unit.y)
+            : sheet;
         _dragOriginals = {
           for (final member in scene.units)
             if (_selectedUnitIds.contains(member.unit.id))
               member.unit.id: Offset(member.unit.x, member.unit.y),
         };
-        _dragWires = _wiresCarriedBy(scene, _dragOriginals.keys.toSet());
+        _dragWires = _selectionWires(scene);
         return;
       }
 
@@ -2109,10 +2285,25 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     var bestDistance = toleranceMm;
     for (final wire in scene.wires) {
       if (!wire.isDrawn) continue;
-      for (final point in wire.points) {
+      for (var i = 0; i < wire.points.length; i++) {
+        final point = wire.points[i];
         if (scene.pinNear(point, 0.01) != null) continue;
+
+        // Never more than a third of the way along the runs that meet
+        // here. A finger's width is a long way on a zoomed-out sheet, and
+        // without this a touch anywhere on a short wire pulled a new wire
+        // out of its end instead of moving the wire — which looked exactly
+        // like the wire coming away from the circuit.
+        var reach = toleranceMm;
+        if (i > 0) {
+          reach = math.min(reach, (point - wire.points[i - 1]).distance / 3);
+        }
+        if (i < wire.points.length - 1) {
+          reach = math.min(reach, (point - wire.points[i + 1]).distance / 3);
+        }
+
         final distance = (point - sheet).distance;
-        if (distance < bestDistance) {
+        if (distance < reach && distance < bestDistance) {
           bestDistance = distance;
           best = (point, wire.netId);
         }
@@ -2199,32 +2390,50 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       if (_isDraggingUnit) {
         final sheet = start.toSheet(details.localFocalPoint);
         final delta = _snapToGrid(sheet - _dragStartSheet);
+
+        // In the segment model the piece goes where the finger goes, and
+        // whatever shares its ends is brought along by the rules rather
+        // than by this code noticing anything.
+        if (_segmentWiring) {
+          final segments = _segmentDrag(scene, candidate.wire, delta);
+          if (segments != null) {
+            setState(() {
+              _draggingSegments = segments;
+              _draggingSegmentNet = candidate.wire.netId;
+            });
+            return;
+          }
+        }
+
+        // Worked out by the wiring rules, which are put through every
+        // shape a net can take in their own tests: the wire moves and what
+        // is joined to it comes along, or the drag stops short rather than
+        // tearing the drawing apart.
+        final result = PolylineWiring.drag(
+          _netAsPolylines(candidate.wire),
+          candidate.wire.key,
+          candidate.run,
+          delta,
+        );
+        if (result.dragged.isEmpty) return;
         setState(() {
           _draggingWireKey = candidate.wire.key;
-          _draggingWirePoints = DrawnWireGeometry.slideRun(
-            candidate.wire.points,
-            candidate.run,
-            delta,
-            // A loose end travels with the run, so a wire left hanging can
-            // be dragged onto a pin. An end already on a pin stays put:
-            // tidying a wire should never quietly unwire it.
-            carryStart: candidate.run == 0 && candidate.wire.pinAId.isEmpty,
-            carryEnd:
-                candidate.run == candidate.wire.points.length - 2 &&
-                candidate.wire.pinBId.isEmpty,
-          );
+          _draggingWirePoints = result.dragged;
+          _draggingNeighbours = result.followers;
         });
       }
       return;
     }
 
     final candidateId = _candidateUnitId;
-    if (candidateId != null && details.pointerCount == 1) {
+    if ((candidateId != null || _groupDragging) && details.pointerCount == 1) {
       final travelled = (details.localFocalPoint - _gestureStartLocal).distance;
       if (!_isDraggingUnit && travelled > _dragSlopPx) {
         setState(() {
           _isDraggingUnit = true;
-          if (_selectedUnitIds.isEmpty) _selectedUnitId = candidateId;
+          if (_selectedUnitIds.isEmpty && candidateId != null) {
+            _selectedUnitId = candidateId;
+          }
         });
       }
       if (_isDraggingUnit) {
@@ -2235,6 +2444,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
         final shift =
             _snapToGrid(_dragOriginalPosition + delta) - _dragOriginalPosition;
         setState(() {
+          _draggingShift = shift;
           _draggingUnits = {
             for (final entry in _dragOriginals.entries)
               entry.key: entry.value + shift,
@@ -2322,14 +2532,23 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
                 box.contains(scene.boundsOf(unit).bottomRight))
               unit.unit.id,
         };
+        // Wholly inside, the same test the parts get: a wire the box only
+        // clips is on its way somewhere else.
+        _selectedWireIds = {
+          for (final wire in scene.wires)
+            if (wire.points.every(box.contains)) ?wire.drawnId,
+        };
         // Once something is caught, the box has done its job: the bar
         // turns to what can be done with the group, and a tap on empty
         // sheet lets go of it.
-        if (_selectedUnitIds.isNotEmpty) _boxSelecting = false;
+        if (_selectedUnitIds.isNotEmpty || _selectedWireIds.isNotEmpty) {
+          _boxSelecting = false;
+        }
       });
       return;
     }
 
+    final movedGroup = _isDraggingUnit && _groupDragging;
     final movedUnitId = _isDraggingUnit ? _candidateUnitId : null;
     final nudgedWire = _isDraggingUnit ? _candidateWire : null;
     final movedLabel = _isDraggingUnit ? _candidateLabel : null;
@@ -2347,7 +2566,8 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     // drag to be mistaken for a tap.
     _isDraggingUnit = false;
 
-    if (movedUnitId != null) _commitMove();
+    _groupDragging = false;
+    if (movedUnitId != null || movedGroup) _commitMove();
     if (nudgedWire != null) _commitWireSlide(nudgedWire);
     if (movedLabel != null) _recordLabelMove(movedLabel);
   }
@@ -2370,13 +2590,353 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     );
   }
 
+  /// Joins wires of [netId] that meet end-to-end in a straight line.
+  ///
+  /// Two wires in a line with nothing between them are one wire, however
+  /// they came to be that way — drawn one after the other, or brought
+  /// together by dragging. Returns the wires as they were and the ones
+  /// absorbed, so the join can be taken back.
+  Future<(List<SchematicWire>, List<SchematicWire>)> _mergeCollinear(
+    String netId,
+  ) async {
+    final repository = ref.read(netRepositoryProvider);
+    final before = <SchematicWire>[];
+    final absorbed = <SchematicWire>[];
+
+    var wires = [
+      for (final wire in await repository.getWires(widget.project.id))
+        if (wire.netId == netId) wire,
+    ];
+
+    var joinedOne = true;
+    while (joinedOne) {
+      joinedOne = false;
+      for (var i = 0; i < wires.length && !joinedOne; i++) {
+        for (var j = i + 1; j < wires.length && !joinedOne; j++) {
+          final join = _collinearJoin(wires[i], wires[j]);
+          if (join == null) continue;
+          final (points, pinA, pinB) = join;
+          final kept = wires[i];
+          final gone = wires[j];
+
+          before.add(kept);
+          absorbed.add(gone);
+          await repository.deleteWire(gone.id);
+          await repository.updateWire(kept.copyWith(points: points));
+          await repository.setWireEnds(kept.id, pinAId: pinA, pinBId: pinB);
+
+          wires = [
+            for (final wire in wires)
+              if (wire.id == kept.id)
+                kept.copyWith(points: points)
+              else if (wire.id != gone.id)
+                wire,
+          ];
+          joinedOne = true;
+        }
+      }
+    }
+    return (before, absorbed);
+  }
+
+  /// How [a] and [b] read as one wire, when they meet end to end and carry
+  /// straight on: the joined shape and the pins its two ends then have.
+  /// Null when they meet at a corner, or not at all — a corner is a place a
+  /// third wire can be drawn from, so those stay two wires.
+  static (List<Offset>, String?, String?)? _collinearJoin(
+    SchematicWire a,
+    SchematicWire b,
+  ) {
+    for (final flipA in [false, true]) {
+      for (final flipB in [false, true]) {
+        final pa = flipA ? a.points.reversed.toList() : a.points;
+        final pb = flipB ? b.points.reversed.toList() : b.points;
+        if ((pa.last - pb.first).distance > 0.01) continue;
+
+        // Neither of the ends being joined may be held by a pin.
+        if (((flipA ? a.pinAId : a.pinBId) ?? '').isNotEmpty) continue;
+        if (((flipB ? b.pinBId : b.pinAId) ?? '').isNotEmpty) continue;
+
+        final joined = [...pa, ...pb.skip(1)];
+        final tidied = DrawnWireGeometry.simplify(joined);
+        if (tidied.length >= joined.length) continue;
+
+        return (
+          tidied,
+          flipA ? a.pinBId : a.pinAId,
+          flipB ? b.pinAId : b.pinBId,
+        );
+      }
+    }
+    return null;
+  }
+
+  /// Whether the segment model is in force.
+  bool get _segmentWiring =>
+      ref.read(appearanceProvider).wiring == WiringModel.segments;
+
+  /// A net's wires as straight pieces, each keeping the row it came from so
+  /// an edit can be written back as an update rather than a delete.
+  static List<WireSegment> _segmentsOfNet(List<SchematicWire> wires) => [
+    for (final wire in wires)
+      for (var i = 0; i < wire.points.length - 1; i++)
+        WireSegment(
+          id: i == 0 ? wire.id : null,
+          a: wire.points[i],
+          b: wire.points[i + 1],
+          pinA: i == 0 ? wire.pinAId : null,
+          pinB: i == wire.points.length - 2 ? wire.pinBId : null,
+        ),
+  ];
+
+  /// Where the pins of [netId] are, which the segment rules treat as fixed
+  /// points.
+  List<Offset> _pinsOfNet(SchematicScene scene, String netId) => [
+    for (final pin in scene.pinsByNet[netId] ?? const <PlacedPin>[])
+      pin.sheetPosition,
+  ];
+
+  /// Writes [segments] as the wires of [netId], updating the rows they came
+  /// from, adding the pieces that are new and deleting what is left over.
+  Future<void> _writeSegments(
+    String netId,
+    List<SchematicWire> rows,
+    List<WireSegment> segments,
+  ) async {
+    final repository = ref.read(netRepositoryProvider);
+    final kept = <String>{};
+    for (final segment in segments) {
+      final row = rows.where((w) => w.id == segment.id).firstOrNull;
+      if (row != null) {
+        kept.add(row.id);
+        await repository.updateWire(
+          row.copyWith(points: [segment.a, segment.b]),
+        );
+        await repository.setWireEnds(
+          row.id,
+          pinAId: segment.pinA,
+          pinBId: segment.pinB,
+        );
+      } else {
+        final added = await repository.addWire(
+          projectId: widget.project.id,
+          points: [segment.a, segment.b],
+          pinAId: segment.pinA,
+          pinBId: segment.pinB,
+          netId: netId,
+        );
+        if (added != null) kept.add(added.id);
+      }
+    }
+    for (final row in rows) {
+      if (!kept.contains(row.id)) await repository.deleteWire(row.id);
+    }
+  }
+
+  /// Puts a net's wires back exactly as [rows] had them.
+  Future<void> _restoreNetWires(String netId, List<SchematicWire> rows) async {
+    final repository = ref.read(netRepositoryProvider);
+    for (final row in await repository.getWires(widget.project.id)) {
+      if (row.netId == netId) await repository.deleteWire(row.id);
+    }
+    for (final row in rows) {
+      await repository.restoreWire(row);
+    }
+  }
+
+  /// Tidies the drawing into the segment model: pieces split where another
+  /// ends against them, pieces in a line joined, pieces lying over each
+  /// other rolled into one.
+  ///
+  /// Nothing is moved — the drawing is the same drawing — so this is not an
+  /// edit and does not go on the undo stack. It is how a sheet drawn in the
+  /// classic model, or by an older version, comes across.
+  Future<void> _tidyIntoSegments(
+    List<SchematicWire> drawn,
+    SchematicScene scene,
+  ) async {
+    if (_tidying || identical(drawn, _tidiedWires)) return;
+    _tidiedWires = drawn;
+
+    final byNet = <String, List<SchematicWire>>{};
+    for (final wire in drawn) {
+      (byNet[wire.netId] ??= []).add(wire);
+    }
+
+    final work = <String, List<WireSegment>>{};
+    for (final entry in byNet.entries) {
+      final segments = _segmentsOfNet(entry.value);
+      final tidy = SegmentWiring.canonicalise(
+        segments,
+        pins: _pinsOfNet(scene, entry.key),
+      );
+      if (!_sameSegments(segments, tidy)) work[entry.key] = tidy;
+    }
+    if (work.isEmpty || !mounted) return;
+
+    _tidying = true;
+    try {
+      for (final entry in work.entries) {
+        await _writeSegments(entry.key, byNet[entry.key]!, entry.value);
+      }
+    } finally {
+      _tidying = false;
+    }
+  }
+
+  static bool _sameSegments(List<WireSegment> a, List<WireSegment> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if ((a[i].a - b[i].a).distance > SegmentWiring.tolerance ||
+          (a[i].b - b[i].b).distance > SegmentWiring.tolerance) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// The whole net as it would be with the piece under the finger moved by
+  /// [shift] — everything joined to it coming along.
+  List<WireSegment>? _segmentDrag(
+    SchematicScene scene,
+    RoutedWire wire,
+    Offset shift,
+  ) {
+    final id = wire.drawnId;
+    if (id == null) return null;
+    final drawn =
+        ref.read(schematicWiresProvider(widget.project.id)).value ??
+        const <SchematicWire>[];
+    final rows = [
+      for (final row in drawn)
+        if (row.netId == wire.netId) row,
+    ];
+    return SegmentWiring.drag(
+      _segmentsOfNet(rows),
+      id,
+      shift,
+      pins: _pinsOfNet(scene, wire.netId),
+    );
+  }
+
+  /// Writes a finished segment drag, as one undoable step.
+  Future<void> _commitSegmentDrag(String netId) async {
+    final segments = _draggingSegments;
+    final repository = ref.read(netRepositoryProvider);
+    setState(() {
+      _draggingSegments = null;
+      _draggingSegmentNet = null;
+      _draggingWireKey = null;
+      _draggingWirePoints = null;
+    });
+    if (segments == null) return;
+
+    final scene = _scene;
+    final snapshot = await repository.capture(widget.project.id, [
+      for (final pin in _landedPins(scene, segments, netId)) pin,
+    ]);
+
+    final before = [
+      for (final row in await repository.getWires(widget.project.id))
+        if (row.netId == netId) row,
+    ];
+
+    // An end that has come to rest on a pin joins it to the net, the way
+    // dropping a wire on a pin does anywhere else.
+    final landed = <WireSegment>[];
+    for (final segment in segments) {
+      var piece = segment;
+      if (segment.pinA == null && scene != null) {
+        final pin = scene.pinNear(segment.a, _landingMm);
+        if (pin != null) piece = piece.copyWith(pinA: pin.id);
+      }
+      if (segment.pinB == null && scene != null) {
+        final pin = scene.pinNear(segment.b, _landingMm);
+        if (pin != null) piece = piece.copyWith(pinB: pin.id);
+      }
+      landed.add(piece);
+    }
+    await _joinLandedPins(scene, landed, netId);
+    await _writeSegments(netId, before, landed);
+    final after = [
+      for (final row in await repository.getWires(widget.project.id))
+        if (row.netId == netId) row,
+    ];
+    if (_sameWires(before, after)) return;
+
+    _record(
+      'Move wire',
+      undo: () async {
+        await _restoreNetWires(netId, before);
+        await repository.restore(snapshot);
+      },
+      redo: () => _restoreNetWires(netId, after),
+    );
+  }
+
+  /// The pins the ends of [segments] have come to rest on.
+  List<String> _landedPins(
+    SchematicScene? scene,
+    List<WireSegment> segments,
+    String netId,
+  ) {
+    if (scene == null) return const [];
+    return [
+      for (final segment in segments)
+        for (final end in [segment.a, segment.b])
+          ?scene.pinNear(end, _landingMm)?.id,
+    ];
+  }
+
+  /// Joins whatever pins the wire has landed on to its net.
+  Future<void> _joinLandedPins(
+    SchematicScene? scene,
+    List<WireSegment> segments,
+    String netId,
+  ) async {
+    if (scene == null) return;
+    final repository = ref.read(netRepositoryProvider);
+    for (final pin in _landedPins(scene, segments, netId).toSet()) {
+      final on = await repository.netIdForPin(pin);
+      if (on == netId) continue;
+      final member = (scene.pinsByNet[netId] ?? const <PlacedPin>[])
+          .where((p) => p.id != pin)
+          .firstOrNull;
+      try {
+        if (member == null) {
+          await repository.addPinToNet(netId, pin);
+        } else {
+          await repository.connectPins(member.id, pin);
+        }
+      } on InvalidConnectionException catch (e) {
+        if (mounted) _notify(e.message);
+      }
+    }
+  }
+
+  static bool _sameWires(List<SchematicWire> a, List<SchematicWire> b) {
+    if (a.length != b.length) return false;
+    for (final wire in a) {
+      final other = b.where((w) => w.id == wire.id).firstOrNull;
+      if (other == null || !_samePoints(wire.points, other.points)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   /// Writes a finished drag, once, as one undoable step.
+  ///
+  /// Parts and the wires travelling with them move by the same amount, so
+  /// a piece of circuit keeps its shape wherever it is put down.
   Future<void> _commitMove() async {
     final live = _draggingUnits;
     final originals = _dragOriginals;
     final wiresBefore = _dragWires;
+    final shift = _draggingShift;
     _dragWires = const [];
-    if (live == null) return;
+    _draggingShift = Offset.zero;
+
     final repository = ref.read(partRepositoryProvider);
     final nets = ref.read(netRepositoryProvider);
     final parts = ref.read(projectPartsProvider(widget.project.id)).value;
@@ -2390,7 +2950,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     String? reference;
     for (final part in parts) {
       for (final unit in part.units) {
-        final at = live[unit.id];
+        final at = live?[unit.id];
         final was = originals[unit.id];
         if (at == null || was == null) continue;
         before.add(unit.copyWith(x: was.dx, y: was.dy));
@@ -2399,20 +2959,12 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       }
     }
 
-    final moved =
-        after.isNotEmpty &&
-        (Offset(after.first.x, after.first.y) -
-                    Offset(before.first.x, before.first.y))
-                .distance >
-            1e-6;
-    final shift = moved
-        ? Offset(after.first.x, after.first.y) -
-              Offset(before.first.x, before.first.y)
-        : Offset.zero;
     final wiresAfter = [
       for (final wire in wiresBefore)
         wire.copyWith(points: [for (final p in wire.points) p + shift]),
     ];
+    final moved =
+        shift.distance > 1e-6 && (after.isNotEmpty || wiresAfter.isNotEmpty);
 
     Future<void> write(List<PartUnit> units, List<SchematicWire> wires) async {
       for (final unit in units) {
@@ -2430,7 +2982,11 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     if (!moved) return;
 
     _record(
-      after.length == 1 ? 'Move $reference' : 'Move ${after.length} parts',
+      switch ((after.length, wiresAfter.length)) {
+        (1, 0) => 'Move $reference',
+        (0, final wires) => 'Move $wires ${wires == 1 ? "wire" : "wires"}',
+        (final units, _) => 'Move $units parts',
+      },
       undo: () => write(before, wiresBefore),
       redo: () => write(after, wiresAfter),
     );
@@ -2451,6 +3007,12 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   /// too, so the wire stays where it was put instead of springing back to
   /// the pins it was first drawn between.
   Future<void> _commitWireSlide(WireRunHit hit) async {
+    if (_draggingSegments != null && _draggingSegmentNet != null) {
+      final netId = _draggingSegmentNet!;
+      await _commitSegmentDrag(netId);
+      return;
+    }
+
     final repository = ref.read(netRepositoryProvider);
     final scene = _scene;
     final points = _draggingWirePoints;
@@ -2458,6 +3020,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       setState(() {
         _draggingWireKey = null;
         _draggingWirePoints = null;
+        _draggingNeighbours = const {};
       });
       return;
     }
@@ -2492,6 +3055,24 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       (w) => w.id != drawnId && (w.pinAId == pin || w.pinBId == pin),
     );
 
+    final stored =
+        ref.read(schematicWiresProvider(projectId)).value ??
+        const <SchematicWire>[];
+    final followedBefore = <SchematicWire>[];
+    final followedAfter = <SchematicWire>[];
+    for (final entry in _draggingNeighbours.entries) {
+      final wire = stored.where((w) => w.id == entry.key).firstOrNull;
+      if (wire == null) continue;
+      followedBefore.add(wire);
+      followedAfter.add(wire.copyWith(points: entry.value));
+    }
+
+    Future<void> follow(List<SchematicWire> wires) async {
+      for (final wire in wires) {
+        await repository.updateWire(wire);
+      }
+    }
+
     SchematicWire? laid;
 
     /// Lays the wire again between whatever its ends now rest on.
@@ -2500,6 +3081,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     /// go of a pin can leave its net with nothing on it, and an empty net
     /// is tidied away — taking any wire still pointing at it along too.
     Future<void> rewire() async {
+      await follow(followedAfter);
       if (drawnId != null) await repository.deleteWire(drawnId);
       for (final (was, now) in [(oldA, newA), (oldB, newB)]) {
         if (was != null && was != now && !heldElsewhere(was)) {
@@ -2545,6 +3127,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     setState(() {
       _draggingWireKey = null;
       _draggingWirePoints = null;
+      _draggingNeighbours = const {};
       _selectedWireKey = laid?.id;
       _selectedWireRun = laid == null ? null : hit.run;
     });
@@ -2553,33 +3136,120 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       undo: () async {
         if (laid case final wire?) await repository.deleteWire(wire.id);
         await repository.restore(snapshot);
+        await follow(followedBefore);
       },
       redo: rewire,
     );
   }
 
+  /// The net the wire belongs to, as the wiring rules see it: the shapes on
+  /// the sheet, with the pins their ends are held by.
+  /// Taken from the stored wires rather than from the sheet as drawn: the
+  /// sheet already has the drag in progress on it, and working from that
+  /// would pile each frame's movement on top of the last.
+  List<PolylineWire> _netAsPolylines(RoutedWire dragged) {
+    final stored =
+        ref.read(schematicWiresProvider(widget.project.id)).value ??
+        const <SchematicWire>[];
+    return [
+      for (final wire in stored)
+        if (wire.netId == dragged.netId)
+          PolylineWire(
+            id: wire.id,
+            points: wire.points,
+            pinA: wire.pinAId,
+            pinB: wire.pinBId,
+          ),
+      // A connection the app routed itself has nothing stored; it is the
+      // shape on the sheet until the drag makes a wire of it.
+      if (dragged.drawnId == null)
+        PolylineWire(
+          id: dragged.key,
+          points: dragged.points,
+          pinA: dragged.pinAId.isEmpty ? null : dragged.pinAId,
+          pinB: dragged.pinBId.isEmpty ? null : dragged.pinBId,
+        ),
+    ];
+  }
+
   /// Writes a slide that only changed a wire's shape.
   Future<void> _writeSlide(WireRunHit hit, List<Offset> points) async {
     final repository = ref.read(netRepositoryProvider);
+    final stored =
+        ref.read(schematicWiresProvider(widget.project.id)).value ??
+        const <SchematicWire>[];
+
+    // The wire itself and every wire stretched to stay joined to it, all
+    // written together so one undo puts the lot back.
+    final before = <SchematicWire>[];
+    final after = <SchematicWire>[];
+    for (final entry in _draggingNeighbours.entries) {
+      final wire = stored.where((w) => w.id == entry.key).firstOrNull;
+      if (wire == null) continue;
+      before.add(wire);
+      after.add(wire.copyWith(points: entry.value));
+    }
     final drawnId = hit.wire.drawnId;
     if (drawnId != null) {
-      final before =
-          (ref.read(schematicWiresProvider(widget.project.id)).value ??
-                  const <SchematicWire>[])
-              .where((w) => w.id == drawnId)
-              .firstOrNull;
-      if (before != null) {
-        final after = before.copyWith(points: points);
-        await repository.updateWire(after);
+      final wire = stored.where((w) => w.id == drawnId).firstOrNull;
+      if (wire != null) {
+        before.add(wire);
+        after.add(wire.copyWith(points: points));
+      }
+    }
+
+    Future<void> write(List<SchematicWire> wires) async {
+      for (final wire in wires) {
+        await repository.updateWire(wire);
+      }
+    }
+
+    // Wires brought end to end in a straight line become one, and putting
+    // that back is part of taking the move back.
+    var joinedBefore = const <SchematicWire>[];
+    var joinedAway = const <SchematicWire>[];
+    Future<void> join() async {
+      final (was, gone) = await _mergeCollinear(hit.wire.netId);
+      joinedBefore = was;
+      joinedAway = gone;
+    }
+
+    Future<void> unjoin() async {
+      for (final wire in joinedAway) {
+        await repository.restoreWire(wire);
+      }
+      for (final wire in joinedBefore) {
+        await repository.updateWire(wire);
+        await repository.setWireEnds(
+          wire.id,
+          pinAId: wire.pinAId,
+          pinBId: wire.pinBId,
+        );
+      }
+      joinedBefore = const [];
+      joinedAway = const [];
+    }
+
+    if (drawnId != null) {
+      if (after.isNotEmpty) {
+        await write(after);
+        await join();
         _record(
           'Move wire',
-          undo: () => repository.updateWire(before),
-          redo: () => repository.updateWire(after),
+          undo: () async {
+            await unjoin();
+            await write(before);
+          },
+          redo: () async {
+            await write(after);
+            await join();
+          },
         );
       }
     } else {
       // A wire the app had routed becomes one the user drew, so it keeps
       // the shape it was given.
+      await write(after);
       final added = await repository.addWire(
         projectId: widget.project.id,
         points: points,
@@ -2588,10 +3258,19 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
         netId: hit.wire.netId,
       );
       if (added != null) {
+        await join();
         _record(
           'Move wire',
-          undo: () => repository.deleteWire(added.id),
-          redo: () => repository.restoreWire(added),
+          undo: () async {
+            await unjoin();
+            await repository.deleteWire(added.id);
+            await write(before);
+          },
+          redo: () async {
+            await write(after);
+            await repository.restoreWire(added);
+            await join();
+          },
         );
       }
     }
@@ -2599,6 +3278,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     setState(() {
       _draggingWireKey = null;
       _draggingWirePoints = null;
+      _draggingNeighbours = const {};
       _selectedWireKey = hit.wire.key;
       _selectedWireRun = hit.run;
     });
@@ -2847,6 +3527,28 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       return;
     }
 
+    // A branch drawn back along the wire it came out of is no branch at
+    // all: it lies inside what is already there, and all it leaves behind
+    // is a junction dot where nothing actually meets.
+    final alongside = [
+      for (final wire in scene.wires)
+        if (wire.netId == netId) wire.points,
+    ];
+    final covered =
+        [
+          for (var i = 0; i < points.length - 1; i++)
+            (points[i] + points[i + 1]) / 2,
+        ].every(
+          (at) => alongside.any(
+            (path) => DrawnWireGeometry.nearestRun(path, at).$2 < 0.01,
+          ),
+        );
+    if (covered) {
+      _notify('Already wired along there');
+      setState(() {});
+      return;
+    }
+
     final members = scene.pinsByNet[netId] ?? const <PlacedPin>[];
     final ontoNet = pin?.netId ?? onto?.netId;
     final joinTo =
@@ -2863,6 +3565,11 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       ?members.firstOrNull?.id,
     ]);
 
+    // Carrying a wire on in the direction it was already going makes that
+    // wire longer. Two wires in a straight line with nothing between them
+    // are one wire, and cutting or dragging them should treat them as one.
+    final carriedOn = _wireExtendedBy(from, points, netId, pin?.id);
+
     SchematicWire? laid;
     Future<void> draw() async {
       var net = netId;
@@ -2874,6 +3581,12 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
           net = (await repository.connectPins(member.id, joinTo)).net.id;
         }
         net = await repository.netIdForPin(joinTo) ?? net;
+      }
+      if (carriedOn case (final wire, final longer, final ends)) {
+        await repository.updateWire(wire.copyWith(points: longer));
+        await repository.setWireEnds(wire.id, pinAId: ends.$1, pinBId: ends.$2);
+        laid = null;
+        return;
       }
       laid = await repository.addWire(
         projectId: projectId,
@@ -2900,17 +3613,69 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
           : 'Branch drawn — drag from its end to carry on',
     );
     setState(() {
-      _selectedWireKey = laid?.id;
-      _selectedWireRun = laid == null ? null : 0;
+      _selectedWireKey = laid?.id ?? carriedOn?.$1.id;
+      _selectedWireRun = 0;
     });
     _record(
       pin != null ? 'Wire to ${pin.label}' : 'Branch wire',
       undo: () async {
         if (laid case final wire?) await repository.deleteWire(wire.id);
+        if (carriedOn case (final wire, _, _)) {
+          await repository.updateWire(wire);
+          await repository.setWireEnds(
+            wire.id,
+            pinAId: wire.pinAId,
+            pinBId: wire.pinBId,
+          );
+        }
         await repository.restore(snapshot);
       },
       redo: draw,
     );
+  }
+
+  /// The wire [points] carries straight on from, if it does: the wire as it
+  /// stands, the longer shape it becomes, and the pins of its two ends.
+  ///
+  /// Only a straight continuation counts. A wire that turns a corner where
+  /// another ends is still two wires — the corner is a place a third can be
+  /// drawn from — but a line carried on in the same direction is one wire,
+  /// and dividing it in two would be an invention of the app's own.
+  (SchematicWire, List<Offset>, (String?, String?))? _wireExtendedBy(
+    Offset from,
+    List<Offset> points,
+    String netId,
+    String? endPin,
+  ) {
+    final stored =
+        ref.read(schematicWiresProvider(widget.project.id)).value ??
+        const <SchematicWire>[];
+    for (final wire in stored) {
+      if (wire.netId != netId || wire.points.length < 2) continue;
+
+      final atEnd =
+          (wire.points.last - from).distance < 0.01 &&
+          (wire.pinBId ?? '').isEmpty;
+      final atStart =
+          (wire.points.first - from).distance < 0.01 &&
+          (wire.pinAId ?? '').isEmpty;
+      if (!atEnd && !atStart) continue;
+
+      // Joined, then tidied: a corner that was not really a corner is
+      // dropped, which is exactly the case this is looking for.
+      final joined = atEnd
+          ? [...wire.points, ...points.skip(1)]
+          : [...points.reversed, ...wire.points.skip(1)];
+      final tidied = DrawnWireGeometry.simplify(joined);
+      if (tidied.length >= joined.length) continue;
+
+      return (
+        wire,
+        tidied,
+        atEnd ? (wire.pinAId, endPin) : (endPin, wire.pinBId),
+      );
+    }
+    return null;
   }
 
   /// Ends the wire being drawn where its last corner is, joined to nothing

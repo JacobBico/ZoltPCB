@@ -96,6 +96,35 @@ class SettingsPanel extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const PanelHeading('Schematic wiring'),
+                const SizedBox(height: 4),
+                Text(
+                  'How wires are held and how they behave when dragged. '
+                  'Both edit the same drawing, so you can switch at any '
+                  'point without losing anything.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: KicadPalette.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                for (final model in WiringModel.values)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _ChoiceCard(
+                      label: model.label,
+                      description: model.description,
+                      selected: model == appearance.wiring,
+                      onTap: () => notifier.setWiring(model),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Panel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 const PanelHeading('Board editor'),
                 const SizedBox(height: 4),
                 Text(
@@ -120,6 +149,69 @@ class SettingsPanel extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A labelled choice with a radio dot, as a card you can pick.
+class _ChoiceCard extends StatelessWidget {
+  const _ChoiceCard({
+    required this.label,
+    required this.description,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final String description;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: selected ? KicadPalette.current.selectedContainer : null,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: selected ? KicadPalette.highlight : KicadPalette.border,
+            width: selected ? 1.6 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              selected
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked,
+              size: 18,
+              color: selected
+                  ? KicadPalette.highlight
+                  : KicadPalette.textSecondary,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: theme.textTheme.bodyLarge),
+                  Text(
+                    description,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: KicadPalette.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

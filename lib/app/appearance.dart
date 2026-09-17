@@ -26,6 +26,34 @@ enum ResistorStyle {
       values.where((s) => s.name == name).firstOrNull ?? iec;
 }
 
+/// How the schematic's wires are held and edited.
+///
+/// [segments] is KiCad's own model: a wire is one straight piece, and wires
+/// are joined by sharing an end. Nothing has to work out whether two wires
+/// are connected, so dragging one brings everything joined to it along.
+///
+/// [polyline] is the original: a wire is a chain of corners, and what it
+/// touches is worked out as it moves. Kept as the fallback.
+enum WiringModel {
+  polyline(
+    'Classic',
+    'A wire is a chain of corners, and what it touches moves with it',
+  ),
+  segments(
+    'Segments',
+    'KiCad\'s own: each wire one straight piece, joined by shared ends — '
+        'a different feel, worth a try if the classic one misbehaves',
+  );
+
+  const WiringModel(this.label, this.description);
+
+  final String label;
+  final String description;
+
+  static WiringModel byName(String? name) =>
+      values.where((m) => m.name == name).firstOrNull ?? polyline;
+}
+
 /// The look the user has chosen.
 @immutable
 class Appearance {
@@ -33,20 +61,24 @@ class Appearance {
     this.palette = AppPalettes.kicad,
     this.resistorStyle = ResistorStyle.iec,
     this.boardEditor = BoardEditorStyle.precision,
+    this.wiring = WiringModel.polyline,
   });
 
   final AppPalette palette;
   final ResistorStyle resistorStyle;
   final BoardEditorStyle boardEditor;
+  final WiringModel wiring;
 
   Appearance copyWith({
     AppPalette? palette,
     ResistorStyle? resistorStyle,
     BoardEditorStyle? boardEditor,
+    WiringModel? wiring,
   }) => Appearance(
     palette: palette ?? this.palette,
     resistorStyle: resistorStyle ?? this.resistorStyle,
     boardEditor: boardEditor ?? this.boardEditor,
+    wiring: wiring ?? this.wiring,
   );
 
   @override
@@ -54,10 +86,11 @@ class Appearance {
       other is Appearance &&
       other.palette == palette &&
       other.resistorStyle == resistorStyle &&
-      other.boardEditor == boardEditor;
+      other.boardEditor == boardEditor &&
+      other.wiring == wiring;
 
   @override
-  int get hashCode => Object.hash(palette, resistorStyle, boardEditor);
+  int get hashCode => Object.hash(palette, resistorStyle, boardEditor, wiring);
 }
 
 final settingsRepositoryProvider = Provider<SettingsRepository>(
@@ -113,6 +146,7 @@ class AppearanceNotifier extends Notifier<Appearance> {
         boardEditor: BoardEditorStyle.byName(
           settings[SettingsRepository.boardEditorKey],
         ),
+        wiring: WiringModel.byName(settings[SettingsRepository.wiringKey]),
       ),
     );
   }
@@ -136,6 +170,13 @@ class AppearanceNotifier extends Notifier<Appearance> {
     await ref
         .read(settingsRepositoryProvider)
         .set(SettingsRepository.boardEditorKey, style.name);
+  }
+
+  Future<void> setWiring(WiringModel model) async {
+    _apply(state.copyWith(wiring: model));
+    await ref
+        .read(settingsRepositoryProvider)
+        .set(SettingsRepository.wiringKey, model.name);
   }
 
   void _apply(Appearance next) {

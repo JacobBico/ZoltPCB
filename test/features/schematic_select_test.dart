@@ -72,7 +72,7 @@ void main() {
 
     // Round R1 and R2, not R3.
     await drag(const Offset(42, 44), const Offset(70, 60));
-    expect(find.text('2 selected'), findsOneWidget);
+    expect(find.text('2 parts selected'), findsOneWidget);
 
     Future<Map<String, Offset>> positions() async => {
       for (final p in await parts.getPartsWithDetails(project.id))
@@ -300,7 +300,7 @@ void main() {
       screen(area.topLeft) - const Offset(6, 6),
       screen(area.bottomRight) + const Offset(6, 6),
     );
-    expect(find.text('2 selected'), findsOneWidget);
+    expect(find.text('2 parts selected'), findsOneWidget);
     expect(find.text('Copy'), findsOneWidget);
     expect(find.text('Rotate'), findsOneWidget);
 
@@ -340,5 +340,88 @@ void main() {
       isNot(await nets.netIdForPin(pin(all.first, '1'))),
       reason: 'on a net of their own, not joined to the originals',
     );
+  });
+
+  // "when I use the selection tool to highlight an area, it doesnt recognize
+  // the wires, please make sure it recognizes wires the same way it does
+  // components and other circuitry"
+  testAppWithStorage('the box picks up wires as well as parts', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final project = await ProjectRepository(db).create(name: 'Sweep');
+    final parts = PartRepository(db);
+    final nets = NetRepository(db);
+    final r1 = await parts.addPart(project.id, resistorSpec());
+    await parts.updateUnitPlacement(
+      r1.units.first.copyWith(x: 50.8, y: 50.8, placed: true),
+    );
+    final r2 = await parts.addPart(project.id, resistorSpec());
+    await parts.updateUnitPlacement(
+      r2.units.first.copyWith(x: 101.6, y: 88.9, placed: true),
+    );
+    final pin = r1.pins.firstWhere((p) => p.number == '1').id;
+    final netId = await nets.netForPin(project.id, pin);
+    await nets.addWire(
+      projectId: project.id,
+      points: const [Offset(50.8, 46.99), Offset(50.8, 60.96)],
+      pinAId: pin,
+      netId: netId,
+    );
+    // A second piece of the same net, clear of every part.
+    final loose = await nets.addWire(
+      projectId: project.id,
+      points: const [Offset(69.85, 60.96), Offset(80.01, 60.96)],
+      netId: netId,
+    );
+
+    await pumpApp(
+      tester,
+      Scaffold(body: SchematicPanel(project: project)),
+      database: db,
+      storage: storage,
+    );
+
+    Offset screen(Offset sheet) =>
+        tester.getRect(find.byType(SchematicPanel)).topLeft +
+        _painter(tester).viewport.toScreen(sheet);
+
+    Future<void> drag(Offset fromSheet, Offset toSheet) async {
+      final from = screen(fromSheet);
+      final to = screen(toSheet);
+      final gesture = await tester.startGesture(from);
+      for (var i = 1; i <= 10; i++) {
+        await gesture.moveTo(Offset.lerp(from, to, i / 10)!);
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await gesture.up();
+      await settleApp(tester);
+    }
+
+    await tester.tap(find.text('Select'));
+    await settleApp(tester);
+    // Round that piece of wire and nothing else.
+    await drag(const Offset(66, 56), const Offset(84, 65));
+
+    expect(find.text('1 wire selected'), findsOneWidget);
+    expect(_painter(tester).selectedWireIds, {loose!.id});
+
+    await tester.tap(find.text('Delete'));
+    await settleApp(tester);
+    expect(
+      (await nets.getWires(project.id)).map((w) => w.id),
+      isNot(contains(loose.id)),
+      reason: 'the wire swept up went with the delete',
+    );
+    expect(
+      await nets.getWires(project.id),
+      hasLength(1),
+      reason: 'and the rest of the net is untouched',
+    );
+
+    await tester.tap(find.text('Undo'));
+    await settleApp(tester);
+    expect(await nets.getWires(project.id), hasLength(2));
   });
 }

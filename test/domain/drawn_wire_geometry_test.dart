@@ -119,4 +119,202 @@ void main() {
       expect(slid, drawn);
     });
   });
+
+  // "it should only have a dot if it is a JUNCTION not when its just curving
+  // around, like you just go straight and take a left, that isnt a junction,
+  // thats just a turn"
+  group('junction dots', () {
+    test('a corner is a turn, not a junction', () {
+      expect(
+        DrawnWireGeometry.junctions([
+          const [Offset(0, 0), Offset(10, 0), Offset(10, 10)],
+        ]),
+        isEmpty,
+      );
+    });
+
+    test('one wire carrying on where another stops needs no dot', () {
+      expect(
+        DrawnWireGeometry.junctions([
+          const [Offset(0, 0), Offset(10, 0)],
+          const [Offset(10, 0), Offset(10, 10)],
+        ]),
+        isEmpty,
+      );
+    });
+
+    test('a wire ending on the middle of another is a junction', () {
+      expect(
+        DrawnWireGeometry.junctions([
+          const [Offset(0, 0), Offset(20, 0)],
+          const [Offset(10, 0), Offset(10, 10)],
+        ]),
+        [const Offset(10, 0)],
+      );
+    });
+
+    test('three ends meeting at a point is a junction', () {
+      expect(
+        DrawnWireGeometry.junctions([
+          const [Offset(0, 0), Offset(10, 0)],
+          const [Offset(10, 0), Offset(20, 0)],
+          const [Offset(10, 0), Offset(10, 10)],
+        ]),
+        [const Offset(10, 0)],
+      );
+    });
+
+    test('one wire reaching a pin is not a junction, two are', () {
+      expect(
+        DrawnWireGeometry.junctions(
+          [
+            const [Offset(0, 0), Offset(10, 0)],
+          ],
+          pins: [const Offset(10, 0)],
+        ),
+        isEmpty,
+      );
+      expect(
+        DrawnWireGeometry.junctions(
+          [
+            const [Offset(0, 0), Offset(10, 0)],
+            const [Offset(10, 0), Offset(10, 10)],
+          ],
+          pins: [const Offset(10, 0)],
+        ),
+        [const Offset(10, 0)],
+      );
+    });
+
+    // "the lower junction is incorrect because the wires once again
+    // intersect and it treats it as a junction"
+    test('a wire ending inside another it lies along is not a junction', () {
+      expect(
+        DrawnWireGeometry.junctions([
+          const [Offset(10, 0), Offset(10, 20)],
+          // Along the same line, ending part-way inside it.
+          const [Offset(10, 5), Offset(10, -10)],
+        ]),
+        isEmpty,
+      );
+    });
+
+    // Wires of one net that cross are joined, so the crossing is a junction
+    // and says so; wires of different nets never reach this, and hop over
+    // one another instead.
+    test('two wires of a net crossing are dotted', () {
+      expect(
+        DrawnWireGeometry.junctions([
+          const [Offset(0, 10), Offset(20, 10)],
+          const [Offset(10, 0), Offset(10, 20)],
+        ]),
+        [const Offset(10, 10)],
+      );
+    });
+
+    test('a loose end on its own is not a junction', () {
+      expect(
+        DrawnWireGeometry.junctions([
+          const [Offset(0, 0), Offset(10, 0)],
+        ]),
+        isEmpty,
+      );
+    });
+  });
+
+  // "it must drag a wire along side it like in KiCAD" — the corner of the
+  // wire left behind has to come too.
+  group('moving a corner', () {
+    test('both runs bend to keep up with it', () {
+      final moved = DrawnWireGeometry.moveVertex(
+        const [Offset(0, 10), Offset(10, 10), Offset(10, 20)],
+        1,
+        const Offset(10, 5),
+      );
+      expect(moved.first, const Offset(0, 10), reason: 'the far end stays');
+      expect(moved.last, const Offset(10, 20), reason: 'and so does the other');
+      expect(moved, contains(const Offset(10, 5)));
+      for (var i = 0; i < moved.length - 1; i++) {
+        final run = moved[i + 1] - moved[i];
+        expect(
+          run.dx.abs() < 1e-9 || run.dy.abs() < 1e-9,
+          isTrue,
+          reason: 'every run stays square: $moved',
+        );
+      }
+    });
+
+    test('an end is moved the way an end always was', () {
+      expect(
+        DrawnWireGeometry.moveVertex(
+          const [Offset(0, 0), Offset(10, 0)],
+          1,
+          const Offset(10, 4),
+        ).last,
+        const Offset(10, 4),
+      );
+    });
+
+    test('a corner can be put in where another wire meets a run', () {
+      expect(
+        DrawnWireGeometry.splitAt(const [
+          Offset(0, 0),
+          Offset(20, 0),
+        ], const Offset(8, 0)),
+        [const Offset(0, 0), const Offset(8, 0), const Offset(20, 0)],
+      );
+    });
+  });
+
+  // "when a wire goes over another wire ... I'd rather have you replace that
+  // overlap section with a little semi-circle, how they draw it in papers"
+  group('wires that cross', () {
+    test('a proper crossing has a point', () {
+      expect(
+        DrawnWireGeometry.crossing(
+          const Offset(0, 5),
+          const Offset(10, 5),
+          const Offset(5, 0),
+          const Offset(5, 10),
+        ),
+        const Offset(5, 5),
+      );
+    });
+
+    test('a wire ending on another is not a crossing', () {
+      expect(
+        DrawnWireGeometry.crossing(
+          const Offset(0, 5),
+          const Offset(10, 5),
+          const Offset(5, 5),
+          const Offset(5, 10),
+        ),
+        isNull,
+      );
+    });
+
+    test('parallel wires never cross', () {
+      expect(
+        DrawnWireGeometry.crossing(
+          const Offset(0, 5),
+          const Offset(10, 5),
+          const Offset(0, 8),
+          const Offset(10, 8),
+        ),
+        isNull,
+      );
+    });
+
+    test('segments that miss each other do not count', () {
+      expect(
+        DrawnWireGeometry.crossing(
+          const Offset(0, 5),
+          const Offset(4, 5),
+          const Offset(8, 0),
+          const Offset(8, 10),
+        ),
+        isNull,
+      );
+    });
+  });
 }

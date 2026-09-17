@@ -1,0 +1,253 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hintpcb/domain/geometry/polyline_wiring.dart';
+
+/// A net to drag about, with a name for the failure message.
+class _Case {
+  const _Case(this.name, this.wires);
+  final String name;
+  final List<PolylineWire> wires;
+}
+
+PolylineWire _w(String id, List<Offset> points, {String? pinA, String? pinB}) =>
+    PolylineWire(id: id, points: points, pinA: pinA, pinB: pinB);
+
+/// The nets these tests drag around: the shapes a schematic actually ends
+/// up in, including the ones from the bug reports.
+List<_Case> _cases() => [
+  _Case('a stub off a pin, with a branch at its loose end', [
+    _w('down', const [Offset(50, 40), Offset(50, 60)], pinA: 'p1'),
+    _w('across', const [Offset(50, 60), Offset(70, 60)]),
+  ]),
+  _Case('an L off a pin, with a wire up from its corner', [
+    _w('ell', const [
+      Offset(50, 40),
+      Offset(50, 60),
+      Offset(70, 60),
+    ], pinA: 'p1'),
+    _w('up', const [Offset(50, 60), Offset(50, 50)]),
+  ]),
+  _Case('a tee: a wire ending part-way along another', [
+    _w('spine', const [Offset(40, 50), Offset(80, 50)], pinA: 'p1'),
+    _w('stub', const [Offset(60, 50), Offset(60, 70)]),
+  ]),
+  _Case('three wires meeting at a point', [
+    _w('left', const [Offset(40, 50), Offset(60, 50)], pinA: 'p1'),
+    _w('right', const [Offset(60, 50), Offset(80, 50)]),
+    _w('down', const [Offset(60, 50), Offset(60, 70)]),
+  ]),
+  _Case('two pins joined, with a stub off the middle', [
+    _w(
+      'main',
+      const [Offset(40, 50), Offset(60, 50), Offset(60, 70), Offset(80, 70)],
+      pinA: 'p1',
+      pinB: 'p2',
+    ),
+    _w('stub', const [Offset(60, 60), Offset(75, 60)]),
+  ]),
+  _Case('a comb: a spine with three teeth', [
+    _w('spine', const [Offset(40, 50), Offset(100, 50)], pinA: 'p1'),
+    _w('tooth1', const [Offset(50, 50), Offset(50, 65)]),
+    _w('tooth2', const [Offset(70, 50), Offset(70, 65)]),
+    _w('tooth3', const [Offset(90, 50), Offset(90, 65)]),
+  ]),
+  _Case('a chain of corners with a branch half way', [
+    _w('chain', const [
+      Offset(40, 40),
+      Offset(40, 60),
+      Offset(60, 60),
+      Offset(60, 80),
+    ], pinA: 'p1'),
+    _w('branch', const [Offset(60, 60), Offset(80, 60)]),
+  ]),
+  _Case('a loop back on itself', [
+    _w('out', const [
+      Offset(40, 40),
+      Offset(80, 40),
+      Offset(80, 60),
+    ], pinA: 'p1'),
+    _w('back', const [Offset(80, 60), Offset(40, 60), Offset(40, 40)]),
+  ]),
+];
+
+const _deltas = [
+  Offset(0, 5),
+  Offset(0, -5),
+  Offset(5, 0),
+  Offset(-5, 0),
+  Offset(0, 15),
+  Offset(-15, 0),
+];
+
+/// The net as plain point chains, with the drag applied.
+List<List<Offset>> _after(
+  List<PolylineWire> net,
+  String id,
+  int run,
+  Offset delta,
+) {
+  final result = PolylineWiring.drag(net, id, run, delta);
+  return [
+    for (final wire in net)
+      if (wire.id == id)
+        result.dragged
+      else
+        result.followers[wire.id] ?? wire.points,
+  ];
+}
+
+void main() {
+  // "it SHOULD also drag down the wire that its attached to ... it is like
+  // directly disconnecting from the circuit". Every wire of every net,
+  // dragged every way: the drawing must never come apart.
+  group('dragging never breaks the net', () {
+    for (final test in _cases()) {
+      for (final wire in test.wires) {
+        for (var run = 0; run < wire.points.length - 1; run++) {
+          for (final delta in _deltas) {
+            final what = '${test.name} · ${wire.id} run $run by $delta';
+
+            it(what, () {
+              final net = test.wires;
+              final before = [for (final w in net) w.points];
+              expect(
+                PolylineWiring.allJoined(before),
+                isTrue,
+                reason: 'the net starts in one piece',
+              );
+
+              final after = _after(net, wire.id, run, delta);
+
+              expect(
+                PolylineWiring.allJoined(after),
+                isTrue,
+                reason: 'left behind: $after',
+              );
+              for (final shape in after) {
+                expect(
+                  PolylineWiring.square(shape),
+                  isTrue,
+                  reason: 'a run went diagonal: $shape',
+                );
+              }
+
+              // A pinned end never moves: the part is where it is.
+              for (var i = 0; i < net.length; i++) {
+                if (net[i].startPinned) {
+                  expect(
+                    after[i].first,
+                    net[i].points.first,
+                    reason: 'a pinned end moved',
+                  );
+                }
+                if (net[i].endPinned) {
+                  expect(
+                    after[i].last,
+                    net[i].points.last,
+                    reason: 'a pinned end moved',
+                  );
+                }
+              }
+            });
+          }
+        }
+      }
+    }
+  });
+
+  group('junctions slide rather than shove', _slidingJunctions);
+
+  // Whatever else it does, a drag has to move the wire that was dragged.
+  group('the wire dragged actually moves', () {
+    for (final test in _cases()) {
+      for (final wire in test.wires) {
+        for (var run = 0; run < wire.points.length - 1; run++) {
+          final a = wire.points[run];
+          final b = wire.points[run + 1];
+          final across = (a.dy - b.dy).abs() < 0.01
+              ? const Offset(0, 5)
+              : const Offset(5, 0);
+
+          it('${test.name} · ${wire.id} run $run', () {
+            final result = PolylineWiring.drag(
+              test.wires,
+              wire.id,
+              run,
+              across,
+            );
+            final moved = result.dragged;
+            final midBefore = (a + b) / 2;
+            expect(
+              PolylineWiring.covers(moved, midBefore),
+              isFalse,
+              reason: 'the run stayed where it was: $moved',
+            );
+          });
+        }
+      }
+    }
+  });
+}
+
+/// `test`, but the name is allowed to repeat across groups.
+void it(String name, dynamic Function() body) => test(name, body);
+
+/// Cases where a wire is joined along the way the drag is going, so the
+/// place they meet slides along it and nothing else need move.
+void _slidingJunctions() {
+  // "if there are multiple junctions on that wire, it will also move those
+  // wires up, even though, since they are junctions, they shouldnt be
+  // moving"
+  test('a spine dragged into its teeth leaves the teeth alone', () {
+    final net = [
+      _w('spine', const [Offset(40, 50), Offset(100, 50)], pinA: 'p1'),
+      _w('tooth1', const [Offset(50, 50), Offset(50, 65)]),
+      _w('tooth2', const [Offset(70, 50), Offset(70, 65)]),
+      _w('tooth3', const [Offset(90, 50), Offset(90, 65)]),
+    ];
+
+    final result = PolylineWiring.drag(net, 'spine', 0, const Offset(0, 10));
+
+    // Its pinned end stays; the run that was dragged is the one that moved.
+    expect(result.dragged.last.dy, 60, reason: 'the spine moved');
+    expect(
+      result.followers,
+      isEmpty,
+      reason: 'the teeth it slid along stayed where they were',
+    );
+  });
+
+  test('but a tooth it would slide off the end of follows', () {
+    final net = [
+      _w('spine', const [Offset(40, 50), Offset(100, 50)]),
+      _w('tooth', const [Offset(70, 50), Offset(70, 65)]),
+    ];
+
+    // Up, away from the tooth: there is nothing to slide along.
+    final result = PolylineWiring.drag(net, 'spine', 0, const Offset(0, -10));
+
+    expect(result.dragged.first.dy, 40);
+    expect(
+      result.followers['tooth']!.first,
+      const Offset(70, 40),
+      reason: 'the tooth stretched up to keep hold of it',
+    );
+    expect(
+      result.followers['tooth']!.last,
+      const Offset(70, 65),
+      reason: 'its far end stayed put',
+    );
+  });
+
+  test('a tooth dragged along the spine keeps the spine still', () {
+    final net = [
+      _w('spine', const [Offset(40, 50), Offset(100, 50)], pinA: 'p1'),
+      _w('tooth', const [Offset(70, 50), Offset(70, 65)]),
+    ];
+
+    // Sideways: the meeting point slides along the spine.
+    final result = PolylineWiring.drag(net, 'tooth', 0, const Offset(10, 0));
+
+    expect(result.dragged.first, const Offset(80, 50));
+    expect(result.followers, isEmpty, reason: 'the spine stayed where it was');
+  });
+}

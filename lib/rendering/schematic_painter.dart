@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import '../core/theme/kicad_palette.dart';
 import 'schematic_painter_support.dart';
 import 'schematic_scene.dart';
+import '../domain/geometry/drawn_wire_geometry.dart';
 import '../domain/geometry/wire_router.dart';
 import 'schematic_viewport.dart';
 import 'symbol_renderer.dart';
@@ -18,6 +19,7 @@ class SchematicPainter extends CustomPainter {
     required this.colors,
     this.selectedUnitId,
     this.selectedUnitIds = const {},
+    this.selectedWireIds = const {},
     this.selectionBox,
     this.selectedWireKey,
     this.selectedWireRun,
@@ -51,6 +53,9 @@ class SchematicPainter extends CustomPainter {
 
   /// Parts swept up together with a selection box.
   final Set<String> selectedUnitIds;
+
+  /// The drawn wires swept up with them, drawn as picked out too.
+  final Set<String> selectedWireIds;
 
   /// The box being swept, in sheet millimetres.
   final Rect? selectionBox;
@@ -199,8 +204,12 @@ class SchematicPainter extends CustomPainter {
   /// nobody chose — keeps the drawing honest about what the data says. The
   /// exporter says the same thing to KiCad using net labels.
   void _paintConnections(Canvas canvas) {
-    for (final wire in scene.wires) {
-      final selected = wire.key == selectedWireKey && selectedWireRun == null;
+    final hops = _hops();
+    for (var index = 0; index < scene.wires.length; index++) {
+      final wire = scene.wires[index];
+      final selected =
+          (wire.key == selectedWireKey && selectedWireRun == null) ||
+          (wire.drawnId != null && selectedWireIds.contains(wire.drawnId));
       final highlighted = selected || wire.netId == highlightedNetId;
       final paint = Paint()
         ..color = highlighted
@@ -213,46 +222,138 @@ class SchematicPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
 
-      final path = Path();
-      final first = viewport.toScreen(wire.points.first);
-      path.moveTo(first.dx, first.dy);
-      for (final point in wire.points.skip(1)) {
-        final screen = viewport.toScreen(point);
-        path.lineTo(screen.dx, screen.dy);
-      }
-      canvas.drawPath(path, paint);
+      canvas.drawPath(_wirePath(wire, hops[index]), paint);
     }
 
     _paintSelectedRun(canvas);
     _paintJunctions(canvas);
 
-    final dot = Paint()..color = colors.junction;
-    final radius = math.max(2.0, viewport.lengthToScreen(0.4));
-    for (final pins in scene.pinsByNet.values) {
-      if (pins.length < 2) continue;
-      for (final pin in pins) {
-        canvas.drawCircle(viewport.toScreen(pin.sheetPosition), radius, dot);
-      }
-    }
-
     _paintWireHandles(canvas);
   }
 
-  /// Marks the corners of drawn wires: the points where segments meet, and
-  /// the ends of wires that stop in mid-air.
+  /// Where each wire hops over another, by segment.
   ///
-  /// Each is a junction — somewhere a wire can be pulled out of — so they
-  /// are worth seeing. Pins already have their own dots.
-  void _paintJunctions(Canvas canvas) {
-    final radius = math.max(1.5, viewport.lengthToScreen(0.35));
-    final paint = Paint()
-      ..color = colors.junction.withValues(alpha: 0.8)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4;
+  /// Wires of different nets that cross are not connected, and on paper a
+  /// little bridge is how that is said. The horizontal one hops, so that
+  /// only one of the pair does.
+  List<List<List<Offset>>> _hops() => hopPoints(scene.wires);
 
+  /// Visible for testing: which crossings each wire arches over.
+  static List<List<List<Offset>>> hopPoints(List<RoutedWire> wires) {
+    final result = [
+      for (final wire in wires)
+        [for (var i = 0; i < wire.points.length - 1; i++) <Offset>[]],
+    ];
+
+    var segments = 0;
+    for (final wire in wires) {
+      segments += wire.points.length - 1;
+    }
+    // Every segment against every other, so on a very busy sheet the
+    // bridges are dropped rather than the drawing slowed down.
+    if (segments > 500) return result;
+
+    for (var i = 0; i < wires.length; i++) {
+      for (var s = 0; s < wires[i].points.length - 1; s++) {
+        final a1 = wires[i].points[s];
+        final a2 = wires[i].points[s + 1];
+        if ((a1.dy - a2.dy).abs() > 1e-6) continue; // the horizontal hops
+        for (var j = 0; j < wires.length; j++) {
+          if (i == j || wires[j].netId == wires[i].netId) continue;
+          for (var t = 0; t < wires[j].points.length - 1; t++) {
+            final at = DrawnWireGeometry.crossing(
+              a1,
+              a2,
+              wires[j].points[t],
+              wires[j].points[t + 1],
+            );
+            if (at != null) result[i][s].add(at);
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  /// A wire's path, arching over the wires it crosses without touching.
+  Path _wirePath(RoutedWire wire, List<List<Offset>> hops) => hoppedPath(
+    [for (final point in wire.points) viewport.toScreen(point)],
+    [
+      for (final crossings in hops)
+        [for (final at in crossings) viewport.toScreen(at)],
+    ],
+    // Big enough to read as a bridge at arm's length. A hop the width of
+    // the wire itself is no hop at all.
+    math.max(5.0, viewport.lengthToScreen(0.9)),
+  );
+
+  /// Visible for testing: [points] drawn with a semicircle over each of the
+  /// crossings in [hops], which are given per segment.
+  static Path hoppedPath(
+    List<Offset> points,
+    List<List<Offset>> hops,
+    double radius,
+  ) {
+    final path = Path();
+    if (points.isEmpty) return path;
+    path.moveTo(points.first.dx, points.first.dy);
+
+    for (var s = 0; s < points.length - 1; s++) {
+      final a = points[s];
+      final b = points[s + 1];
+      final rightwards = b.dx >= a.dx;
+      final crossings = [...?hops.elementAtOrNull(s)]
+        ..sort(
+          (p, q) => rightwards ? p.dx.compareTo(q.dx) : q.dx.compareTo(p.dx),
+        );
+
+      for (final centre in crossings) {
+        // Not so near an end that the arch would swallow the corner.
+        if ((centre - a).distance < radius * 1.2 ||
+            (centre - b).distance < radius * 1.2) {
+          continue;
+        }
+        final before = Offset(
+          centre.dx + (rightwards ? -radius : radius),
+          centre.dy,
+        );
+        path.lineTo(before.dx, before.dy);
+        // Over the top either way round, so the bridge always arches away
+        // from the wire underneath rather than into it.
+        path.arcTo(
+          Rect.fromCircle(center: centre, radius: radius),
+          rightwards ? math.pi : 0,
+          rightwards ? math.pi : -math.pi,
+          false,
+        );
+      }
+      path.lineTo(b.dx, b.dy);
+    }
+    return path;
+  }
+
+  /// Dots the junctions: where three or more wire ends meet, or a wire ends
+  /// on the middle of another.
+  ///
+  /// Only there. A wire turning a corner is not a junction, and a dot at
+  /// every corner says a net is joined up in places it simply is not.
+  void _paintJunctions(Canvas canvas) {
+    final byNet = <String, List<List<Offset>>>{};
     for (final wire in scene.wires) {
-      if (!wire.isDrawn) continue;
-      for (final point in wire.points) {
+      (byNet[wire.netId] ??= []).add(wire.points);
+    }
+
+    final radius = math.max(2.0, viewport.lengthToScreen(0.4));
+    final paint = Paint()..color = colors.junction;
+    for (final entry in byNet.entries) {
+      final dots = DrawnWireGeometry.junctions(
+        entry.value,
+        pins: [
+          for (final pin in scene.pinsByNet[entry.key] ?? const <PlacedPin>[])
+            pin.sheetPosition,
+        ],
+      );
+      for (final point in dots) {
         canvas.drawCircle(viewport.toScreen(point), radius, paint);
       }
     }
@@ -554,6 +655,7 @@ class SchematicPainter extends CustomPainter {
       old.viewport.origin != viewport.origin ||
       old.selectedUnitId != selectedUnitId ||
       !setEquals(old.selectedUnitIds, selectedUnitIds) ||
+      !setEquals(old.selectedWireIds, selectedWireIds) ||
       old.selectionBox != selectionBox ||
       old.selectedWireKey != selectedWireKey ||
       old.selectedWireRun != selectedWireRun ||

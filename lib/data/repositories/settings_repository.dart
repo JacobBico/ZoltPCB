@@ -16,6 +16,7 @@ class SettingsRepository {
 
   /// Which of the two board editors the PCB section uses.
   static const boardEditorKey = 'board.editor';
+  static const wiringKey = 'schematic.wiring';
 
   Future<String?> get(String key) async {
     final row = await (_db.select(

@@ -105,6 +105,39 @@ abstract final class DrawnWireGeometry {
   /// end sitting on a pin is anchored — dragging the wire must not quietly
   /// pull it off the pin — while a loose end is carried, so a wire left
   /// hanging can be dragged onto a pin.
+  /// How far run [index] actually moves for a drag of [delta]: a run only
+  /// slides across itself, never along.
+  static Offset runShift(List<Offset> points, int index, Offset delta) {
+    if (index < 0 || index >= points.length - 1) return Offset.zero;
+    final a = points[index];
+    final b = points[index + 1];
+    final horizontal = (a.dy - b.dy).abs() < _eps;
+    return horizontal ? Offset(0, delta.dy) : Offset(delta.dx, 0);
+  }
+
+  /// Where two segments cross, or null if they meet only at an end, touch,
+  /// or miss each other entirely.
+  ///
+  /// Ends are deliberately left out: wires that meet at a point are joined,
+  /// and it is the ones that merely pass over each other that need saying
+  /// something about.
+  static Offset? crossing(Offset a1, Offset a2, Offset b1, Offset b2) {
+    final r = a2 - a1;
+    final s = b2 - b1;
+    final denominator = r.dx * s.dy - r.dy * s.dx;
+    if (denominator.abs() < 1e-12) return null;
+    final d = b1 - a1;
+    final t = (d.dx * s.dy - d.dy * s.dx) / denominator;
+    final u = (d.dx * r.dy - d.dy * r.dx) / denominator;
+    const edge = 1e-6;
+    if (t <= edge || t >= 1 - edge || u <= edge || u >= 1 - edge) return null;
+    return a1 + Offset(r.dx * t, r.dy * t);
+  }
+
+  /// Whether [at] lies on the segment from [a] to [b].
+  static bool onSegment(Offset at, Offset a, Offset b) =>
+      _distanceToSegment(at, a, b) < 0.01;
+
   static List<Offset> slideRun(
     List<Offset> points,
     int index,
@@ -125,6 +158,125 @@ abstract final class DrawnWireGeometry {
     if (index + 1 == points.length - 1 && !carryEnd) result.add(b);
     if (index == 0 && !carryStart) result.insert(0, a);
     return simplify(result);
+  }
+
+  /// The points where wires need a junction dot.
+  ///
+  /// KiCad's rule, and the one that makes a drawing readable: a dot where
+  /// three or more directions of wire leave the same point. Counting ends
+  /// is not enough — a wire lying along another, end inside it, has three
+  /// ends meeting and yet only two directions, and dotting that says the
+  /// two are joined at a place where they merely overlap.
+  ///
+  /// A pin counts as a connection where it sits, so two wires meeting on
+  /// one are dotted while a single wire reaching a pin is not.
+  ///
+  /// Pass the wires of a single net: wires that merely cross on their way
+  /// somewhere else are not connected and must not be dotted.
+  static List<Offset> junctions(
+    Iterable<List<Offset>> wires, {
+    Iterable<Offset> pins = const [],
+  }) {
+    const tolerance = 0.01;
+    final paths = [
+      for (final wire in wires)
+        if (wire.length >= 2) wire,
+    ];
+
+    // Corners, pins, and the places two of these wires cross: wires of one
+    // net that cross are joined, and a crossing with nothing to show for it
+    // reads as two wires passing by.
+    final crossings = <Offset>[];
+    for (var i = 0; i < paths.length; i++) {
+      for (var j = i + 1; j < paths.length; j++) {
+        for (var a = 0; a < paths[i].length - 1; a++) {
+          for (var b = 0; b < paths[j].length - 1; b++) {
+            final at = crossing(
+              paths[i][a],
+              paths[i][a + 1],
+              paths[j][b],
+              paths[j][b + 1],
+            );
+            if (at != null) crossings.add(at);
+          }
+        }
+      }
+    }
+
+    final candidates = <Offset>[];
+    for (final point in [
+      for (final path in paths) ...path,
+      ...pins,
+      ...crossings,
+    ]) {
+      if (!candidates.any((c) => (c - point).distance < tolerance)) {
+        candidates.add(point);
+      }
+    }
+
+    final dots = <Offset>[];
+    for (final point in candidates) {
+      final directions = <Offset>[];
+      void leaving(Offset towards) {
+        final away = towards - point;
+        if (away.distance < tolerance) return;
+        final unit = away / away.distance;
+        if (directions.any((d) => (d - unit).distance < 1e-3)) return;
+        directions.add(unit);
+      }
+
+      for (final path in paths) {
+        for (var i = 0; i < path.length; i++) {
+          if ((path[i] - point).distance >= tolerance) continue;
+          if (i > 0) leaving(path[i - 1]);
+          if (i < path.length - 1) leaving(path[i + 1]);
+        }
+        // Passing through, between two corners rather than at one.
+        for (var i = 0; i < path.length - 1; i++) {
+          if ((path[i] - point).distance < tolerance ||
+              (path[i + 1] - point).distance < tolerance) {
+            continue;
+          }
+          if (_distanceToSegment(point, path[i], path[i + 1]) < tolerance) {
+            leaving(path[i]);
+            leaving(path[i + 1]);
+          }
+        }
+      }
+
+      final onPin = pins.any((pin) => (pin - point).distance < tolerance);
+      if (directions.length >= 3 || (onPin && directions.length >= 2)) {
+        dots.add(point);
+      }
+    }
+    return dots;
+  }
+
+  /// [points] with corner [index] moved to [to], the runs on either side of
+  /// it bending to keep up — the way a corner is dragged in KiCad.
+  static List<Offset> moveVertex(List<Offset> points, int index, Offset to) {
+    if (index < 0 || index >= points.length) return points;
+    if (index == 0) return attachEnds(points, start: to);
+    if (index == points.length - 1) return attachEnds(points, end: to);
+
+    final head = attachEnds(points.sublist(0, index + 1), end: to);
+    final tail = attachEnds(points.sublist(index), start: to);
+    return simplify([...head, ...tail.skip(1)]);
+  }
+
+  /// [points] with a corner put in at [at], which has to lie on it, so that
+  /// the place another wire meets it can then be moved.
+  static List<Offset> splitAt(List<Offset> points, Offset at) {
+    const tolerance = 0.01;
+    for (final point in points) {
+      if ((point - at).distance < tolerance) return points;
+    }
+    for (var i = 0; i < points.length - 1; i++) {
+      if (_distanceToSegment(at, points[i], points[i + 1]) < tolerance) {
+        return [...points.sublist(0, i + 1), at, ...points.sublist(i + 1)];
+      }
+    }
+    return points;
   }
 
   /// Drops repeated corners and corners in the middle of a straight run.

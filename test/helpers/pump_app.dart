@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hintpcb/app/appearance.dart';
 import 'package:hintpcb/app/providers.dart';
 import 'package:hintpcb/core/theme/app_theme.dart';
 import 'package:hintpcb/data/db/database.dart';
@@ -56,6 +57,9 @@ Future<void> pumpApp(
   Size size = landscapePhone,
   double devicePixelRatio = 2,
   EdgeInsets padding = EdgeInsets.zero,
+
+  /// The wiring model the schematic uses, for tests about one or the other.
+  WiringModel wiring = WiringModel.polyline,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = devicePixelRatio;
@@ -78,6 +82,7 @@ Future<void> pumpApp(
         exportDirectoryProvider.overrideWithValue(
           Directory('${Directory.systemTemp.path}/hintpcb_widget_exports'),
         ),
+        appearanceProvider.overrideWith(() => _FixedAppearance(wiring)),
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -142,4 +147,16 @@ void testAppWithStorage(
 Future<void> openRail(WidgetTester tester) async {
   await tester.tap(find.byIcon(Icons.menu).first);
   await settleApp(tester);
+}
+
+/// The appearance, with the wiring model a test asked for and no settings
+/// to load: a widget test runs under a fake clock, where a database read on
+/// the way to the first frame would never come back.
+class _FixedAppearance extends AppearanceNotifier {
+  _FixedAppearance(this.wiring);
+
+  final WiringModel wiring;
+
+  @override
+  Appearance build() => Appearance(wiring: wiring);
 }
