@@ -59,6 +59,45 @@ List<_Case> _cases() => [
     ], pinA: 'p1'),
     _w('branch', const [Offset(60, 60), Offset(80, 60)]),
   ]),
+  _Case('two branches off the same point', [
+    _w('spine', const [Offset(40, 50), Offset(80, 50)], pinA: 'p1'),
+    _w('up', const [Offset(60, 50), Offset(60, 35)]),
+    _w('down', const [Offset(60, 50), Offset(60, 65)]),
+  ]),
+  _Case('wires of one net crossing', [
+    _w('across', const [Offset(40, 50), Offset(90, 50)], pinA: 'p1'),
+    _w('down', const [Offset(60, 30), Offset(60, 70)]),
+  ]),
+  _Case('a zigzag with a branch at a middle corner', [
+    _w('zig', const [
+      Offset(40, 40),
+      Offset(60, 40),
+      Offset(60, 55),
+      Offset(80, 55),
+      Offset(80, 70),
+    ], pinA: 'p1'),
+    _w('branch', const [Offset(60, 55), Offset(45, 55)]),
+  ]),
+  _Case('both ends pinned, with a branch off the middle', [
+    _w(
+      'main',
+      const [Offset(40, 50), Offset(70, 50), Offset(70, 80)],
+      pinA: 'p1',
+      pinB: 'p2',
+    ),
+    _w('branch', const [Offset(55, 50), Offset(55, 30)]),
+  ]),
+  _Case('a branch off a branch', [
+    _w('spine', const [Offset(40, 50), Offset(90, 50)], pinA: 'p1'),
+    _w('first', const [Offset(60, 50), Offset(60, 70)]),
+    _w('second', const [Offset(60, 70), Offset(80, 70)]),
+  ]),
+  _Case('branches on both sides of a spine', [
+    _w('spine', const [Offset(40, 50), Offset(100, 50)], pinA: 'p1'),
+    _w('above', const [Offset(55, 50), Offset(55, 35)]),
+    _w('below', const [Offset(75, 50), Offset(75, 65)]),
+    _w('far', const [Offset(90, 50), Offset(90, 30)]),
+  ]),
   _Case('a loop back on itself', [
     _w('out', const [
       Offset(40, 40),
@@ -76,6 +115,10 @@ const _deltas = [
   Offset(-5, 0),
   Offset(0, 15),
   Offset(-15, 0),
+  // A finger does not move along one axis: the drag arrives with both.
+  Offset(5, 5),
+  Offset(-10, 5),
+  Offset(10, -20),
 ];
 
 /// The net as plain point chains, with the drag applied.
@@ -235,6 +278,25 @@ void _slidingJunctions() {
       result.followers['tooth']!.last,
       const Offset(70, 65),
       reason: 'its far end stayed put',
+    );
+  });
+
+  // "if I drag this vertical wire to the right, it then extends our
+  // original floating wire (as expected). However! If I drag the same wire
+  // back, our original wire that we have just extended does not move back"
+  test('a wire on the end of another shortens it when dragged back', () {
+    final net = [
+      _w('across', const [Offset(40, 50), Offset(80, 50)], pinA: 'p1'),
+      _w('up', const [Offset(80, 50), Offset(80, 35)]),
+    ];
+
+    final back = PolylineWiring.drag(net, 'up', 0, const Offset(-20, 0));
+
+    expect(back.dragged.first.dx, 60, reason: 'the upright moved back');
+    expect(
+      back.followers['across']!.last,
+      const Offset(60, 50),
+      reason: 'and the wire it sits on the end of came back with it',
     );
   });
 

@@ -125,17 +125,26 @@ class PolylineWiring {
       if (other.id == id) continue;
       var shape = other.points;
 
-      // A corner of this wire that was sitting on the part that moved comes
-      // along — but only if it has to. Where this wire already runs the way
-      // the drag is going, the place they meet simply slides along it and
-      // nothing needs to move: a wire crossing another at a junction stays
-      // where the user put it. An end held by a pin never moves at all.
+      // What follows the drag, and what stays put, turns on where the two
+      // meet.
+      //
+      // End to end — this wire finishes where the dragged one finishes —
+      // and they are one run of wire between them: dragging one takes the
+      // other's end with it, so the pair lengthens and shortens together.
+      //
+      // Against its middle, though, is a junction: the meeting point slides
+      // along the dragged wire and this one stays exactly where it was put.
+      // That is the difference between shortening a wire and shoving
+      // everything hanging off it.
       final moving = <(Offset, Offset)>[];
       for (var i = 0; i < shape.length; i++) {
         if (i == 0 && other.startPinned) continue;
         if (i == shape.length - 1 && other.endPinned) continue;
         if (taken(shape[i]) case final at?) {
-          if (covers(shape, at)) continue;
+          final endToEnd =
+              (shape[i] - wire.points.first).distance < tolerance ||
+              (shape[i] - wire.points.last).distance < tolerance;
+          if (!endToEnd && covers(shape, at)) continue;
           moving.add((shape[i], at));
         }
       }
