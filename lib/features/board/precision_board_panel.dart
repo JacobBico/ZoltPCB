@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/cross_probe.dart';
 import '../../app/edit_history.dart';
 import '../../app/providers.dart';
 import '../../core/theme/kicad_palette.dart';
@@ -13,6 +14,12 @@ import '../../domain/models/models.dart';
 import '../../domain/pcb/pcb.dart';
 import '../../rendering/schematic_viewport.dart';
 import 'board_painter.dart';
+import 'layer_picker.dart';
+import 'board_sync_dialog.dart';
+import 'impedance_dialog.dart';
+import 'meander_dialog.dart';
+import 'net_lengths_dialog.dart';
+import 'stackup_dialog.dart';
 import 'board_shape_editor.dart';
 import 'crosshair.dart';
 import 'design_rules_dialog.dart';
@@ -172,6 +179,8 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     final scene = sceneAsync.value;
     final parts = partsAsync.value;
     if (scene == null || parts == null) return const SizedBox.shrink();
+    ref.watch(crossProbeProvider);
+    _takeProbe(scene);
 
     if (parts.isEmpty) {
       return const EmptyState(
@@ -639,6 +648,20 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                   colour: KicadPalette.warning,
                   onTap: () => _showParts(scene, parts),
                 ),
+              // The schematic has moved on since the board last caught up:
+              // a new part, a changed footprint, copper on a deleted net.
+              if (ref
+                      .watch(boardSyncPlanProvider(widget.project.id))
+                      .value
+                      ?.hasWork ??
+                  false)
+                _StripChip(
+                  key: const ValueKey('board-sync-chip'),
+                  label: 'Update from schematic',
+                  icon: Icons.sync,
+                  colour: KicadPalette.highlight,
+                  onTap: _syncFromSchematic,
+                ),
               Expanded(
                 child: ListView(
                   scrollDirection: Axis.horizontal,
@@ -654,8 +677,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                       label: layer.label,
                       icon: Icons.layers_outlined,
                       colour: BoardPainter.colorFor(layer),
-                      onTap: () =>
-                          ref.read(activeLayerProvider.notifier).toggle(),
+                      onTap: () => _chooseLayer(scene),
                     ),
                     _StripChip(
                       label: _snap ? '${_mm(_grid)} mm' : 'free',
@@ -876,6 +898,19 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           label: 'Cancel',
           onPressed: () => setState(_clearDrawing),
         ),
+        if (_tool == AimTool.route)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              _impedanceLabel(
+                scene,
+                _routeLayer ?? ref.read(activeLayerProvider),
+                _widthFor(scene),
+              ),
+              key: const ValueKey('route-impedance-readout'),
+              style: TextStyle(fontSize: 12, color: KicadPalette.textSecondary),
+            ),
+          ),
       ];
     }
 
@@ -964,6 +999,11 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           label: 'Footprint',
           onPressed: () => setState(() => _assigningPartId = footprint.part.id),
         ),
+        _Chip(
+          icon: Icons.schema_outlined,
+          label: 'Schematic',
+          onPressed: () => _probeSchematic(partId: footprint.part.id),
+        ),
       ];
     }
 
@@ -971,12 +1011,26 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         .where((t) => t.id == _selectedTrackId)
         .firstOrNull;
     if (track != null) {
+      final length = track.netId == null
+          ? null
+          : NetLength.of(scene, track.netId!);
       return [
         _Chip(
           icon: Icons.swap_horiz,
           label: 'Slide',
           onPressed: () => _slide(track),
         ),
+        _Chip(
+          icon: Icons.waves,
+          label: 'Tune',
+          onPressed: () => _tune(scene, track),
+        ),
+        if (track.netId != null)
+          _Chip(
+            icon: Icons.schema_outlined,
+            label: 'Schematic',
+            onPressed: () => _probeSchematic(netId: track.netId),
+          ),
         _Chip(
           icon: Icons.tune,
           label: 'Properties',
@@ -994,6 +1048,17 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           danger: true,
           onPressed: track.netId == null ? null : () => _ripUpNet(track.netId!),
         ),
+        if (length != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              '${_netName(scene, track.netId) ?? 'Net'} '
+              '${_mm(length.length)} mm · ${length.delayPs.toStringAsFixed(0)} ps'
+              ' · ${_impedanceLabel(scene, track.layer, track.width)}',
+              key: const ValueKey('track-length-readout'),
+              style: TextStyle(fontSize: 12, color: KicadPalette.textSecondary),
+            ),
+          ),
       ];
     }
 
@@ -1195,14 +1260,23 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       // A net in a class routes at the class width, the way KiCad picks the
       // width up from the net under the cursor.
       final netClass = scene.classOf(pad?.netId ?? snap.netId);
-      if (netClass != null) _notify(netClass.label);
+      final CopperLayer layer = pad != null
+          ? _layerFor(pad)
+          : (snap.layer ?? ref.read(activeLayerProvider));
+      final classWidth = netClass?.widthOn(scene.board.stackup, layer);
+      if (netClass != null) {
+        _notify(
+          netClass.impedance == null
+              ? netClass.label
+              : '${netClass.label} · ${_mm(classWidth!)} mm on '
+                    '${layer.shortLabel}',
+        );
+      }
       setState(() {
         _clearSelection();
-        if (netClass != null) _trackWidth = netClass.trackWidth;
+        if (classWidth != null) _trackWidth = classWidth;
         _routeNetId = pad?.netId ?? snap.netId;
-        _routeLayer = pad != null
-            ? _layerFor(pad)
-            : (snap.layer ?? ref.read(activeLayerProvider));
+        _routeLayer = layer;
         _points.add(pad?.position ?? at);
       });
       return;
@@ -1330,9 +1404,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     if (!mounted) return;
 
     final repository = ref.read(boardRepositoryProvider);
-    final layer = ref.read(activeLayerProvider) == CopperLayer.front
-        ? BoardLayer.frontCopper
-        : BoardLayer.backCopper;
+    final layer = ref.read(activeLayerProvider).layer;
 
     final added = await repository.addZone(
       projectId: widget.project.id,
@@ -1479,6 +1551,20 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     );
   }
 
+  /// Changes the routing layer: turns the board over on two layers, and
+  /// asks which on more.
+  Future<void> _chooseLayer(BoardScene scene) async {
+    final board = scene.board;
+    final active = ref.read(activeLayerProvider);
+    if (board.copperLayerCount <= 2) {
+      ref.read(activeLayerProvider.notifier).next(board);
+      return;
+    }
+    final chosen = await showLayerPicker(context, board: board, active: active);
+    if (chosen == null || !mounted) return;
+    ref.read(activeLayerProvider.notifier).set(chosen);
+  }
+
   Future<void> _viaAndSwitch(BoardScene scene) async {
     if (_points.isEmpty) return;
     final at = _points.last;
@@ -1486,7 +1572,20 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     await _dropVia(scene, at);
     if (!mounted) return;
 
-    ref.read(activeLayerProvider.notifier).toggle();
+    final before = ref.read(activeLayerProvider);
+    await _chooseLayer(scene);
+    if (!mounted) return;
+    // A picker dismissed without a choice leaves the via in place and the
+    // route where it was: nothing to carry on with on the same layer.
+    if (ref.read(activeLayerProvider) == before) return;
+    // An impedance-controlled net changes width with the layer it is on.
+    final netClass = scene.classOf(_routeNetId);
+    if (netClass?.impedance != null) {
+      _trackWidth = netClass!.widthOn(
+        scene.board.stackup,
+        ref.read(activeLayerProvider),
+      );
+    }
     setState(() {
       _points
         ..clear()
@@ -2382,6 +2481,55 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     );
   }
 
+  /// Acts on a probe sent from the schematic, once the board is showing.
+  void _takeProbe(BoardScene scene) {
+    if (ref.read(crossProbeProvider)?.target != ProbeTarget.board) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final request = ref
+          .read(crossProbeProvider.notifier)
+          .take(ProbeTarget.board);
+      if (request == null) return;
+      final partId = request.partId;
+      if (partId != null) {
+        final placed = scene.footprints.any((f) => f.part.id == partId);
+        if (!placed) {
+          _notify('That part is not placed on the board yet');
+          return;
+        }
+        _selectPlaced(partId);
+        return;
+      }
+      final netId = request.netId;
+      final pad = scene.pads.where((p) => p.netId == netId).firstOrNull;
+      if (netId == null || pad == null) {
+        _notify('That net has no pads on the board yet');
+        return;
+      }
+      setState(() {
+        _clearSelection();
+        _highlightedNetId = netId;
+      });
+      _centreOn(pad.position);
+      final length = NetLength.of(scene, netId);
+      _notify(
+        '${pad.netName ?? 'Net'}: ${scene.pads.where((p) => p.netId == netId).length} pads'
+        '${length.trackCount == 0 ? '' : ' · ${_mm(length.length)} mm routed'}',
+      );
+    });
+  }
+
+  /// Shows [partId] or [netId] on the schematic.
+  void _probeSchematic({String? partId, String? netId}) => ref
+      .read(crossProbeProvider.notifier)
+      .send(
+        ProbeRequest(
+          target: ProbeTarget.schematic,
+          partId: partId,
+          netId: netId,
+        ),
+      );
+
   void _selectPlaced(String partId) {
     final scene = ref.read(boardSceneProvider(widget.project.id)).value;
     final footprint = scene?.footprints
@@ -2557,8 +2705,10 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
   double _widthFor(BoardScene scene) =>
       _trackWidth ??
-      scene.classOf(_routeNetId)?.trackWidth ??
-      scene.board.rules.trackWidth;
+      scene.trackWidthFor(
+        _routeNetId,
+        _routeLayer ?? ref.read(activeLayerProvider),
+      );
 
   /// Where the route being drawn comes too close to another net.
   List<RouteClash> _clashes(BoardScene scene, Offset at) {
@@ -2808,10 +2958,46 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                     context,
                     projectId: widget.project.id,
                     rules: scene.board.rules,
+                    stackup: scene.board.stackup,
                   ),
                   subtitle: scene.netClasses.isEmpty
                       ? 'Named widths for power, signal…'
                       : [for (final c in scene.netClasses) c.name].join(' · '),
+                ),
+                item(
+                  Icons.sync,
+                  'Update from schematic',
+                  _syncFromSchematic,
+                  subtitle: () {
+                    final plan = ref
+                        .read(boardSyncPlanProvider(widget.project.id))
+                        .value;
+                    if (plan == null) return 'Compare with the schematic';
+                    return plan.hasWork
+                        ? '${plan.actionCount + (plan.orphanTracks > 0 ? 1 : 0)} changes waiting'
+                        : 'Up to date';
+                  }(),
+                ),
+                item(
+                  Icons.layers_outlined,
+                  'Board build',
+                  () => _editBuild(scene),
+                  subtitle:
+                      '${scene.board.copperLayerCount} layers · '
+                      '${_mm(scene.board.stackup.thickness)} mm · '
+                      '${scene.board.stackup.copper.first.weight.label} copper',
+                ),
+                item(
+                  Icons.speed,
+                  'Impedance calculator',
+                  () => _impedance(scene),
+                  subtitle: 'Width for 50 Ω, 90 Ω pairs, delay per mm',
+                ),
+                item(
+                  Icons.straighten,
+                  'Net lengths',
+                  () => showNetLengthsDialog(context, scene: scene),
+                  subtitle: 'Select a track and TUNE to add loops',
                 ),
                 item(
                   Icons.tune,
@@ -2897,6 +3083,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       context,
       track: track,
       netName: _netName(scene, track.netId) ?? '',
+      layers: scene.board.copperLayers,
     );
     if (result == null || !mounted) return;
     final repository = ref.read(boardRepositoryProvider);
@@ -3062,6 +3249,118 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       'Board outline',
       undo: () => repository.updateBoard(before),
       redo: () => repository.updateBoard(after),
+    );
+  }
+
+  /// `Z₀ 50.2 Ω` for a track of [width] on [layer], from the build.
+  String _impedanceLabel(BoardScene scene, CopperLayer layer, double width) {
+    if (!scene.board.hasLayer(layer) || width <= 0) return '';
+    final line = ImpedanceCalculator.of(
+      scene.board.stackup,
+      layer,
+      width: width,
+    );
+    return 'Z₀ ${line.z0.toStringAsFixed(1)} Ω';
+  }
+
+  Future<void> _syncFromSchematic() async {
+    final message = await showBoardSyncDialog(
+      context,
+      projectId: widget.project.id,
+    );
+    if (message != null) _notify(message);
+  }
+
+  Future<void> _editBuild(BoardScene scene) async {
+    final used = {
+      for (final t in scene.tracks) t.layer,
+      for (final z in scene.zones) ?CopperLayer.fromToken(z.layer.token),
+    };
+    final after = await showStackupDialog(
+      context,
+      board: scene.board,
+      usedLayers: used,
+    );
+    if (after == null || !mounted) return;
+    final repository = ref.read(boardRepositoryProvider);
+    final before = scene.board;
+    await repository.updateBoard(after);
+    if (!after.hasLayer(ref.read(activeLayerProvider))) {
+      ref.read(activeLayerProvider.notifier).set(CopperLayer.front);
+    }
+    _record(
+      'Board build',
+      undo: () => repository.updateBoard(before),
+      redo: () => repository.updateBoard(after),
+    );
+    _notify(
+      '${after.copperLayerCount} layers, '
+      '${_mm(after.stackup.thickness)} mm',
+    );
+  }
+
+  Future<void> _impedance(BoardScene scene) async {
+    final width = await showImpedanceCalculator(
+      context,
+      board: scene.board,
+      layer: ref.read(activeLayerProvider),
+      width: _widthFor(scene),
+    );
+    if (width == null || !mounted) return;
+    setState(() => _trackWidth = width);
+    _notify('Routing at ${_mm(width)} mm');
+  }
+
+  /// Folds the selected segment into loops until its net is long enough.
+  Future<void> _tune(BoardScene scene, Track track) async {
+    if (track.netId == null) {
+      _notify('This track is on no net — nothing to match it to');
+      return;
+    }
+    final plan = await showMeanderDialog(
+      context,
+      scene: scene,
+      track: track,
+      netName: _netName(scene, track.netId) ?? '',
+    );
+    if (plan == null || !plan.isValid || !mounted) return;
+    final repository = ref.read(boardRepositoryProvider);
+    await repository.deleteTracks([track.id]);
+    final ids = <String>[];
+    for (var i = 0; i < plan.points.length - 1; i++) {
+      ids.add(
+        await repository.addTrack(
+          projectId: widget.project.id,
+          layer: track.layer,
+          startX: plan.points[i].dx,
+          startY: plan.points[i].dy,
+          endX: plan.points[i + 1].dx,
+          endY: plan.points[i + 1].dy,
+          width: track.width,
+          netId: track.netId,
+        ),
+      );
+    }
+    final added = await repository.getTracks(widget.project.id);
+    final laid = [
+      for (final t in added)
+        if (ids.contains(t.id)) t,
+    ];
+    if (mounted) setState(() => _selectedTrackId = null);
+    _record(
+      'Tune ${_netName(scene, track.netId) ?? 'track'}',
+      undo: () async {
+        await repository.deleteTracks(ids);
+        await repository.restoreCopper(tracks: [track], vias: const []);
+      },
+      redo: () async {
+        await repository.deleteTracks([track.id]);
+        await repository.restoreCopper(tracks: laid, vias: const []);
+      },
+    );
+    _notify(
+      '+${_mm(plan.added)} mm in ${plan.loops} loop'
+      '${plan.loops == 1 ? '' : 's'}',
     );
   }
 
@@ -3263,6 +3562,7 @@ class _ToolChip extends StatelessWidget {
 
 class _StripChip extends StatelessWidget {
   const _StripChip({
+    super.key,
     required this.label,
     required this.icon,
     required this.colour,

@@ -14,6 +14,7 @@ class SchematicDocument {
     this.symbols = const {},
     this.routeHints = const {},
     this.drawnWires = const [],
+    this.notes = const [],
     this.generator = 'hintpcb',
     this.generatorVersion = '1.0',
   });
@@ -36,6 +37,9 @@ class SchematicDocument {
 
   /// The wires as the user drew them, written exactly as drawn.
   final List<SchematicWire> drawnWires;
+
+  /// Text and boxes on the sheet.
+  final List<SchematicNote> notes;
 
   final String generator;
   final String generatorVersion;

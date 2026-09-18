@@ -100,8 +100,11 @@ class SExprWriter {
   String _atomText(SAtom atom) =>
       atom.quoted ? '"${escape(atom.value)}"' : atom.value;
 
-  /// Escapes the two characters KiCad's reader treats specially inside a
-  /// quoted string.
-  static String escape(String value) =>
-      value.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+  /// Escapes what KiCad's reader treats specially inside a quoted string:
+  /// the backslash, the quote, and a line break, which KiCad writes as
+  /// `\n` in multi-line text.
+  static String escape(String value) => value
+      .replaceAll(r'\', r'\\')
+      .replaceAll('"', r'\"')
+      .replaceAll('\n', r'\n');
 }

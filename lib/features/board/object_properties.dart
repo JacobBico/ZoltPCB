@@ -336,16 +336,25 @@ Future<PropertiesResult<Track>?> showTrackProperties(
   BuildContext context, {
   required Track track,
   required String netName,
+  List<CopperLayer> layers = const [CopperLayer.front, CopperLayer.back],
 }) => showDialog<PropertiesResult<Track>>(
   context: context,
-  builder: (context) => _TrackProperties(track: track, netName: netName),
+  builder: (context) =>
+      _TrackProperties(track: track, netName: netName, layers: layers),
 );
 
 class _TrackProperties extends StatefulWidget {
-  const _TrackProperties({required this.track, required this.netName});
+  const _TrackProperties({
+    required this.track,
+    required this.netName,
+    required this.layers,
+  });
 
   final Track track;
   final String netName;
+
+  /// The board's copper, which is what a track can be moved to.
+  final List<CopperLayer> layers;
 
   @override
   State<_TrackProperties> createState() => _TrackPropertiesState();
@@ -433,15 +442,18 @@ class _TrackPropertiesState extends State<_TrackProperties> {
                 Expanded(
                   child: SegmentedButton<CopperLayer>(
                     showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment(
-                        value: CopperLayer.front,
-                        label: Text('Front'),
-                      ),
-                      ButtonSegment(
-                        value: CopperLayer.back,
-                        label: Text('Back'),
-                      ),
+                    segments: [
+                      for (final layer in widget.layers)
+                        ButtonSegment(
+                          value: layer,
+                          // Six words do not fit across a dialog; six
+                          // short names do.
+                          label: Text(
+                            widget.layers.length > 2
+                                ? layer.shortLabel
+                                : layer.label,
+                          ),
+                        ),
                     ],
                     selected: {_layer},
                     onSelectionChanged: (value) =>

@@ -33,6 +33,9 @@ part 'database.g.dart';
     BoardZones,
     BoardTexts,
     AppSettings,
+    ProjectSnapshots,
+    SchematicNotes,
+    ProjectSettings,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -95,7 +98,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -208,6 +211,28 @@ class AppDatabase extends _$AppDatabase {
         await m.createTable(schematicWires);
         await m.createIndex(idxSchematicWiresProject);
         await joinSameNamedNets();
+      }
+      // v14 adds snapshots, sheet notes, per-project settings, and a board
+      // stackup with more than two copper layers. Every addition defaults
+      // to what a project had before: no snapshots, no notes, two layers
+      // of 1.6 mm board, and net classes routed by width alone.
+      if (from < 14) {
+        await m.createTable(projectSnapshots);
+        await m.createIndex(idxProjectSnapshotsProject);
+        await m.createTable(schematicNotes);
+        await m.createIndex(idxSchematicNotesProject);
+        await m.createTable(projectSettings);
+      }
+      if (from >= 5 && from < 14) {
+        await m.addColumn(boards, boards.copperLayers);
+        await m.addColumn(boards, boards.thickness);
+        await m.addColumn(boards, boards.stackup);
+      }
+      if (from >= 13 && from < 14) {
+        await m.addColumn(netClasses, netClasses.impedance);
+      }
+      if (from < 14) {
+        await m.addColumn(netNodes, netNodes.labelled);
       }
     },
     beforeOpen: (details) async {

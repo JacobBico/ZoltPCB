@@ -25,10 +25,14 @@ class PriorNet {
     required this.pinIds,
     this.wires = const [],
     this.netClassId,
+    this.labelledPinIds = const {},
   });
 
   final String? name;
   final List<String> pinIds;
+
+  /// The pins that carried a label of their own.
+  final Set<String> labelledPinIds;
 
   /// The net's drawn wires, so undoing a disconnect brings back their
   /// shapes rather than an automatic route.
@@ -271,11 +275,24 @@ class NetRepository {
     return netId;
   }
 
-  Future<String> labelPin(String projectId, String pinId, String name) async {
+  ///
+  /// With [joinByName], the pin is marked as carrying its own label, so the
+  /// sheet shows the name at it instead of routing a wire to the rest of
+  /// the net — what the Labels action wants. Off, the net is named and
+  /// drawn exactly as a named net always has been.
+  Future<String> labelPin(
+    String projectId,
+    String pinId,
+    String name, {
+    bool joinByName = true,
+  }) async {
     final existing = await netIdForPin(pinId);
-    if (existing != null) return renameNet(existing, name);
+    if (existing != null) {
+      if (joinByName) await _setLabelled(pinId, true);
+      return renameNet(existing, name);
+    }
     final netId = await _createNet(projectId, name: name.trim());
-    await _addNode(netId, pinId);
+    await _addNode(netId, pinId, labelled: joinByName);
     final joined = await _joinSameName(netId);
     await _touchProject(projectId);
     return joined;
@@ -401,6 +418,10 @@ class NetRepository {
         PriorNet(
           name: net.name,
           pinIds: [for (final node in nodes) node.partPinId],
+          labelledPinIds: {
+            for (final node in nodes)
+              if (node.labelled) node.partPinId,
+          },
           wires: await getWiresOfNet(netId),
           netClassId: net.netClassId,
         ),
@@ -448,7 +469,11 @@ class NetRepository {
           );
         }
         for (final pinId in prior.pinIds) {
-          await _addNode(netId, pinId);
+          await _addNode(
+            netId,
+            pinId,
+            labelled: prior.labelledPinIds.contains(pinId),
+          );
         }
         for (final wire in prior.wires) {
           await _db
@@ -676,7 +701,11 @@ class NetRepository {
     return id;
   }
 
-  Future<void> _addNode(String netId, String pinId) async {
+  Future<void> _addNode(
+    String netId,
+    String pinId, {
+    bool labelled = false,
+  }) async {
     await _db
         .into(_db.netNodes)
         .insert(
@@ -684,9 +713,16 @@ class NetRepository {
             id: newId(),
             netId: netId,
             partPinId: pinId,
+            labelled: Value(labelled),
             createdAt: DateTime.now(),
           ),
         );
+  }
+
+  /// Marks [pinId] as carrying its own label, or not.
+  Future<void> _setLabelled(String pinId, bool labelled) async {
+    await (_db.update(_db.netNodes)..where((t) => t.partPinId.equals(pinId)))
+        .write(NetNodesCompanion(labelled: Value(labelled)));
   }
 
   /// Merges two nets and returns the id of the survivor.

@@ -16,6 +16,7 @@ import '../../kicad/schematic_writer.dart';
 import '../repositories/board_repository.dart';
 import '../repositories/footprint_library_repository.dart';
 import '../repositories/net_repository.dart';
+import '../repositories/note_repository.dart';
 import '../repositories/part_repository.dart';
 import '../repositories/project_repository.dart';
 import '../repositories/symbol_library_repository.dart';
@@ -77,6 +78,7 @@ class ProjectExporter {
     required this.outputDirectory,
     this.boards,
     this.footprints,
+    this.notes,
   });
 
   final ProjectRepository projects;
@@ -88,6 +90,9 @@ class ProjectExporter {
   /// — and every existing test — needs no board at all.
   final BoardRepository? boards;
   final FootprintLibraryRepository? footprints;
+
+  /// Notes on the sheet; optional for the same reason.
+  final NoteRepository? notes;
 
   /// Where exported files are written. Injected so tests can use a
   /// temporary directory.
@@ -121,6 +126,7 @@ class ProjectExporter {
       symbols: symbols,
       routeHints: hints,
       drawnWires: await nets.getWires(projectId),
+      notes: await notes?.getAll(projectId) ?? const [],
     );
   }
 
@@ -290,7 +296,11 @@ class ProjectExporter {
       routeHints: document.routeHints,
       drawnWires: document.drawnWires,
     );
-    final bytes = await renderSchematicPdf(scene, title: document.project.name);
+    final bytes = await renderSchematicPdf(
+      scene,
+      title: document.project.name,
+      notes: document.notes,
+    );
     return _writeBytes(
       ExportKind.pdf,
       '${fileNameFor(document.project.name)}.pdf',

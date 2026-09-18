@@ -99,10 +99,18 @@ class NetLabel {
     required this.text,
     required this.position,
     required this.pinned,
+    this.primary = true,
   });
 
   final String netId;
   final String text;
+
+  /// The net's own label, the one that is stored and dragged. A named net
+  /// whose pins are not all wired together — a bus label on two chips —
+  /// shows the name again at each separate piece, the way KiCad does, so
+  /// no end of it looks unconnected; those repeats follow where the pieces
+  /// are and are not moved on their own.
+  final bool primary;
 
   /// Sheet millimetres. The user's own spot when [pinned], otherwise the
   /// corner of the net's wire.
@@ -212,6 +220,11 @@ class SchematicScene {
       (drawnByNet[wire.netId] ??= []).add(wire);
     }
     final wires = <RoutedWire>[];
+    final labelledPins = {
+      for (final net in nets)
+        for (final e in net.endpoints)
+          if (e.node.labelled) e.pin.id,
+    };
     for (final entry in byNet.entries) {
       wires.addAll(
         _routeNet(
@@ -220,6 +233,7 @@ class SchematicScene {
           obstacles,
           routeHints,
           drawnByNet[entry.key] ?? const [],
+          labelledPins: labelledPins,
         ),
       );
     }
@@ -254,22 +268,113 @@ class SchematicScene {
       if (pins.isEmpty) continue;
       if (pins.any((pin) => isPowerReference(pin.reference))) continue;
 
+      final netWires = [
+        for (final wire in wires)
+          if (wire.netId == net.net.id) wire,
+      ];
       final stored = net.net.labelAt;
-      labels.add(
-        NetLabel(
-          netId: net.net.id,
-          text: name,
-          position:
-              stored ??
-              _defaultLabelSpot([
-                for (final wire in wires)
-                  if (wire.netId == net.net.id) wire,
-              ], pins),
-          pinned: stored != null,
-        ),
-      );
+      // One label per separate piece only for a net joined by the Labels
+      // action; any other net keeps its one label, as it always had.
+      final hasLabelledPin = net.endpoints.any((e) => e.node.labelled);
+      final islands = hasLabelledPin
+          ? _islands(pins, netWires)
+          : [(pins, netWires)];
+      for (var i = 0; i < islands.length; i++) {
+        final (islandPins, islandWires) = islands[i];
+        final first = i == 0;
+        labels.add(
+          NetLabel(
+            netId: net.net.id,
+            text: name,
+            position: first && stored != null
+                ? stored
+                : _defaultLabelSpot(islandWires, islandPins),
+            pinned: first && stored != null,
+            primary: first,
+          ),
+        );
+      }
     }
     return labels;
+  }
+
+  /// A net's pins grouped by what its wires actually join, each group with
+  /// its wires, the group holding the first pin first.
+  static List<(List<PlacedPin>, List<RoutedWire>)> _islands(
+    List<PlacedPin> pins,
+    List<RoutedWire> wires,
+  ) {
+    if (pins.length == 1 && wires.isEmpty) return [(pins, wires)];
+    final parent = <String, String>{};
+    String find(String a) {
+      var root = parent.putIfAbsent(a, () => a);
+      while (parent[root] != root) {
+        root = parent[root]!;
+      }
+      parent[a] = root;
+      return root;
+    }
+
+    void union(String a, String b) {
+      final ra = find(a);
+      final rb = find(b);
+      if (ra != rb) parent[ra] = rb;
+    }
+
+    final pinIds = {for (final p in pins) p.id};
+    for (final pin in pins) {
+      find('p:${pin.id}');
+    }
+    for (var i = 0; i < wires.length; i++) {
+      final wire = wires[i];
+      find('w:$i');
+      if (pinIds.contains(wire.pinAId)) union('w:$i', 'p:${wire.pinAId}');
+      if (pinIds.contains(wire.pinBId)) union('w:$i', 'p:${wire.pinBId}');
+      // A pin the wire merely ends on, without being attached by id.
+      for (final pin in pins) {
+        for (final end in [wire.points.first, wire.points.last]) {
+          if ((end - pin.sheetPosition).distance < 1e-3) {
+            union('w:$i', 'p:${pin.id}');
+          }
+        }
+      }
+    }
+    // Wires that meet: an end of one on the other.
+    bool touches(RoutedWire a, RoutedWire b) {
+      for (final end in [a.points.first, a.points.last]) {
+        for (var k = 0; k < b.points.length - 1; k++) {
+          if (RoutedWire.distanceToSegment(end, b.points[k], b.points[k + 1]) <
+              1e-3) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    for (var i = 0; i < wires.length; i++) {
+      for (var j = i + 1; j < wires.length; j++) {
+        if (touches(wires[i], wires[j]) || touches(wires[j], wires[i])) {
+          union('w:$i', 'w:$j');
+        }
+      }
+    }
+
+    final order = <String>[];
+    final groupPins = <String, List<PlacedPin>>{};
+    final groupWires = <String, List<RoutedWire>>{};
+    for (final pin in pins) {
+      final root = find('p:${pin.id}');
+      if (!groupPins.containsKey(root)) order.add(root);
+      (groupPins[root] ??= []).add(pin);
+    }
+    for (var i = 0; i < wires.length; i++) {
+      (groupWires[find('w:$i')] ??= []).add(wires[i]);
+    }
+    return [
+      for (final root in order)
+        (groupPins[root]!, groupWires[root] ?? const <RoutedWire>[]),
+    ];
   }
 
   /// Where a label goes when the user has not placed it: on the corner of
@@ -330,7 +435,7 @@ class SchematicScene {
     wires: wires,
     labels: [
       for (final label in labels)
-        if (label.netId == netId)
+        if (label.netId == netId && label.primary)
           NetLabel(
             netId: label.netId,
             text: label.text,
@@ -480,8 +585,9 @@ class SchematicScene {
     List<PlacedPin> pins,
     List<Rect> obstacles,
     Map<String, List<double>> routeHints,
-    List<SchematicWire> drawn,
-  ) {
+    List<SchematicWire> drawn, {
+    Set<String> labelledPins = const {},
+  }) {
     final routable = [for (final pin in pins) pin.routable];
 
     var reach = Rect.fromPoints(
@@ -530,6 +636,9 @@ class SchematicScene {
         if (hint != null && a.id.compareTo(b.id) < 0) signature.write('h$hint');
       }
     }
+    for (final pin in routable) {
+      if (labelledPins.contains(pin.id)) signature.write('L${pin.id}');
+    }
     final key = signature.toString();
 
     final cached = _routeCache[netId];
@@ -541,6 +650,7 @@ class SchematicScene {
       drawn: drawn,
       obstacles: nearby,
       hints: routeHints,
+      labelledPins: labelledPins,
     );
     if (_routeCache.length > 4000) _routeCache.clear();
     _routeCache[netId] = (key, routed);

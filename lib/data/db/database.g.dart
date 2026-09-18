@@ -2759,6 +2759,17 @@ class $NetClassesTable extends NetClasses
     type: DriftSqlType.double,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _impedanceMeta = const VerificationMeta(
+    'impedance',
+  );
+  @override
+  late final GeneratedColumn<double> impedance = GeneratedColumn<double>(
+    'impedance',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -2777,6 +2788,7 @@ class $NetClassesTable extends NetClasses
     name,
     trackWidth,
     clearance,
+    impedance,
     createdAt,
   ];
   @override
@@ -2826,6 +2838,12 @@ class $NetClassesTable extends NetClasses
         clearance.isAcceptableOrUnknown(data['clearance']!, _clearanceMeta),
       );
     }
+    if (data.containsKey('impedance')) {
+      context.handle(
+        _impedanceMeta,
+        impedance.isAcceptableOrUnknown(data['impedance']!, _impedanceMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -2863,6 +2881,10 @@ class $NetClassesTable extends NetClasses
         DriftSqlType.double,
         data['${effectivePrefix}clearance'],
       ),
+      impedance: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}impedance'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -2884,6 +2906,11 @@ class NetClassRow extends DataClass implements Insertable<NetClassRow> {
 
   /// Null uses the board's design rule.
   final double? clearance;
+
+  /// The characteristic impedance this class is routed to, in ohms. When
+  /// set, a track's width comes from the stackup of the layer it is drawn
+  /// on rather than from [trackWidth], which is then only the fallback.
+  final double? impedance;
   final DateTime createdAt;
   const NetClassRow({
     required this.id,
@@ -2891,6 +2918,7 @@ class NetClassRow extends DataClass implements Insertable<NetClassRow> {
     required this.name,
     required this.trackWidth,
     this.clearance,
+    this.impedance,
     required this.createdAt,
   });
   @override
@@ -2902,6 +2930,9 @@ class NetClassRow extends DataClass implements Insertable<NetClassRow> {
     map['track_width'] = Variable<double>(trackWidth);
     if (!nullToAbsent || clearance != null) {
       map['clearance'] = Variable<double>(clearance);
+    }
+    if (!nullToAbsent || impedance != null) {
+      map['impedance'] = Variable<double>(impedance);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
@@ -2916,6 +2947,9 @@ class NetClassRow extends DataClass implements Insertable<NetClassRow> {
       clearance: clearance == null && nullToAbsent
           ? const Value.absent()
           : Value(clearance),
+      impedance: impedance == null && nullToAbsent
+          ? const Value.absent()
+          : Value(impedance),
       createdAt: Value(createdAt),
     );
   }
@@ -2931,6 +2965,7 @@ class NetClassRow extends DataClass implements Insertable<NetClassRow> {
       name: serializer.fromJson<String>(json['name']),
       trackWidth: serializer.fromJson<double>(json['trackWidth']),
       clearance: serializer.fromJson<double?>(json['clearance']),
+      impedance: serializer.fromJson<double?>(json['impedance']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -2943,6 +2978,7 @@ class NetClassRow extends DataClass implements Insertable<NetClassRow> {
       'name': serializer.toJson<String>(name),
       'trackWidth': serializer.toJson<double>(trackWidth),
       'clearance': serializer.toJson<double?>(clearance),
+      'impedance': serializer.toJson<double?>(impedance),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -2953,6 +2989,7 @@ class NetClassRow extends DataClass implements Insertable<NetClassRow> {
     String? name,
     double? trackWidth,
     Value<double?> clearance = const Value.absent(),
+    Value<double?> impedance = const Value.absent(),
     DateTime? createdAt,
   }) => NetClassRow(
     id: id ?? this.id,
@@ -2960,6 +2997,7 @@ class NetClassRow extends DataClass implements Insertable<NetClassRow> {
     name: name ?? this.name,
     trackWidth: trackWidth ?? this.trackWidth,
     clearance: clearance.present ? clearance.value : this.clearance,
+    impedance: impedance.present ? impedance.value : this.impedance,
     createdAt: createdAt ?? this.createdAt,
   );
   NetClassRow copyWithCompanion(NetClassesCompanion data) {
@@ -2971,6 +3009,7 @@ class NetClassRow extends DataClass implements Insertable<NetClassRow> {
           ? data.trackWidth.value
           : this.trackWidth,
       clearance: data.clearance.present ? data.clearance.value : this.clearance,
+      impedance: data.impedance.present ? data.impedance.value : this.impedance,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -2983,14 +3022,22 @@ class NetClassRow extends DataClass implements Insertable<NetClassRow> {
           ..write('name: $name, ')
           ..write('trackWidth: $trackWidth, ')
           ..write('clearance: $clearance, ')
+          ..write('impedance: $impedance, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, projectId, name, trackWidth, clearance, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    projectId,
+    name,
+    trackWidth,
+    clearance,
+    impedance,
+    createdAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -3000,6 +3047,7 @@ class NetClassRow extends DataClass implements Insertable<NetClassRow> {
           other.name == this.name &&
           other.trackWidth == this.trackWidth &&
           other.clearance == this.clearance &&
+          other.impedance == this.impedance &&
           other.createdAt == this.createdAt);
 }
 
@@ -3009,6 +3057,7 @@ class NetClassesCompanion extends UpdateCompanion<NetClassRow> {
   final Value<String> name;
   final Value<double> trackWidth;
   final Value<double?> clearance;
+  final Value<double?> impedance;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const NetClassesCompanion({
@@ -3017,6 +3066,7 @@ class NetClassesCompanion extends UpdateCompanion<NetClassRow> {
     this.name = const Value.absent(),
     this.trackWidth = const Value.absent(),
     this.clearance = const Value.absent(),
+    this.impedance = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -3026,6 +3076,7 @@ class NetClassesCompanion extends UpdateCompanion<NetClassRow> {
     required String name,
     required double trackWidth,
     this.clearance = const Value.absent(),
+    this.impedance = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -3039,6 +3090,7 @@ class NetClassesCompanion extends UpdateCompanion<NetClassRow> {
     Expression<String>? name,
     Expression<double>? trackWidth,
     Expression<double>? clearance,
+    Expression<double>? impedance,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -3048,6 +3100,7 @@ class NetClassesCompanion extends UpdateCompanion<NetClassRow> {
       if (name != null) 'name': name,
       if (trackWidth != null) 'track_width': trackWidth,
       if (clearance != null) 'clearance': clearance,
+      if (impedance != null) 'impedance': impedance,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -3059,6 +3112,7 @@ class NetClassesCompanion extends UpdateCompanion<NetClassRow> {
     Value<String>? name,
     Value<double>? trackWidth,
     Value<double?>? clearance,
+    Value<double?>? impedance,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -3068,6 +3122,7 @@ class NetClassesCompanion extends UpdateCompanion<NetClassRow> {
       name: name ?? this.name,
       trackWidth: trackWidth ?? this.trackWidth,
       clearance: clearance ?? this.clearance,
+      impedance: impedance ?? this.impedance,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -3091,6 +3146,9 @@ class NetClassesCompanion extends UpdateCompanion<NetClassRow> {
     if (clearance.present) {
       map['clearance'] = Variable<double>(clearance.value);
     }
+    if (impedance.present) {
+      map['impedance'] = Variable<double>(impedance.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -3108,6 +3166,7 @@ class NetClassesCompanion extends UpdateCompanion<NetClassRow> {
           ..write('name: $name, ')
           ..write('trackWidth: $trackWidth, ')
           ..write('clearance: $clearance, ')
+          ..write('impedance: $impedance, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -3627,6 +3686,21 @@ class $NetNodesTable extends NetNodes
       'REFERENCES part_pins (id) ON DELETE CASCADE',
     ),
   );
+  static const VerificationMeta _labelledMeta = const VerificationMeta(
+    'labelled',
+  );
+  @override
+  late final GeneratedColumn<bool> labelled = GeneratedColumn<bool>(
+    'labelled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("labelled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -3639,7 +3713,13 @@ class $NetNodesTable extends NetNodes
     requiredDuringInsert: true,
   );
   @override
-  List<GeneratedColumn> get $columns => [id, netId, partPinId, createdAt];
+  List<GeneratedColumn> get $columns => [
+    id,
+    netId,
+    partPinId,
+    labelled,
+    createdAt,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -3672,6 +3752,12 @@ class $NetNodesTable extends NetNodes
       );
     } else if (isInserting) {
       context.missing(_partPinIdMeta);
+    }
+    if (data.containsKey('labelled')) {
+      context.handle(
+        _labelledMeta,
+        labelled.isAcceptableOrUnknown(data['labelled']!, _labelledMeta),
+      );
     }
     if (data.containsKey('created_at')) {
       context.handle(
@@ -3706,6 +3792,10 @@ class $NetNodesTable extends NetNodes
         DriftSqlType.string,
         data['${effectivePrefix}part_pin_id'],
       )!,
+      labelled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}labelled'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -3723,11 +3813,18 @@ class NetNodeRow extends DataClass implements Insertable<NetNodeRow> {
   final String id;
   final String netId;
   final String partPinId;
+
+  /// The pin carries a label of its own — it is on this net by name, the
+  /// way a KiCad label at a pin puts it there, rather than by a wire. The
+  /// sheet then shows the name at the pin instead of routing a wire to
+  /// the rest of the net.
+  final bool labelled;
   final DateTime createdAt;
   const NetNodeRow({
     required this.id,
     required this.netId,
     required this.partPinId,
+    required this.labelled,
     required this.createdAt,
   });
   @override
@@ -3736,6 +3833,7 @@ class NetNodeRow extends DataClass implements Insertable<NetNodeRow> {
     map['id'] = Variable<String>(id);
     map['net_id'] = Variable<String>(netId);
     map['part_pin_id'] = Variable<String>(partPinId);
+    map['labelled'] = Variable<bool>(labelled);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -3745,6 +3843,7 @@ class NetNodeRow extends DataClass implements Insertable<NetNodeRow> {
       id: Value(id),
       netId: Value(netId),
       partPinId: Value(partPinId),
+      labelled: Value(labelled),
       createdAt: Value(createdAt),
     );
   }
@@ -3758,6 +3857,7 @@ class NetNodeRow extends DataClass implements Insertable<NetNodeRow> {
       id: serializer.fromJson<String>(json['id']),
       netId: serializer.fromJson<String>(json['netId']),
       partPinId: serializer.fromJson<String>(json['partPinId']),
+      labelled: serializer.fromJson<bool>(json['labelled']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -3768,6 +3868,7 @@ class NetNodeRow extends DataClass implements Insertable<NetNodeRow> {
       'id': serializer.toJson<String>(id),
       'netId': serializer.toJson<String>(netId),
       'partPinId': serializer.toJson<String>(partPinId),
+      'labelled': serializer.toJson<bool>(labelled),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -3776,11 +3877,13 @@ class NetNodeRow extends DataClass implements Insertable<NetNodeRow> {
     String? id,
     String? netId,
     String? partPinId,
+    bool? labelled,
     DateTime? createdAt,
   }) => NetNodeRow(
     id: id ?? this.id,
     netId: netId ?? this.netId,
     partPinId: partPinId ?? this.partPinId,
+    labelled: labelled ?? this.labelled,
     createdAt: createdAt ?? this.createdAt,
   );
   NetNodeRow copyWithCompanion(NetNodesCompanion data) {
@@ -3788,6 +3891,7 @@ class NetNodeRow extends DataClass implements Insertable<NetNodeRow> {
       id: data.id.present ? data.id.value : this.id,
       netId: data.netId.present ? data.netId.value : this.netId,
       partPinId: data.partPinId.present ? data.partPinId.value : this.partPinId,
+      labelled: data.labelled.present ? data.labelled.value : this.labelled,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -3798,13 +3902,14 @@ class NetNodeRow extends DataClass implements Insertable<NetNodeRow> {
           ..write('id: $id, ')
           ..write('netId: $netId, ')
           ..write('partPinId: $partPinId, ')
+          ..write('labelled: $labelled, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, netId, partPinId, createdAt);
+  int get hashCode => Object.hash(id, netId, partPinId, labelled, createdAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -3812,6 +3917,7 @@ class NetNodeRow extends DataClass implements Insertable<NetNodeRow> {
           other.id == this.id &&
           other.netId == this.netId &&
           other.partPinId == this.partPinId &&
+          other.labelled == this.labelled &&
           other.createdAt == this.createdAt);
 }
 
@@ -3819,12 +3925,14 @@ class NetNodesCompanion extends UpdateCompanion<NetNodeRow> {
   final Value<String> id;
   final Value<String> netId;
   final Value<String> partPinId;
+  final Value<bool> labelled;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const NetNodesCompanion({
     this.id = const Value.absent(),
     this.netId = const Value.absent(),
     this.partPinId = const Value.absent(),
+    this.labelled = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -3832,6 +3940,7 @@ class NetNodesCompanion extends UpdateCompanion<NetNodeRow> {
     required String id,
     required String netId,
     required String partPinId,
+    this.labelled = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -3842,6 +3951,7 @@ class NetNodesCompanion extends UpdateCompanion<NetNodeRow> {
     Expression<String>? id,
     Expression<String>? netId,
     Expression<String>? partPinId,
+    Expression<bool>? labelled,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -3849,6 +3959,7 @@ class NetNodesCompanion extends UpdateCompanion<NetNodeRow> {
       if (id != null) 'id': id,
       if (netId != null) 'net_id': netId,
       if (partPinId != null) 'part_pin_id': partPinId,
+      if (labelled != null) 'labelled': labelled,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -3858,6 +3969,7 @@ class NetNodesCompanion extends UpdateCompanion<NetNodeRow> {
     Value<String>? id,
     Value<String>? netId,
     Value<String>? partPinId,
+    Value<bool>? labelled,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -3865,6 +3977,7 @@ class NetNodesCompanion extends UpdateCompanion<NetNodeRow> {
       id: id ?? this.id,
       netId: netId ?? this.netId,
       partPinId: partPinId ?? this.partPinId,
+      labelled: labelled ?? this.labelled,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -3882,6 +3995,9 @@ class NetNodesCompanion extends UpdateCompanion<NetNodeRow> {
     if (partPinId.present) {
       map['part_pin_id'] = Variable<String>(partPinId.value);
     }
+    if (labelled.present) {
+      map['labelled'] = Variable<bool>(labelled.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -3897,6 +4013,7 @@ class NetNodesCompanion extends UpdateCompanion<NetNodeRow> {
           ..write('id: $id, ')
           ..write('netId: $netId, ')
           ..write('partPinId: $partPinId, ')
+          ..write('labelled: $labelled, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -7563,6 +7680,42 @@ class $BoardsTable extends Boards with TableInfo<$BoardsTable, BoardRow> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0.5),
   );
+  static const VerificationMeta _copperLayersMeta = const VerificationMeta(
+    'copperLayers',
+  );
+  @override
+  late final GeneratedColumn<int> copperLayers = GeneratedColumn<int>(
+    'copper_layers',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(2),
+  );
+  static const VerificationMeta _thicknessMeta = const VerificationMeta(
+    'thickness',
+  );
+  @override
+  late final GeneratedColumn<double> thickness = GeneratedColumn<double>(
+    'thickness',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1.6),
+  );
+  static const VerificationMeta _stackupMeta = const VerificationMeta(
+    'stackup',
+  );
+  @override
+  late final GeneratedColumn<String> stackup = GeneratedColumn<String>(
+    'stackup',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _modifiedAtMeta = const VerificationMeta(
     'modifiedAt',
   );
@@ -7591,6 +7744,9 @@ class $BoardsTable extends Boards with TableInfo<$BoardsTable, BoardRow> {
     trackWidths,
     viaSizes,
     gridMm,
+    copperLayers,
+    thickness,
+    stackup,
     modifiedAt,
   ];
   @override
@@ -7714,6 +7870,27 @@ class $BoardsTable extends Boards with TableInfo<$BoardsTable, BoardRow> {
         gridMm.isAcceptableOrUnknown(data['grid_mm']!, _gridMmMeta),
       );
     }
+    if (data.containsKey('copper_layers')) {
+      context.handle(
+        _copperLayersMeta,
+        copperLayers.isAcceptableOrUnknown(
+          data['copper_layers']!,
+          _copperLayersMeta,
+        ),
+      );
+    }
+    if (data.containsKey('thickness')) {
+      context.handle(
+        _thicknessMeta,
+        thickness.isAcceptableOrUnknown(data['thickness']!, _thicknessMeta),
+      );
+    }
+    if (data.containsKey('stackup')) {
+      context.handle(
+        _stackupMeta,
+        stackup.isAcceptableOrUnknown(data['stackup']!, _stackupMeta),
+      );
+    }
     if (data.containsKey('modified_at')) {
       context.handle(
         _modifiedAtMeta,
@@ -7795,6 +7972,18 @@ class $BoardsTable extends Boards with TableInfo<$BoardsTable, BoardRow> {
         DriftSqlType.double,
         data['${effectivePrefix}grid_mm'],
       )!,
+      copperLayers: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}copper_layers'],
+      )!,
+      thickness: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}thickness'],
+      )!,
+      stackup: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}stackup'],
+      )!,
       modifiedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}modified_at'],
@@ -7843,6 +8032,17 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
   /// Placement grid. 0.5 mm rather than the schematic's 1.27 mm: boards are
   /// laid out in a much finer world than schematics.
   final double gridMm;
+
+  /// How many copper layers the board has: 2, 4, 6 or 8.
+  final int copperLayers;
+
+  /// Finished board thickness, in millimetres.
+  final double thickness;
+
+  /// The layer build-up — copper weights, dielectric heights and materials —
+  /// as JSON. Empty means "the standard build for this many layers and
+  /// this thickness", worked out rather than stored.
+  final String stackup;
   final DateTime modifiedAt;
   const BoardRow({
     required this.id,
@@ -7860,6 +8060,9 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
     required this.trackWidths,
     required this.viaSizes,
     required this.gridMm,
+    required this.copperLayers,
+    required this.thickness,
+    required this.stackup,
     required this.modifiedAt,
   });
   @override
@@ -7880,6 +8083,9 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
     map['track_widths'] = Variable<String>(trackWidths);
     map['via_sizes'] = Variable<String>(viaSizes);
     map['grid_mm'] = Variable<double>(gridMm);
+    map['copper_layers'] = Variable<int>(copperLayers);
+    map['thickness'] = Variable<double>(thickness);
+    map['stackup'] = Variable<String>(stackup);
     map['modified_at'] = Variable<DateTime>(modifiedAt);
     return map;
   }
@@ -7901,6 +8107,9 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
       trackWidths: Value(trackWidths),
       viaSizes: Value(viaSizes),
       gridMm: Value(gridMm),
+      copperLayers: Value(copperLayers),
+      thickness: Value(thickness),
+      stackup: Value(stackup),
       modifiedAt: Value(modifiedAt),
     );
   }
@@ -7926,6 +8135,9 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
       trackWidths: serializer.fromJson<String>(json['trackWidths']),
       viaSizes: serializer.fromJson<String>(json['viaSizes']),
       gridMm: serializer.fromJson<double>(json['gridMm']),
+      copperLayers: serializer.fromJson<int>(json['copperLayers']),
+      thickness: serializer.fromJson<double>(json['thickness']),
+      stackup: serializer.fromJson<String>(json['stackup']),
       modifiedAt: serializer.fromJson<DateTime>(json['modifiedAt']),
     );
   }
@@ -7948,6 +8160,9 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
       'trackWidths': serializer.toJson<String>(trackWidths),
       'viaSizes': serializer.toJson<String>(viaSizes),
       'gridMm': serializer.toJson<double>(gridMm),
+      'copperLayers': serializer.toJson<int>(copperLayers),
+      'thickness': serializer.toJson<double>(thickness),
+      'stackup': serializer.toJson<String>(stackup),
       'modifiedAt': serializer.toJson<DateTime>(modifiedAt),
     };
   }
@@ -7968,6 +8183,9 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
     String? trackWidths,
     String? viaSizes,
     double? gridMm,
+    int? copperLayers,
+    double? thickness,
+    String? stackup,
     DateTime? modifiedAt,
   }) => BoardRow(
     id: id ?? this.id,
@@ -7985,6 +8203,9 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
     trackWidths: trackWidths ?? this.trackWidths,
     viaSizes: viaSizes ?? this.viaSizes,
     gridMm: gridMm ?? this.gridMm,
+    copperLayers: copperLayers ?? this.copperLayers,
+    thickness: thickness ?? this.thickness,
+    stackup: stackup ?? this.stackup,
     modifiedAt: modifiedAt ?? this.modifiedAt,
   );
   BoardRow copyWithCompanion(BoardsCompanion data) {
@@ -8018,6 +8239,11 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
           : this.trackWidths,
       viaSizes: data.viaSizes.present ? data.viaSizes.value : this.viaSizes,
       gridMm: data.gridMm.present ? data.gridMm.value : this.gridMm,
+      copperLayers: data.copperLayers.present
+          ? data.copperLayers.value
+          : this.copperLayers,
+      thickness: data.thickness.present ? data.thickness.value : this.thickness,
+      stackup: data.stackup.present ? data.stackup.value : this.stackup,
       modifiedAt: data.modifiedAt.present
           ? data.modifiedAt.value
           : this.modifiedAt,
@@ -8042,6 +8268,9 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
           ..write('trackWidths: $trackWidths, ')
           ..write('viaSizes: $viaSizes, ')
           ..write('gridMm: $gridMm, ')
+          ..write('copperLayers: $copperLayers, ')
+          ..write('thickness: $thickness, ')
+          ..write('stackup: $stackup, ')
           ..write('modifiedAt: $modifiedAt')
           ..write(')'))
         .toString();
@@ -8064,6 +8293,9 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
     trackWidths,
     viaSizes,
     gridMm,
+    copperLayers,
+    thickness,
+    stackup,
     modifiedAt,
   );
   @override
@@ -8085,6 +8317,9 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
           other.trackWidths == this.trackWidths &&
           other.viaSizes == this.viaSizes &&
           other.gridMm == this.gridMm &&
+          other.copperLayers == this.copperLayers &&
+          other.thickness == this.thickness &&
+          other.stackup == this.stackup &&
           other.modifiedAt == this.modifiedAt);
 }
 
@@ -8104,6 +8339,9 @@ class BoardsCompanion extends UpdateCompanion<BoardRow> {
   final Value<String> trackWidths;
   final Value<String> viaSizes;
   final Value<double> gridMm;
+  final Value<int> copperLayers;
+  final Value<double> thickness;
+  final Value<String> stackup;
   final Value<DateTime> modifiedAt;
   final Value<int> rowid;
   const BoardsCompanion({
@@ -8122,6 +8360,9 @@ class BoardsCompanion extends UpdateCompanion<BoardRow> {
     this.trackWidths = const Value.absent(),
     this.viaSizes = const Value.absent(),
     this.gridMm = const Value.absent(),
+    this.copperLayers = const Value.absent(),
+    this.thickness = const Value.absent(),
+    this.stackup = const Value.absent(),
     this.modifiedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -8141,6 +8382,9 @@ class BoardsCompanion extends UpdateCompanion<BoardRow> {
     this.trackWidths = const Value.absent(),
     this.viaSizes = const Value.absent(),
     this.gridMm = const Value.absent(),
+    this.copperLayers = const Value.absent(),
+    this.thickness = const Value.absent(),
+    this.stackup = const Value.absent(),
     required DateTime modifiedAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -8162,6 +8406,9 @@ class BoardsCompanion extends UpdateCompanion<BoardRow> {
     Expression<String>? trackWidths,
     Expression<String>? viaSizes,
     Expression<double>? gridMm,
+    Expression<int>? copperLayers,
+    Expression<double>? thickness,
+    Expression<String>? stackup,
     Expression<DateTime>? modifiedAt,
     Expression<int>? rowid,
   }) {
@@ -8181,6 +8428,9 @@ class BoardsCompanion extends UpdateCompanion<BoardRow> {
       if (trackWidths != null) 'track_widths': trackWidths,
       if (viaSizes != null) 'via_sizes': viaSizes,
       if (gridMm != null) 'grid_mm': gridMm,
+      if (copperLayers != null) 'copper_layers': copperLayers,
+      if (thickness != null) 'thickness': thickness,
+      if (stackup != null) 'stackup': stackup,
       if (modifiedAt != null) 'modified_at': modifiedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -8202,6 +8452,9 @@ class BoardsCompanion extends UpdateCompanion<BoardRow> {
     Value<String>? trackWidths,
     Value<String>? viaSizes,
     Value<double>? gridMm,
+    Value<int>? copperLayers,
+    Value<double>? thickness,
+    Value<String>? stackup,
     Value<DateTime>? modifiedAt,
     Value<int>? rowid,
   }) {
@@ -8221,6 +8474,9 @@ class BoardsCompanion extends UpdateCompanion<BoardRow> {
       trackWidths: trackWidths ?? this.trackWidths,
       viaSizes: viaSizes ?? this.viaSizes,
       gridMm: gridMm ?? this.gridMm,
+      copperLayers: copperLayers ?? this.copperLayers,
+      thickness: thickness ?? this.thickness,
+      stackup: stackup ?? this.stackup,
       modifiedAt: modifiedAt ?? this.modifiedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -8274,6 +8530,15 @@ class BoardsCompanion extends UpdateCompanion<BoardRow> {
     if (gridMm.present) {
       map['grid_mm'] = Variable<double>(gridMm.value);
     }
+    if (copperLayers.present) {
+      map['copper_layers'] = Variable<int>(copperLayers.value);
+    }
+    if (thickness.present) {
+      map['thickness'] = Variable<double>(thickness.value);
+    }
+    if (stackup.present) {
+      map['stackup'] = Variable<String>(stackup.value);
+    }
     if (modifiedAt.present) {
       map['modified_at'] = Variable<DateTime>(modifiedAt.value);
     }
@@ -8301,6 +8566,9 @@ class BoardsCompanion extends UpdateCompanion<BoardRow> {
           ..write('trackWidths: $trackWidths, ')
           ..write('viaSizes: $viaSizes, ')
           ..write('gridMm: $gridMm, ')
+          ..write('copperLayers: $copperLayers, ')
+          ..write('thickness: $thickness, ')
+          ..write('stackup: $stackup, ')
           ..write('modifiedAt: $modifiedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -11797,6 +12065,1281 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingRow> {
   }
 }
 
+class $ProjectSnapshotsTable extends ProjectSnapshots
+    with TableInfo<$ProjectSnapshotsTable, ProjectSnapshotRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ProjectSnapshotsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _projectIdMeta = const VerificationMeta(
+    'projectId',
+  );
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+    'project_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES projects (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _automaticMeta = const VerificationMeta(
+    'automatic',
+  );
+  @override
+  late final GeneratedColumn<bool> automatic = GeneratedColumn<bool>(
+    'automatic',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("automatic" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _dataMeta = const VerificationMeta('data');
+  @override
+  late final GeneratedColumn<String> data = GeneratedColumn<String>(
+    'data',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    projectId,
+    name,
+    automatic,
+    data,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'project_snapshots';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ProjectSnapshotRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('project_id')) {
+      context.handle(
+        _projectIdMeta,
+        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_projectIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('automatic')) {
+      context.handle(
+        _automaticMeta,
+        automatic.isAcceptableOrUnknown(data['automatic']!, _automaticMeta),
+      );
+    }
+    if (data.containsKey('data')) {
+      context.handle(
+        _dataMeta,
+        this.data.isAcceptableOrUnknown(data['data']!, _dataMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dataMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ProjectSnapshotRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ProjectSnapshotRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      projectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      automatic: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}automatic'],
+      )!,
+      data: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}data'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ProjectSnapshotsTable createAlias(String alias) {
+    return $ProjectSnapshotsTable(attachedDatabase, alias);
+  }
+}
+
+class ProjectSnapshotRow extends DataClass
+    implements Insertable<ProjectSnapshotRow> {
+  final String id;
+  final String projectId;
+  final String name;
+
+  /// Taken by the app rather than the user — before a restore, say.
+  final bool automatic;
+
+  /// The project archive, as JSON.
+  final String data;
+  final DateTime createdAt;
+  const ProjectSnapshotRow({
+    required this.id,
+    required this.projectId,
+    required this.name,
+    required this.automatic,
+    required this.data,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['project_id'] = Variable<String>(projectId);
+    map['name'] = Variable<String>(name);
+    map['automatic'] = Variable<bool>(automatic);
+    map['data'] = Variable<String>(data);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  ProjectSnapshotsCompanion toCompanion(bool nullToAbsent) {
+    return ProjectSnapshotsCompanion(
+      id: Value(id),
+      projectId: Value(projectId),
+      name: Value(name),
+      automatic: Value(automatic),
+      data: Value(data),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory ProjectSnapshotRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ProjectSnapshotRow(
+      id: serializer.fromJson<String>(json['id']),
+      projectId: serializer.fromJson<String>(json['projectId']),
+      name: serializer.fromJson<String>(json['name']),
+      automatic: serializer.fromJson<bool>(json['automatic']),
+      data: serializer.fromJson<String>(json['data']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'projectId': serializer.toJson<String>(projectId),
+      'name': serializer.toJson<String>(name),
+      'automatic': serializer.toJson<bool>(automatic),
+      'data': serializer.toJson<String>(data),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  ProjectSnapshotRow copyWith({
+    String? id,
+    String? projectId,
+    String? name,
+    bool? automatic,
+    String? data,
+    DateTime? createdAt,
+  }) => ProjectSnapshotRow(
+    id: id ?? this.id,
+    projectId: projectId ?? this.projectId,
+    name: name ?? this.name,
+    automatic: automatic ?? this.automatic,
+    data: data ?? this.data,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  ProjectSnapshotRow copyWithCompanion(ProjectSnapshotsCompanion data) {
+    return ProjectSnapshotRow(
+      id: data.id.present ? data.id.value : this.id,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      name: data.name.present ? data.name.value : this.name,
+      automatic: data.automatic.present ? data.automatic.value : this.automatic,
+      data: data.data.present ? data.data.value : this.data,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProjectSnapshotRow(')
+          ..write('id: $id, ')
+          ..write('projectId: $projectId, ')
+          ..write('name: $name, ')
+          ..write('automatic: $automatic, ')
+          ..write('data: $data, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, projectId, name, automatic, data, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ProjectSnapshotRow &&
+          other.id == this.id &&
+          other.projectId == this.projectId &&
+          other.name == this.name &&
+          other.automatic == this.automatic &&
+          other.data == this.data &&
+          other.createdAt == this.createdAt);
+}
+
+class ProjectSnapshotsCompanion extends UpdateCompanion<ProjectSnapshotRow> {
+  final Value<String> id;
+  final Value<String> projectId;
+  final Value<String> name;
+  final Value<bool> automatic;
+  final Value<String> data;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const ProjectSnapshotsCompanion({
+    this.id = const Value.absent(),
+    this.projectId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.automatic = const Value.absent(),
+    this.data = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ProjectSnapshotsCompanion.insert({
+    required String id,
+    required String projectId,
+    required String name,
+    this.automatic = const Value.absent(),
+    required String data,
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       projectId = Value(projectId),
+       name = Value(name),
+       data = Value(data),
+       createdAt = Value(createdAt);
+  static Insertable<ProjectSnapshotRow> custom({
+    Expression<String>? id,
+    Expression<String>? projectId,
+    Expression<String>? name,
+    Expression<bool>? automatic,
+    Expression<String>? data,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (projectId != null) 'project_id': projectId,
+      if (name != null) 'name': name,
+      if (automatic != null) 'automatic': automatic,
+      if (data != null) 'data': data,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ProjectSnapshotsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? projectId,
+    Value<String>? name,
+    Value<bool>? automatic,
+    Value<String>? data,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return ProjectSnapshotsCompanion(
+      id: id ?? this.id,
+      projectId: projectId ?? this.projectId,
+      name: name ?? this.name,
+      automatic: automatic ?? this.automatic,
+      data: data ?? this.data,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (automatic.present) {
+      map['automatic'] = Variable<bool>(automatic.value);
+    }
+    if (data.present) {
+      map['data'] = Variable<String>(data.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProjectSnapshotsCompanion(')
+          ..write('id: $id, ')
+          ..write('projectId: $projectId, ')
+          ..write('name: $name, ')
+          ..write('automatic: $automatic, ')
+          ..write('data: $data, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SchematicNotesTable extends SchematicNotes
+    with TableInfo<$SchematicNotesTable, SchematicNoteRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SchematicNotesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _projectIdMeta = const VerificationMeta(
+    'projectId',
+  );
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+    'project_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES projects (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('text'),
+  );
+  static const VerificationMeta _contentMeta = const VerificationMeta(
+    'content',
+  );
+  @override
+  late final GeneratedColumn<String> content = GeneratedColumn<String>(
+    'content',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _xMeta = const VerificationMeta('x');
+  @override
+  late final GeneratedColumn<double> x = GeneratedColumn<double>(
+    'x',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _yMeta = const VerificationMeta('y');
+  @override
+  late final GeneratedColumn<double> y = GeneratedColumn<double>(
+    'y',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _widthMeta = const VerificationMeta('width');
+  @override
+  late final GeneratedColumn<double> width = GeneratedColumn<double>(
+    'width',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _heightMeta = const VerificationMeta('height');
+  @override
+  late final GeneratedColumn<double> height = GeneratedColumn<double>(
+    'height',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _sizeMeta = const VerificationMeta('size');
+  @override
+  late final GeneratedColumn<double> size = GeneratedColumn<double>(
+    'size',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1.27),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    projectId,
+    kind,
+    content,
+    x,
+    y,
+    width,
+    height,
+    size,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'schematic_notes';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SchematicNoteRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('project_id')) {
+      context.handle(
+        _projectIdMeta,
+        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_projectIdMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    }
+    if (data.containsKey('content')) {
+      context.handle(
+        _contentMeta,
+        content.isAcceptableOrUnknown(data['content']!, _contentMeta),
+      );
+    }
+    if (data.containsKey('x')) {
+      context.handle(_xMeta, x.isAcceptableOrUnknown(data['x']!, _xMeta));
+    } else if (isInserting) {
+      context.missing(_xMeta);
+    }
+    if (data.containsKey('y')) {
+      context.handle(_yMeta, y.isAcceptableOrUnknown(data['y']!, _yMeta));
+    } else if (isInserting) {
+      context.missing(_yMeta);
+    }
+    if (data.containsKey('width')) {
+      context.handle(
+        _widthMeta,
+        width.isAcceptableOrUnknown(data['width']!, _widthMeta),
+      );
+    }
+    if (data.containsKey('height')) {
+      context.handle(
+        _heightMeta,
+        height.isAcceptableOrUnknown(data['height']!, _heightMeta),
+      );
+    }
+    if (data.containsKey('size')) {
+      context.handle(
+        _sizeMeta,
+        size.isAcceptableOrUnknown(data['size']!, _sizeMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SchematicNoteRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SchematicNoteRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      projectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_id'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      content: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}content'],
+      )!,
+      x: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}x'],
+      )!,
+      y: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}y'],
+      )!,
+      width: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}width'],
+      )!,
+      height: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}height'],
+      )!,
+      size: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}size'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SchematicNotesTable createAlias(String alias) {
+    return $SchematicNotesTable(attachedDatabase, alias);
+  }
+}
+
+class SchematicNoteRow extends DataClass
+    implements Insertable<SchematicNoteRow> {
+  final String id;
+  final String projectId;
+
+  /// `text` or `box`.
+  final String kind;
+
+  /// What the note says; a box's caption.
+  final String content;
+
+  /// Top-left corner, in sheet millimetres.
+  final double x;
+  final double y;
+
+  /// A box's size; zero for a text note.
+  final double width;
+  final double height;
+
+  /// Character height, in millimetres.
+  final double size;
+  final DateTime createdAt;
+  const SchematicNoteRow({
+    required this.id,
+    required this.projectId,
+    required this.kind,
+    required this.content,
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+    required this.size,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['project_id'] = Variable<String>(projectId);
+    map['kind'] = Variable<String>(kind);
+    map['content'] = Variable<String>(content);
+    map['x'] = Variable<double>(x);
+    map['y'] = Variable<double>(y);
+    map['width'] = Variable<double>(width);
+    map['height'] = Variable<double>(height);
+    map['size'] = Variable<double>(size);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  SchematicNotesCompanion toCompanion(bool nullToAbsent) {
+    return SchematicNotesCompanion(
+      id: Value(id),
+      projectId: Value(projectId),
+      kind: Value(kind),
+      content: Value(content),
+      x: Value(x),
+      y: Value(y),
+      width: Value(width),
+      height: Value(height),
+      size: Value(size),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory SchematicNoteRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SchematicNoteRow(
+      id: serializer.fromJson<String>(json['id']),
+      projectId: serializer.fromJson<String>(json['projectId']),
+      kind: serializer.fromJson<String>(json['kind']),
+      content: serializer.fromJson<String>(json['content']),
+      x: serializer.fromJson<double>(json['x']),
+      y: serializer.fromJson<double>(json['y']),
+      width: serializer.fromJson<double>(json['width']),
+      height: serializer.fromJson<double>(json['height']),
+      size: serializer.fromJson<double>(json['size']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'projectId': serializer.toJson<String>(projectId),
+      'kind': serializer.toJson<String>(kind),
+      'content': serializer.toJson<String>(content),
+      'x': serializer.toJson<double>(x),
+      'y': serializer.toJson<double>(y),
+      'width': serializer.toJson<double>(width),
+      'height': serializer.toJson<double>(height),
+      'size': serializer.toJson<double>(size),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  SchematicNoteRow copyWith({
+    String? id,
+    String? projectId,
+    String? kind,
+    String? content,
+    double? x,
+    double? y,
+    double? width,
+    double? height,
+    double? size,
+    DateTime? createdAt,
+  }) => SchematicNoteRow(
+    id: id ?? this.id,
+    projectId: projectId ?? this.projectId,
+    kind: kind ?? this.kind,
+    content: content ?? this.content,
+    x: x ?? this.x,
+    y: y ?? this.y,
+    width: width ?? this.width,
+    height: height ?? this.height,
+    size: size ?? this.size,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  SchematicNoteRow copyWithCompanion(SchematicNotesCompanion data) {
+    return SchematicNoteRow(
+      id: data.id.present ? data.id.value : this.id,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      content: data.content.present ? data.content.value : this.content,
+      x: data.x.present ? data.x.value : this.x,
+      y: data.y.present ? data.y.value : this.y,
+      width: data.width.present ? data.width.value : this.width,
+      height: data.height.present ? data.height.value : this.height,
+      size: data.size.present ? data.size.value : this.size,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SchematicNoteRow(')
+          ..write('id: $id, ')
+          ..write('projectId: $projectId, ')
+          ..write('kind: $kind, ')
+          ..write('content: $content, ')
+          ..write('x: $x, ')
+          ..write('y: $y, ')
+          ..write('width: $width, ')
+          ..write('height: $height, ')
+          ..write('size: $size, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    projectId,
+    kind,
+    content,
+    x,
+    y,
+    width,
+    height,
+    size,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SchematicNoteRow &&
+          other.id == this.id &&
+          other.projectId == this.projectId &&
+          other.kind == this.kind &&
+          other.content == this.content &&
+          other.x == this.x &&
+          other.y == this.y &&
+          other.width == this.width &&
+          other.height == this.height &&
+          other.size == this.size &&
+          other.createdAt == this.createdAt);
+}
+
+class SchematicNotesCompanion extends UpdateCompanion<SchematicNoteRow> {
+  final Value<String> id;
+  final Value<String> projectId;
+  final Value<String> kind;
+  final Value<String> content;
+  final Value<double> x;
+  final Value<double> y;
+  final Value<double> width;
+  final Value<double> height;
+  final Value<double> size;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const SchematicNotesCompanion({
+    this.id = const Value.absent(),
+    this.projectId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.content = const Value.absent(),
+    this.x = const Value.absent(),
+    this.y = const Value.absent(),
+    this.width = const Value.absent(),
+    this.height = const Value.absent(),
+    this.size = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SchematicNotesCompanion.insert({
+    required String id,
+    required String projectId,
+    this.kind = const Value.absent(),
+    this.content = const Value.absent(),
+    required double x,
+    required double y,
+    this.width = const Value.absent(),
+    this.height = const Value.absent(),
+    this.size = const Value.absent(),
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       projectId = Value(projectId),
+       x = Value(x),
+       y = Value(y),
+       createdAt = Value(createdAt);
+  static Insertable<SchematicNoteRow> custom({
+    Expression<String>? id,
+    Expression<String>? projectId,
+    Expression<String>? kind,
+    Expression<String>? content,
+    Expression<double>? x,
+    Expression<double>? y,
+    Expression<double>? width,
+    Expression<double>? height,
+    Expression<double>? size,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (projectId != null) 'project_id': projectId,
+      if (kind != null) 'kind': kind,
+      if (content != null) 'content': content,
+      if (x != null) 'x': x,
+      if (y != null) 'y': y,
+      if (width != null) 'width': width,
+      if (height != null) 'height': height,
+      if (size != null) 'size': size,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SchematicNotesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? projectId,
+    Value<String>? kind,
+    Value<String>? content,
+    Value<double>? x,
+    Value<double>? y,
+    Value<double>? width,
+    Value<double>? height,
+    Value<double>? size,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return SchematicNotesCompanion(
+      id: id ?? this.id,
+      projectId: projectId ?? this.projectId,
+      kind: kind ?? this.kind,
+      content: content ?? this.content,
+      x: x ?? this.x,
+      y: y ?? this.y,
+      width: width ?? this.width,
+      height: height ?? this.height,
+      size: size ?? this.size,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (content.present) {
+      map['content'] = Variable<String>(content.value);
+    }
+    if (x.present) {
+      map['x'] = Variable<double>(x.value);
+    }
+    if (y.present) {
+      map['y'] = Variable<double>(y.value);
+    }
+    if (width.present) {
+      map['width'] = Variable<double>(width.value);
+    }
+    if (height.present) {
+      map['height'] = Variable<double>(height.value);
+    }
+    if (size.present) {
+      map['size'] = Variable<double>(size.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SchematicNotesCompanion(')
+          ..write('id: $id, ')
+          ..write('projectId: $projectId, ')
+          ..write('kind: $kind, ')
+          ..write('content: $content, ')
+          ..write('x: $x, ')
+          ..write('y: $y, ')
+          ..write('width: $width, ')
+          ..write('height: $height, ')
+          ..write('size: $size, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ProjectSettingsTable extends ProjectSettings
+    with TableInfo<$ProjectSettingsTable, ProjectSettingRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ProjectSettingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _projectIdMeta = const VerificationMeta(
+    'projectId',
+  );
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+    'project_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES projects (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _keyMeta = const VerificationMeta('key');
+  @override
+  late final GeneratedColumn<String> key = GeneratedColumn<String>(
+    'key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _valueMeta = const VerificationMeta('value');
+  @override
+  late final GeneratedColumn<String> value = GeneratedColumn<String>(
+    'value',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [projectId, key, value];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'project_settings';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ProjectSettingRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('project_id')) {
+      context.handle(
+        _projectIdMeta,
+        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_projectIdMeta);
+    }
+    if (data.containsKey('key')) {
+      context.handle(
+        _keyMeta,
+        key.isAcceptableOrUnknown(data['key']!, _keyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_keyMeta);
+    }
+    if (data.containsKey('value')) {
+      context.handle(
+        _valueMeta,
+        value.isAcceptableOrUnknown(data['value']!, _valueMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_valueMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {projectId, key};
+  @override
+  ProjectSettingRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ProjectSettingRow(
+      projectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_id'],
+      )!,
+      key: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}key'],
+      )!,
+      value: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}value'],
+      )!,
+    );
+  }
+
+  @override
+  $ProjectSettingsTable createAlias(String alias) {
+    return $ProjectSettingsTable(attachedDatabase, alias);
+  }
+}
+
+class ProjectSettingRow extends DataClass
+    implements Insertable<ProjectSettingRow> {
+  final String projectId;
+  final String key;
+  final String value;
+  const ProjectSettingRow({
+    required this.projectId,
+    required this.key,
+    required this.value,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['project_id'] = Variable<String>(projectId);
+    map['key'] = Variable<String>(key);
+    map['value'] = Variable<String>(value);
+    return map;
+  }
+
+  ProjectSettingsCompanion toCompanion(bool nullToAbsent) {
+    return ProjectSettingsCompanion(
+      projectId: Value(projectId),
+      key: Value(key),
+      value: Value(value),
+    );
+  }
+
+  factory ProjectSettingRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ProjectSettingRow(
+      projectId: serializer.fromJson<String>(json['projectId']),
+      key: serializer.fromJson<String>(json['key']),
+      value: serializer.fromJson<String>(json['value']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'projectId': serializer.toJson<String>(projectId),
+      'key': serializer.toJson<String>(key),
+      'value': serializer.toJson<String>(value),
+    };
+  }
+
+  ProjectSettingRow copyWith({String? projectId, String? key, String? value}) =>
+      ProjectSettingRow(
+        projectId: projectId ?? this.projectId,
+        key: key ?? this.key,
+        value: value ?? this.value,
+      );
+  ProjectSettingRow copyWithCompanion(ProjectSettingsCompanion data) {
+    return ProjectSettingRow(
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      key: data.key.present ? data.key.value : this.key,
+      value: data.value.present ? data.value.value : this.value,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProjectSettingRow(')
+          ..write('projectId: $projectId, ')
+          ..write('key: $key, ')
+          ..write('value: $value')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(projectId, key, value);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ProjectSettingRow &&
+          other.projectId == this.projectId &&
+          other.key == this.key &&
+          other.value == this.value);
+}
+
+class ProjectSettingsCompanion extends UpdateCompanion<ProjectSettingRow> {
+  final Value<String> projectId;
+  final Value<String> key;
+  final Value<String> value;
+  final Value<int> rowid;
+  const ProjectSettingsCompanion({
+    this.projectId = const Value.absent(),
+    this.key = const Value.absent(),
+    this.value = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ProjectSettingsCompanion.insert({
+    required String projectId,
+    required String key,
+    required String value,
+    this.rowid = const Value.absent(),
+  }) : projectId = Value(projectId),
+       key = Value(key),
+       value = Value(value);
+  static Insertable<ProjectSettingRow> custom({
+    Expression<String>? projectId,
+    Expression<String>? key,
+    Expression<String>? value,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (projectId != null) 'project_id': projectId,
+      if (key != null) 'key': key,
+      if (value != null) 'value': value,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ProjectSettingsCompanion copyWith({
+    Value<String>? projectId,
+    Value<String>? key,
+    Value<String>? value,
+    Value<int>? rowid,
+  }) {
+    return ProjectSettingsCompanion(
+      projectId: projectId ?? this.projectId,
+      key: key ?? this.key,
+      value: value ?? this.value,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
+    if (key.present) {
+      map['key'] = Variable<String>(key.value);
+    }
+    if (value.present) {
+      map['value'] = Variable<String>(value.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProjectSettingsCompanion(')
+          ..write('projectId: $projectId, ')
+          ..write('key: $key, ')
+          ..write('value: $value, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -11828,6 +13371,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $BoardZonesTable boardZones = $BoardZonesTable(this);
   late final $BoardTextsTable boardTexts = $BoardTextsTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
+  late final $ProjectSnapshotsTable projectSnapshots = $ProjectSnapshotsTable(
+    this,
+  );
+  late final $SchematicNotesTable schematicNotes = $SchematicNotesTable(this);
+  late final $ProjectSettingsTable projectSettings = $ProjectSettingsTable(
+    this,
+  );
   late final Index idxPartsProject = Index(
     'idx_parts_project',
     'CREATE INDEX idx_parts_project ON parts (project_id)',
@@ -11900,6 +13450,14 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'idx_board_texts_project',
     'CREATE INDEX idx_board_texts_project ON board_texts (project_id)',
   );
+  late final Index idxProjectSnapshotsProject = Index(
+    'idx_project_snapshots_project',
+    'CREATE INDEX idx_project_snapshots_project ON project_snapshots (project_id)',
+  );
+  late final Index idxSchematicNotesProject = Index(
+    'idx_schematic_notes_project',
+    'CREATE INDEX idx_schematic_notes_project ON schematic_notes (project_id)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -11926,6 +13484,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     boardZones,
     boardTexts,
     appSettings,
+    projectSnapshots,
+    schematicNotes,
+    projectSettings,
     idxPartsProject,
     idxPartUnitsPart,
     idxPartPinsPart,
@@ -11944,6 +13505,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     idxBoardEdgesProject,
     idxBoardZonesProject,
     idxBoardTextsProject,
+    idxProjectSnapshotsProject,
+    idxSchematicNotesProject,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -12142,6 +13705,27 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('board_texts', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'projects',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('project_snapshots', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'projects',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('schematic_notes', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'projects',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('project_settings', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -12397,6 +13981,73 @@ final class $$ProjectsTableReferences
     ).filter((f) => f.projectId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_boardTextsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$ProjectSnapshotsTable, List<ProjectSnapshotRow>>
+  _projectSnapshotsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.projectSnapshots,
+    aliasName: $_aliasNameGenerator(
+      db.projects.id,
+      db.projectSnapshots.projectId,
+    ),
+  );
+
+  $$ProjectSnapshotsTableProcessedTableManager get projectSnapshotsRefs {
+    final manager = $$ProjectSnapshotsTableTableManager(
+      $_db,
+      $_db.projectSnapshots,
+    ).filter((f) => f.projectId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _projectSnapshotsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$SchematicNotesTable, List<SchematicNoteRow>>
+  _schematicNotesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.schematicNotes,
+    aliasName: $_aliasNameGenerator(
+      db.projects.id,
+      db.schematicNotes.projectId,
+    ),
+  );
+
+  $$SchematicNotesTableProcessedTableManager get schematicNotesRefs {
+    final manager = $$SchematicNotesTableTableManager(
+      $_db,
+      $_db.schematicNotes,
+    ).filter((f) => f.projectId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_schematicNotesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$ProjectSettingsTable, List<ProjectSettingRow>>
+  _projectSettingsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.projectSettings,
+    aliasName: $_aliasNameGenerator(
+      db.projects.id,
+      db.projectSettings.projectId,
+    ),
+  );
+
+  $$ProjectSettingsTableProcessedTableManager get projectSettingsRefs {
+    final manager = $$ProjectSettingsTableTableManager(
+      $_db,
+      $_db.projectSettings,
+    ).filter((f) => f.projectId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _projectSettingsRefsTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -12744,6 +14395,81 @@ class $$ProjectsTableFilterComposer
           }) => $$BoardTextsTableFilterComposer(
             $db: $db,
             $table: $db.boardTexts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> projectSnapshotsRefs(
+    Expression<bool> Function($$ProjectSnapshotsTableFilterComposer f) f,
+  ) {
+    final $$ProjectSnapshotsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.projectSnapshots,
+      getReferencedColumn: (t) => t.projectId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectSnapshotsTableFilterComposer(
+            $db: $db,
+            $table: $db.projectSnapshots,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> schematicNotesRefs(
+    Expression<bool> Function($$SchematicNotesTableFilterComposer f) f,
+  ) {
+    final $$SchematicNotesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.schematicNotes,
+      getReferencedColumn: (t) => t.projectId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SchematicNotesTableFilterComposer(
+            $db: $db,
+            $table: $db.schematicNotes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> projectSettingsRefs(
+    Expression<bool> Function($$ProjectSettingsTableFilterComposer f) f,
+  ) {
+    final $$ProjectSettingsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.projectSettings,
+      getReferencedColumn: (t) => t.projectId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectSettingsTableFilterComposer(
+            $db: $db,
+            $table: $db.projectSettings,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -13140,6 +14866,81 @@ class $$ProjectsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> projectSnapshotsRefs<T extends Object>(
+    Expression<T> Function($$ProjectSnapshotsTableAnnotationComposer a) f,
+  ) {
+    final $$ProjectSnapshotsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.projectSnapshots,
+      getReferencedColumn: (t) => t.projectId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectSnapshotsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.projectSnapshots,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> schematicNotesRefs<T extends Object>(
+    Expression<T> Function($$SchematicNotesTableAnnotationComposer a) f,
+  ) {
+    final $$SchematicNotesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.schematicNotes,
+      getReferencedColumn: (t) => t.projectId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SchematicNotesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.schematicNotes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> projectSettingsRefs<T extends Object>(
+    Expression<T> Function($$ProjectSettingsTableAnnotationComposer a) f,
+  ) {
+    final $$ProjectSettingsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.projectSettings,
+      getReferencedColumn: (t) => t.projectId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectSettingsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.projectSettings,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$ProjectsTableTableManager
@@ -13168,6 +14969,9 @@ class $$ProjectsTableTableManager
             bool boardEdgesRefs,
             bool boardZonesRefs,
             bool boardTextsRefs,
+            bool projectSnapshotsRefs,
+            bool schematicNotesRefs,
+            bool projectSettingsRefs,
           })
         > {
   $$ProjectsTableTableManager(_$AppDatabase db, $ProjectsTable table)
@@ -13247,6 +15051,9 @@ class $$ProjectsTableTableManager
                 boardEdgesRefs = false,
                 boardZonesRefs = false,
                 boardTextsRefs = false,
+                projectSnapshotsRefs = false,
+                schematicNotesRefs = false,
+                projectSettingsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -13263,6 +15070,9 @@ class $$ProjectsTableTableManager
                     if (boardEdgesRefs) db.boardEdges,
                     if (boardZonesRefs) db.boardZones,
                     if (boardTextsRefs) db.boardTexts,
+                    if (projectSnapshotsRefs) db.projectSnapshots,
+                    if (schematicNotesRefs) db.schematicNotes,
+                    if (projectSettingsRefs) db.projectSettings,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -13515,6 +15325,69 @@ class $$ProjectsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (projectSnapshotsRefs)
+                        await $_getPrefetchedData<
+                          ProjectRow,
+                          $ProjectsTable,
+                          ProjectSnapshotRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProjectsTableReferences
+                              ._projectSnapshotsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProjectsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).projectSnapshotsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.projectId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (schematicNotesRefs)
+                        await $_getPrefetchedData<
+                          ProjectRow,
+                          $ProjectsTable,
+                          SchematicNoteRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProjectsTableReferences
+                              ._schematicNotesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProjectsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).schematicNotesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.projectId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (projectSettingsRefs)
+                        await $_getPrefetchedData<
+                          ProjectRow,
+                          $ProjectsTable,
+                          ProjectSettingRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProjectsTableReferences
+                              ._projectSettingsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProjectsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).projectSettingsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.projectId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -13548,6 +15421,9 @@ typedef $$ProjectsTableProcessedTableManager =
         bool boardEdgesRefs,
         bool boardZonesRefs,
         bool boardTextsRefs,
+        bool projectSnapshotsRefs,
+        bool schematicNotesRefs,
+        bool projectSettingsRefs,
       })
     >;
 typedef $$PartsTableCreateCompanionBuilder =
@@ -15332,6 +17208,7 @@ typedef $$NetClassesTableCreateCompanionBuilder =
       required String name,
       required double trackWidth,
       Value<double?> clearance,
+      Value<double?> impedance,
       required DateTime createdAt,
       Value<int> rowid,
     });
@@ -15342,6 +17219,7 @@ typedef $$NetClassesTableUpdateCompanionBuilder =
       Value<String> name,
       Value<double> trackWidth,
       Value<double?> clearance,
+      Value<double?> impedance,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -15415,6 +17293,11 @@ class $$NetClassesTableFilterComposer
 
   ColumnFilters<double> get clearance => $composableBuilder(
     column: $table.clearance,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get impedance => $composableBuilder(
+    column: $table.impedance,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -15501,6 +17384,11 @@ class $$NetClassesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get impedance => $composableBuilder(
+    column: $table.impedance,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -15552,6 +17440,9 @@ class $$NetClassesTableAnnotationComposer
 
   GeneratedColumn<double> get clearance =>
       $composableBuilder(column: $table.clearance, builder: (column) => column);
+
+  GeneratedColumn<double> get impedance =>
+      $composableBuilder(column: $table.impedance, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -15638,6 +17529,7 @@ class $$NetClassesTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<double> trackWidth = const Value.absent(),
                 Value<double?> clearance = const Value.absent(),
+                Value<double?> impedance = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NetClassesCompanion(
@@ -15646,6 +17538,7 @@ class $$NetClassesTableTableManager
                 name: name,
                 trackWidth: trackWidth,
                 clearance: clearance,
+                impedance: impedance,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -15656,6 +17549,7 @@ class $$NetClassesTableTableManager
                 required String name,
                 required double trackWidth,
                 Value<double?> clearance = const Value.absent(),
+                Value<double?> impedance = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
               }) => NetClassesCompanion.insert(
@@ -15664,6 +17558,7 @@ class $$NetClassesTableTableManager
                 name: name,
                 trackWidth: trackWidth,
                 clearance: clearance,
+                impedance: impedance,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -16661,6 +18556,7 @@ typedef $$NetNodesTableCreateCompanionBuilder =
       required String id,
       required String netId,
       required String partPinId,
+      Value<bool> labelled,
       required DateTime createdAt,
       Value<int> rowid,
     });
@@ -16669,6 +18565,7 @@ typedef $$NetNodesTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> netId,
       Value<String> partPinId,
+      Value<bool> labelled,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -16723,6 +18620,11 @@ class $$NetNodesTableFilterComposer
   });
   ColumnFilters<String> get id => $composableBuilder(
     column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get labelled => $composableBuilder(
+    column: $table.labelled,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -16792,6 +18694,11 @@ class $$NetNodesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get labelled => $composableBuilder(
+    column: $table.labelled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -16855,6 +18762,9 @@ class $$NetNodesTableAnnotationComposer
   });
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<bool> get labelled =>
+      $composableBuilder(column: $table.labelled, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -16937,12 +18847,14 @@ class $$NetNodesTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> netId = const Value.absent(),
                 Value<String> partPinId = const Value.absent(),
+                Value<bool> labelled = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NetNodesCompanion(
                 id: id,
                 netId: netId,
                 partPinId: partPinId,
+                labelled: labelled,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -16951,12 +18863,14 @@ class $$NetNodesTableTableManager
                 required String id,
                 required String netId,
                 required String partPinId,
+                Value<bool> labelled = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
               }) => NetNodesCompanion.insert(
                 id: id,
                 netId: netId,
                 partPinId: partPinId,
+                labelled: labelled,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -20017,6 +21931,9 @@ typedef $$BoardsTableCreateCompanionBuilder =
       Value<String> trackWidths,
       Value<String> viaSizes,
       Value<double> gridMm,
+      Value<int> copperLayers,
+      Value<double> thickness,
+      Value<String> stackup,
       required DateTime modifiedAt,
       Value<int> rowid,
     });
@@ -20037,6 +21954,9 @@ typedef $$BoardsTableUpdateCompanionBuilder =
       Value<String> trackWidths,
       Value<String> viaSizes,
       Value<double> gridMm,
+      Value<int> copperLayers,
+      Value<double> thickness,
+      Value<String> stackup,
       Value<DateTime> modifiedAt,
       Value<int> rowid,
     });
@@ -20139,6 +22059,21 @@ class $$BoardsTableFilterComposer
 
   ColumnFilters<double> get gridMm => $composableBuilder(
     column: $table.gridMm,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get copperLayers => $composableBuilder(
+    column: $table.copperLayers,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get thickness => $composableBuilder(
+    column: $table.thickness,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get stackup => $composableBuilder(
+    column: $table.stackup,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -20250,6 +22185,21 @@ class $$BoardsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get copperLayers => $composableBuilder(
+    column: $table.copperLayers,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get thickness => $composableBuilder(
+    column: $table.thickness,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get stackup => $composableBuilder(
+    column: $table.stackup,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get modifiedAt => $composableBuilder(
     column: $table.modifiedAt,
     builder: (column) => ColumnOrderings(column),
@@ -20344,6 +22294,17 @@ class $$BoardsTableAnnotationComposer
   GeneratedColumn<double> get gridMm =>
       $composableBuilder(column: $table.gridMm, builder: (column) => column);
 
+  GeneratedColumn<int> get copperLayers => $composableBuilder(
+    column: $table.copperLayers,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get thickness =>
+      $composableBuilder(column: $table.thickness, builder: (column) => column);
+
+  GeneratedColumn<String> get stackup =>
+      $composableBuilder(column: $table.stackup, builder: (column) => column);
+
   GeneratedColumn<DateTime> get modifiedAt => $composableBuilder(
     column: $table.modifiedAt,
     builder: (column) => column,
@@ -20416,6 +22377,9 @@ class $$BoardsTableTableManager
                 Value<String> trackWidths = const Value.absent(),
                 Value<String> viaSizes = const Value.absent(),
                 Value<double> gridMm = const Value.absent(),
+                Value<int> copperLayers = const Value.absent(),
+                Value<double> thickness = const Value.absent(),
+                Value<String> stackup = const Value.absent(),
                 Value<DateTime> modifiedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BoardsCompanion(
@@ -20434,6 +22398,9 @@ class $$BoardsTableTableManager
                 trackWidths: trackWidths,
                 viaSizes: viaSizes,
                 gridMm: gridMm,
+                copperLayers: copperLayers,
+                thickness: thickness,
+                stackup: stackup,
                 modifiedAt: modifiedAt,
                 rowid: rowid,
               ),
@@ -20454,6 +22421,9 @@ class $$BoardsTableTableManager
                 Value<String> trackWidths = const Value.absent(),
                 Value<String> viaSizes = const Value.absent(),
                 Value<double> gridMm = const Value.absent(),
+                Value<int> copperLayers = const Value.absent(),
+                Value<double> thickness = const Value.absent(),
+                Value<String> stackup = const Value.absent(),
                 required DateTime modifiedAt,
                 Value<int> rowid = const Value.absent(),
               }) => BoardsCompanion.insert(
@@ -20472,6 +22442,9 @@ class $$BoardsTableTableManager
                 trackWidths: trackWidths,
                 viaSizes: viaSizes,
                 gridMm: gridMm,
+                copperLayers: copperLayers,
+                thickness: thickness,
+                stackup: stackup,
                 modifiedAt: modifiedAt,
                 rowid: rowid,
               ),
@@ -23396,6 +25369,1073 @@ typedef $$AppSettingsTableProcessedTableManager =
       AppSettingRow,
       PrefetchHooks Function()
     >;
+typedef $$ProjectSnapshotsTableCreateCompanionBuilder =
+    ProjectSnapshotsCompanion Function({
+      required String id,
+      required String projectId,
+      required String name,
+      Value<bool> automatic,
+      required String data,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$ProjectSnapshotsTableUpdateCompanionBuilder =
+    ProjectSnapshotsCompanion Function({
+      Value<String> id,
+      Value<String> projectId,
+      Value<String> name,
+      Value<bool> automatic,
+      Value<String> data,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$ProjectSnapshotsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $ProjectSnapshotsTable,
+          ProjectSnapshotRow
+        > {
+  $$ProjectSnapshotsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $ProjectsTable _projectIdTable(_$AppDatabase db) =>
+      db.projects.createAlias(
+        $_aliasNameGenerator(db.projectSnapshots.projectId, db.projects.id),
+      );
+
+  $$ProjectsTableProcessedTableManager get projectId {
+    final $_column = $_itemColumn<String>('project_id')!;
+
+    final manager = $$ProjectsTableTableManager(
+      $_db,
+      $_db.projects,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_projectIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$ProjectSnapshotsTableFilterComposer
+    extends Composer<_$AppDatabase, $ProjectSnapshotsTable> {
+  $$ProjectSnapshotsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get automatic => $composableBuilder(
+    column: $table.automatic,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get data => $composableBuilder(
+    column: $table.data,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ProjectsTableFilterComposer get projectId {
+    final $$ProjectsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableFilterComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ProjectSnapshotsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ProjectSnapshotsTable> {
+  $$ProjectSnapshotsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get automatic => $composableBuilder(
+    column: $table.automatic,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get data => $composableBuilder(
+    column: $table.data,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ProjectsTableOrderingComposer get projectId {
+    final $$ProjectsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableOrderingComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ProjectSnapshotsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ProjectSnapshotsTable> {
+  $$ProjectSnapshotsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<bool> get automatic =>
+      $composableBuilder(column: $table.automatic, builder: (column) => column);
+
+  GeneratedColumn<String> get data =>
+      $composableBuilder(column: $table.data, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$ProjectsTableAnnotationComposer get projectId {
+    final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ProjectSnapshotsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ProjectSnapshotsTable,
+          ProjectSnapshotRow,
+          $$ProjectSnapshotsTableFilterComposer,
+          $$ProjectSnapshotsTableOrderingComposer,
+          $$ProjectSnapshotsTableAnnotationComposer,
+          $$ProjectSnapshotsTableCreateCompanionBuilder,
+          $$ProjectSnapshotsTableUpdateCompanionBuilder,
+          (ProjectSnapshotRow, $$ProjectSnapshotsTableReferences),
+          ProjectSnapshotRow,
+          PrefetchHooks Function({bool projectId})
+        > {
+  $$ProjectSnapshotsTableTableManager(
+    _$AppDatabase db,
+    $ProjectSnapshotsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ProjectSnapshotsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ProjectSnapshotsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ProjectSnapshotsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> projectId = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<bool> automatic = const Value.absent(),
+                Value<String> data = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ProjectSnapshotsCompanion(
+                id: id,
+                projectId: projectId,
+                name: name,
+                automatic: automatic,
+                data: data,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String projectId,
+                required String name,
+                Value<bool> automatic = const Value.absent(),
+                required String data,
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => ProjectSnapshotsCompanion.insert(
+                id: id,
+                projectId: projectId,
+                name: name,
+                automatic: automatic,
+                data: data,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$ProjectSnapshotsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({projectId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (projectId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.projectId,
+                                referencedTable:
+                                    $$ProjectSnapshotsTableReferences
+                                        ._projectIdTable(db),
+                                referencedColumn:
+                                    $$ProjectSnapshotsTableReferences
+                                        ._projectIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$ProjectSnapshotsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ProjectSnapshotsTable,
+      ProjectSnapshotRow,
+      $$ProjectSnapshotsTableFilterComposer,
+      $$ProjectSnapshotsTableOrderingComposer,
+      $$ProjectSnapshotsTableAnnotationComposer,
+      $$ProjectSnapshotsTableCreateCompanionBuilder,
+      $$ProjectSnapshotsTableUpdateCompanionBuilder,
+      (ProjectSnapshotRow, $$ProjectSnapshotsTableReferences),
+      ProjectSnapshotRow,
+      PrefetchHooks Function({bool projectId})
+    >;
+typedef $$SchematicNotesTableCreateCompanionBuilder =
+    SchematicNotesCompanion Function({
+      required String id,
+      required String projectId,
+      Value<String> kind,
+      Value<String> content,
+      required double x,
+      required double y,
+      Value<double> width,
+      Value<double> height,
+      Value<double> size,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$SchematicNotesTableUpdateCompanionBuilder =
+    SchematicNotesCompanion Function({
+      Value<String> id,
+      Value<String> projectId,
+      Value<String> kind,
+      Value<String> content,
+      Value<double> x,
+      Value<double> y,
+      Value<double> width,
+      Value<double> height,
+      Value<double> size,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$SchematicNotesTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $SchematicNotesTable, SchematicNoteRow> {
+  $$SchematicNotesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $ProjectsTable _projectIdTable(_$AppDatabase db) =>
+      db.projects.createAlias(
+        $_aliasNameGenerator(db.schematicNotes.projectId, db.projects.id),
+      );
+
+  $$ProjectsTableProcessedTableManager get projectId {
+    final $_column = $_itemColumn<String>('project_id')!;
+
+    final manager = $$ProjectsTableTableManager(
+      $_db,
+      $_db.projects,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_projectIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$SchematicNotesTableFilterComposer
+    extends Composer<_$AppDatabase, $SchematicNotesTable> {
+  $$SchematicNotesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get content => $composableBuilder(
+    column: $table.content,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get x => $composableBuilder(
+    column: $table.x,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get y => $composableBuilder(
+    column: $table.y,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get width => $composableBuilder(
+    column: $table.width,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get height => $composableBuilder(
+    column: $table.height,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get size => $composableBuilder(
+    column: $table.size,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ProjectsTableFilterComposer get projectId {
+    final $$ProjectsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableFilterComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SchematicNotesTableOrderingComposer
+    extends Composer<_$AppDatabase, $SchematicNotesTable> {
+  $$SchematicNotesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get content => $composableBuilder(
+    column: $table.content,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get x => $composableBuilder(
+    column: $table.x,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get y => $composableBuilder(
+    column: $table.y,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get width => $composableBuilder(
+    column: $table.width,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get height => $composableBuilder(
+    column: $table.height,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get size => $composableBuilder(
+    column: $table.size,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ProjectsTableOrderingComposer get projectId {
+    final $$ProjectsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableOrderingComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SchematicNotesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SchematicNotesTable> {
+  $$SchematicNotesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get content =>
+      $composableBuilder(column: $table.content, builder: (column) => column);
+
+  GeneratedColumn<double> get x =>
+      $composableBuilder(column: $table.x, builder: (column) => column);
+
+  GeneratedColumn<double> get y =>
+      $composableBuilder(column: $table.y, builder: (column) => column);
+
+  GeneratedColumn<double> get width =>
+      $composableBuilder(column: $table.width, builder: (column) => column);
+
+  GeneratedColumn<double> get height =>
+      $composableBuilder(column: $table.height, builder: (column) => column);
+
+  GeneratedColumn<double> get size =>
+      $composableBuilder(column: $table.size, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$ProjectsTableAnnotationComposer get projectId {
+    final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SchematicNotesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SchematicNotesTable,
+          SchematicNoteRow,
+          $$SchematicNotesTableFilterComposer,
+          $$SchematicNotesTableOrderingComposer,
+          $$SchematicNotesTableAnnotationComposer,
+          $$SchematicNotesTableCreateCompanionBuilder,
+          $$SchematicNotesTableUpdateCompanionBuilder,
+          (SchematicNoteRow, $$SchematicNotesTableReferences),
+          SchematicNoteRow,
+          PrefetchHooks Function({bool projectId})
+        > {
+  $$SchematicNotesTableTableManager(
+    _$AppDatabase db,
+    $SchematicNotesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SchematicNotesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SchematicNotesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SchematicNotesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> projectId = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String> content = const Value.absent(),
+                Value<double> x = const Value.absent(),
+                Value<double> y = const Value.absent(),
+                Value<double> width = const Value.absent(),
+                Value<double> height = const Value.absent(),
+                Value<double> size = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SchematicNotesCompanion(
+                id: id,
+                projectId: projectId,
+                kind: kind,
+                content: content,
+                x: x,
+                y: y,
+                width: width,
+                height: height,
+                size: size,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String projectId,
+                Value<String> kind = const Value.absent(),
+                Value<String> content = const Value.absent(),
+                required double x,
+                required double y,
+                Value<double> width = const Value.absent(),
+                Value<double> height = const Value.absent(),
+                Value<double> size = const Value.absent(),
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => SchematicNotesCompanion.insert(
+                id: id,
+                projectId: projectId,
+                kind: kind,
+                content: content,
+                x: x,
+                y: y,
+                width: width,
+                height: height,
+                size: size,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$SchematicNotesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({projectId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (projectId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.projectId,
+                                referencedTable: $$SchematicNotesTableReferences
+                                    ._projectIdTable(db),
+                                referencedColumn:
+                                    $$SchematicNotesTableReferences
+                                        ._projectIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$SchematicNotesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SchematicNotesTable,
+      SchematicNoteRow,
+      $$SchematicNotesTableFilterComposer,
+      $$SchematicNotesTableOrderingComposer,
+      $$SchematicNotesTableAnnotationComposer,
+      $$SchematicNotesTableCreateCompanionBuilder,
+      $$SchematicNotesTableUpdateCompanionBuilder,
+      (SchematicNoteRow, $$SchematicNotesTableReferences),
+      SchematicNoteRow,
+      PrefetchHooks Function({bool projectId})
+    >;
+typedef $$ProjectSettingsTableCreateCompanionBuilder =
+    ProjectSettingsCompanion Function({
+      required String projectId,
+      required String key,
+      required String value,
+      Value<int> rowid,
+    });
+typedef $$ProjectSettingsTableUpdateCompanionBuilder =
+    ProjectSettingsCompanion Function({
+      Value<String> projectId,
+      Value<String> key,
+      Value<String> value,
+      Value<int> rowid,
+    });
+
+final class $$ProjectSettingsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $ProjectSettingsTable,
+          ProjectSettingRow
+        > {
+  $$ProjectSettingsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $ProjectsTable _projectIdTable(_$AppDatabase db) =>
+      db.projects.createAlias(
+        $_aliasNameGenerator(db.projectSettings.projectId, db.projects.id),
+      );
+
+  $$ProjectsTableProcessedTableManager get projectId {
+    final $_column = $_itemColumn<String>('project_id')!;
+
+    final manager = $$ProjectsTableTableManager(
+      $_db,
+      $_db.projects,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_projectIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$ProjectSettingsTableFilterComposer
+    extends Composer<_$AppDatabase, $ProjectSettingsTable> {
+  $$ProjectSettingsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get key => $composableBuilder(
+    column: $table.key,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ProjectsTableFilterComposer get projectId {
+    final $$ProjectsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableFilterComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ProjectSettingsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ProjectSettingsTable> {
+  $$ProjectSettingsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get key => $composableBuilder(
+    column: $table.key,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ProjectsTableOrderingComposer get projectId {
+    final $$ProjectsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableOrderingComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ProjectSettingsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ProjectSettingsTable> {
+  $$ProjectSettingsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get key =>
+      $composableBuilder(column: $table.key, builder: (column) => column);
+
+  GeneratedColumn<String> get value =>
+      $composableBuilder(column: $table.value, builder: (column) => column);
+
+  $$ProjectsTableAnnotationComposer get projectId {
+    final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ProjectSettingsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ProjectSettingsTable,
+          ProjectSettingRow,
+          $$ProjectSettingsTableFilterComposer,
+          $$ProjectSettingsTableOrderingComposer,
+          $$ProjectSettingsTableAnnotationComposer,
+          $$ProjectSettingsTableCreateCompanionBuilder,
+          $$ProjectSettingsTableUpdateCompanionBuilder,
+          (ProjectSettingRow, $$ProjectSettingsTableReferences),
+          ProjectSettingRow,
+          PrefetchHooks Function({bool projectId})
+        > {
+  $$ProjectSettingsTableTableManager(
+    _$AppDatabase db,
+    $ProjectSettingsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ProjectSettingsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ProjectSettingsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ProjectSettingsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> projectId = const Value.absent(),
+                Value<String> key = const Value.absent(),
+                Value<String> value = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ProjectSettingsCompanion(
+                projectId: projectId,
+                key: key,
+                value: value,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String projectId,
+                required String key,
+                required String value,
+                Value<int> rowid = const Value.absent(),
+              }) => ProjectSettingsCompanion.insert(
+                projectId: projectId,
+                key: key,
+                value: value,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$ProjectSettingsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({projectId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (projectId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.projectId,
+                                referencedTable:
+                                    $$ProjectSettingsTableReferences
+                                        ._projectIdTable(db),
+                                referencedColumn:
+                                    $$ProjectSettingsTableReferences
+                                        ._projectIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$ProjectSettingsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ProjectSettingsTable,
+      ProjectSettingRow,
+      $$ProjectSettingsTableFilterComposer,
+      $$ProjectSettingsTableOrderingComposer,
+      $$ProjectSettingsTableAnnotationComposer,
+      $$ProjectSettingsTableCreateCompanionBuilder,
+      $$ProjectSettingsTableUpdateCompanionBuilder,
+      (ProjectSettingRow, $$ProjectSettingsTableReferences),
+      ProjectSettingRow,
+      PrefetchHooks Function({bool projectId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -23441,4 +26481,10 @@ class $AppDatabaseManager {
       $$BoardTextsTableTableManager(_db, _db.boardTexts);
   $$AppSettingsTableTableManager get appSettings =>
       $$AppSettingsTableTableManager(_db, _db.appSettings);
+  $$ProjectSnapshotsTableTableManager get projectSnapshots =>
+      $$ProjectSnapshotsTableTableManager(_db, _db.projectSnapshots);
+  $$SchematicNotesTableTableManager get schematicNotes =>
+      $$SchematicNotesTableTableManager(_db, _db.schematicNotes);
+  $$ProjectSettingsTableTableManager get projectSettings =>
+      $$ProjectSettingsTableTableManager(_db, _db.projectSettings);
 }

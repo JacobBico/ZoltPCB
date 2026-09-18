@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'board_layer.dart';
 import 'board_outline.dart';
+import 'stackup.dart';
 
 /// The manufacturing constraints a board is drawn against.
 ///
@@ -84,10 +85,44 @@ class Board {
     this.outlinePoints = const [],
     this.trackWidths = const [],
     this.viaSizes = const [],
-  });
+    this.copperLayerCount = 2,
+    this.thickness = 1.6,
+    Stackup? customStackup,
+  }) : _stackup = customStackup;
 
   final String id;
   final String projectId;
+
+  /// How many copper layers the board is built with: 2, 4, 6 or 8.
+  final int copperLayerCount;
+
+  /// Finished thickness, in millimetres.
+  final double thickness;
+
+  final Stackup? _stackup;
+
+  /// Whether the build has been set up by hand rather than worked out.
+  bool get hasCustomStackup => _stackup != null;
+
+  /// The layer build-up: what was set up, or the standard build for this
+  /// many layers at this thickness.
+  Stackup get stackup =>
+      _stackup ??
+      Stackup.standard(layerCount: copperLayerCount, thickness: thickness);
+
+  /// The copper layers, top to bottom.
+  List<CopperLayer> get copperLayers => CopperLayer.stack(copperLayerCount);
+
+  /// The layer after [layer] going down the board, wrapping back to the
+  /// top — what the routing layer button steps through.
+  CopperLayer nextLayer(CopperLayer layer) {
+    final layers = copperLayers;
+    final index = layers.indexOf(layer);
+    return layers[(index + 1) % layers.length];
+  }
+
+  /// Whether [layer] exists on this board.
+  bool hasLayer(CopperLayer layer) => copperLayers.contains(layer);
 
   /// The outline's bounding box, in board millimetres.
   final double outlineX;
@@ -132,6 +167,9 @@ class Board {
     viaSizes: viaSizes,
     gridMm: gridMm,
     modifiedAt: modifiedAt,
+    copperLayerCount: copperLayerCount,
+    thickness: thickness,
+    customStackup: _stackup,
   );
 
   final DesignRules rules;
@@ -181,6 +219,10 @@ class Board {
     List<double>? trackWidths,
     List<ViaSize>? viaSizes,
     double? gridMm,
+    int? copperLayerCount,
+    double? thickness,
+    Stackup? stackup,
+    bool clearStackup = false,
   }) => Board(
     id: id,
     projectId: projectId,
@@ -195,6 +237,9 @@ class Board {
     viaSizes: viaSizes ?? this.viaSizes,
     gridMm: gridMm ?? this.gridMm,
     modifiedAt: modifiedAt,
+    copperLayerCount: copperLayerCount ?? this.copperLayerCount,
+    thickness: thickness ?? this.thickness,
+    customStackup: clearStackup ? null : (stackup ?? _stackup),
   );
 }
 

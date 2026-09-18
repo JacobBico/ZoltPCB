@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/appearance.dart';
+import '../../app/cross_probe.dart';
 import '../../app/providers.dart';
 import '../../core/theme/kicad_palette.dart';
 import '../../core/util/formatting.dart';
@@ -13,6 +14,7 @@ import '../board/board_panel.dart';
 import '../board/precision_board_panel.dart';
 import '../production/production_panel.dart';
 import '../projects/project_editor_dialog.dart';
+import 'backup_actions.dart';
 import 'components_panel.dart';
 import 'export_panel.dart';
 import 'nets_panel.dart';
@@ -70,6 +72,15 @@ class _ProjectScreenState extends ConsumerState<ProjectScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // A probe from one editor opens the other; the editor picks the probe
+    // up itself once it is showing.
+    ref.listen(crossProbeProvider, (_, request) {
+      if (request == null) return;
+      final section = request.target == ProbeTarget.board
+          ? ProjectSection.board
+          : ProjectSection.schematic;
+      if (section != _section) setState(() => _section = section);
+    });
     final project = ref.watch(projectProvider(widget.projectId));
     final loaded = project.value;
     final parts = ref.watch(projectPartsProvider(widget.projectId)).value;
@@ -89,7 +100,18 @@ class _ProjectScreenState extends ConsumerState<ProjectScreen> {
               tooltip: _railOpen ? 'Close sections' : 'Sections',
               onPressed: () => setState(() => _railOpen = !_railOpen),
             ),
-            actions: [if (loaded != null) _action(loaded)],
+            actions: [
+              // Snapshots belong to the whole project, so they are on the
+              // bar every section shares rather than in any one of them.
+              if (loaded != null)
+                IconButton(
+                  key: const ValueKey('snapshots-button'),
+                  tooltip: 'Snapshots',
+                  icon: const Icon(Icons.history, size: 20),
+                  onPressed: () => showSnapshotsDialog(context, loaded),
+                ),
+              if (loaded != null) _action(loaded),
+            ],
           ),
           Expanded(
             child: SafeArea(

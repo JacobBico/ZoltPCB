@@ -51,6 +51,18 @@ abstract final class KicadPalette {
   static Color get boardGrid => current.boardGrid;
   static Color get frontCopper => current.frontCopper;
   static Color get backCopper => current.backCopper;
+
+  /// Inner copper, In1 to In6. KiCad's own defaults, the same in every
+  /// palette: an inner layer is never the one a theme is chosen for, and
+  /// keeping them fixed keeps them told apart.
+  static const innerCopper = [
+    Color(0xFFC2C200),
+    Color(0xFFCE7D2C),
+    Color(0xFF4FCBCB),
+    Color(0xFFDB628B),
+    Color(0xFFA7A5C6),
+    Color(0xFF28CCD9),
+  ];
   static Color get padThroughHole => current.padThroughHole;
   static Color get drill => current.drill;
   static Color get silkscreen => current.silkscreen;

@@ -135,6 +135,17 @@ class _ProductionPanelState extends ConsumerState<ProductionPanel> {
         image: read('-B_Paste.gbr'),
         front: false,
       ),
+      // Inner copper, bottom up so the stack draws the way it is pressed.
+      // Hidden to begin with: the view opens on the board as it arrives,
+      // and the inner layers are inside it.
+      for (final layer in scene.board.copperLayers.reversed)
+        if (layer.isInner)
+          _Layer(
+            file: named('-${layer.layer.token.replaceAll('.', '_')}.gbr'),
+            label: '${layer.label} copper',
+            color: KicadPalette.innerCopper[layer.index - 1],
+            image: read('-${layer.layer.token.replaceAll('.', '_')}.gbr'),
+          ),
       _Layer(
         file: named('-F_Cu.gbr'),
         label: 'Top copper',
@@ -183,7 +194,9 @@ class _ProductionPanelState extends ConsumerState<ProductionPanel> {
       // Opens looking at the top of the board, as it will arrive.
       _hidden.addAll({
         for (final layer in _layers)
-          if (layer.front == false || layer.file.name.contains('Paste'))
+          if (layer.front == false ||
+              layer.file.name.contains('Paste') ||
+              layer.file.name.contains('-In'))
             layer.file.name,
       });
     }
@@ -236,8 +249,14 @@ class _ProductionPanelState extends ConsumerState<ProductionPanel> {
               child: Wrap(
                 spacing: 6,
                 children: [
-                  _preset('Top', (l) => l.front != false),
-                  _preset('Bottom', (l) => l.front != true),
+                  _preset(
+                    'Top',
+                    (l) => l.front != false && !l.file.name.contains('-In'),
+                  ),
+                  _preset(
+                    'Bottom',
+                    (l) => l.front != true && !l.file.name.contains('-In'),
+                  ),
                   _preset('All', (_) => true),
                   ActionChip(
                     avatar: const Icon(Icons.fit_screen, size: 16),

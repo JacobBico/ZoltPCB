@@ -23,10 +23,6 @@ class BoardWriter {
   /// KiCad 9's board format. Version 10 opens these unchanged.
   static const kicad9FormatVersion = 20241229;
 
-  /// Standard board thickness, in millimetres. Not adjustable in the app:
-  /// it changes nothing about a layout and every fabricator defaults to it.
-  static const boardThicknessMm = 1.6;
-
   final int formatVersion;
   final SExprWriter writer;
 
@@ -41,7 +37,7 @@ class BoardWriter {
       SList([SAtom('generator'), S.text(document.generator)]),
       SList([SAtom('generator_version'), S.text(document.generatorVersion)]),
       S.list('general', [
-        S.of('thickness', [boardThicknessMm]),
+        S.of('thickness', [_mm(document.board.stackup.thickness)]),
         S.flag('legacy_teardrops', false),
       ]),
       SList([SAtom('paper'), S.text(document.project.paper.kicadName)]),
@@ -50,7 +46,7 @@ class BoardWriter {
         SList([SAtom('rev'), S.text(document.project.revision)]),
         SList([SAtom('company'), S.text(document.project.company)]),
       ]),
-      _layers(),
+      _layers(document.board.stackup),
       _setup(document),
       ..._nets(document, netNumbers),
       ..._footprints(document, netNumbers),
@@ -63,14 +59,19 @@ class BoardWriter {
     ]);
   }
 
-  /// The layer table for a two-layer board.
+  /// The layer table: the board's copper, top to bottom, then the rest.
   ///
   /// The numbering is KiCad's own and is not free to invent: a board file
   /// whose layer indices disagree with the ones KiCad expects opens with
-  /// its copper on the wrong side.
-  SList _layers() => S.list('layers', [
-    SList([SAtom('0'), S.text('F.Cu'), SAtom('signal')]),
-    SList([SAtom('2'), S.text('B.Cu'), SAtom('signal')]),
+  /// its copper on the wrong side. A plane is written as KiCad's `power`
+  /// layer, which is what its own stackup editor calls one.
+  SList _layers(Stackup stackup) => S.list('layers', [
+    for (final copper in stackup.copper)
+      SList([
+        SAtom('${copper.layer.kicadIndex}'),
+        S.text(copper.layer.layer.token),
+        SAtom(copper.role.kicadType),
+      ]),
     SList([SAtom('9'), S.text('F.Adhes'), SAtom('user'), S.text('F.Adhesive')]),
     SList([
       SAtom('11'),
@@ -143,6 +144,7 @@ class BoardWriter {
   /// inventing board-file keys for them produces a file KiCad refuses to
   /// open at all. [BoardProjectWriter] writes them where they belong.
   SList _setup(BoardDocument document) => S.list('setup', [
+    stackupNode(document.board.stackup),
     S.of('pad_to_mask_clearance', [0]),
     S.flag('allow_soldermask_bridges_in_footprints', false),
     S.of('aux_axis_origin', [
@@ -150,6 +152,146 @@ class BoardWriter {
       document.scene.outlineBounds.top,
     ]),
   ]);
+
+  /// The physical build, the way KiCad's Board Setup writes it: every
+  /// layer from the top silkscreen down, dielectrics named `dielectric 1`
+  /// onwards. What a fab quotes a controlled-impedance order from.
+  static SList stackupNode(Stackup stackup) {
+    SList copper(StackupCopper c) => S.list('layer', [
+      S.text(c.layer.layer.token),
+      SList([SAtom('type'), S.text('copper')]),
+      S.of('thickness', [_mm(c.thickness)]),
+    ]);
+
+    return S.list('stackup', [
+      SList([
+        SAtom('layer'),
+        S.text('F.SilkS'),
+        SList([SAtom('type'), S.text('Top Silk Screen')]),
+      ]),
+      SList([
+        SAtom('layer'),
+        S.text('F.Paste'),
+        SList([SAtom('type'), S.text('Top Solder Paste')]),
+      ]),
+      SList([
+        SAtom('layer'),
+        S.text('F.Mask'),
+        SList([SAtom('type'), S.text('Top Solder Mask')]),
+        S.of('thickness', [_mm(stackup.maskThickness)]),
+      ]),
+      for (var i = 0; i < stackup.copper.length; i++) ...[
+        copper(stackup.copper[i]),
+        if (i < stackup.dielectrics.length)
+          SList([
+            SAtom('layer'),
+            S.text('dielectric ${i + 1}'),
+            SList([SAtom('type'), S.text(stackup.dielectrics[i].kind.name)]),
+            S.of('thickness', [_mm(stackup.dielectrics[i].thickness)]),
+            SList([SAtom('material'), S.text(stackup.dielectrics[i].material)]),
+            S.of('epsilon_r', [stackup.dielectrics[i].epsilonR]),
+            S.of('loss_tangent', [stackup.dielectrics[i].lossTangent]),
+          ]),
+      ],
+      SList([
+        SAtom('layer'),
+        S.text('B.Mask'),
+        SList([SAtom('type'), S.text('Bottom Solder Mask')]),
+        S.of('thickness', [_mm(stackup.maskThickness)]),
+      ]),
+      SList([
+        SAtom('layer'),
+        S.text('B.Paste'),
+        SList([SAtom('type'), S.text('Bottom Solder Paste')]),
+      ]),
+      SList([
+        SAtom('layer'),
+        S.text('B.SilkS'),
+        SList([SAtom('type'), S.text('Bottom Silk Screen')]),
+      ]),
+      SList([SAtom('copper_finish'), S.text('None')]),
+      S.flag('dielectric_constraints', false),
+    ]);
+  }
+
+  /// Reads a board file's build back: its copper layer count, and the
+  /// stackup if the file has one that matches it. Null when the file says
+  /// nothing more than a two-layer default would.
+  static ({int layerCount, double? thickness, Stackup? stackup}) readBuild(
+    SList root,
+  ) {
+    final copperTokens = <String>[];
+    final roles = <String, LayerRole>{};
+    for (final layer in root.child('layers')?.lists ?? const <SList>[]) {
+      final token = layer.atom(1);
+      if (token == null || CopperLayer.fromToken(token) == null) continue;
+      copperTokens.add(token);
+      roles[token] = switch (layer.atom(2)) {
+        'power' => LayerRole.plane,
+        'mixed' => LayerRole.mixed,
+        _ => LayerRole.signal,
+      };
+    }
+    final count = CopperLayer.layerCounts.contains(copperTokens.length)
+        ? copperTokens.length
+        : 2;
+    final thickness = root.child('general')?.childNumber('thickness');
+
+    final node = root.child('setup')?.child('stackup');
+    if (node == null) {
+      return (layerCount: count, thickness: thickness, stackup: null);
+    }
+    final copper = <StackupCopper>[];
+    final dielectrics = <StackupDielectric>[];
+    var mask = 0.01;
+    for (final layer in node.children('layer')) {
+      final name = layer.atom(1) ?? '';
+      final type = layer.child('type')?.atom(1) ?? '';
+      final thick = layer.childNumber('thickness');
+      final copperLayer = CopperLayer.fromToken(name);
+      if (copperLayer != null) {
+        copper.add(
+          StackupCopper(
+            layer: copperLayer,
+            thickness: thick ?? 0.035,
+            role: roles[name] ?? LayerRole.signal,
+          ),
+        );
+      } else if (name.startsWith('dielectric')) {
+        dielectrics.add(
+          StackupDielectric(
+            thickness: thick ?? 0.2,
+            kind: type == 'prepreg'
+                ? DielectricKind.prepreg
+                : DielectricKind.core,
+            epsilonR: layer.childNumber('epsilon_r') ?? 4.5,
+            lossTangent: layer.childNumber('loss_tangent') ?? 0.02,
+            material: layer.child('material')?.atom(1) ?? 'FR4',
+          ),
+        );
+      } else if (type.contains('Solder Mask') && thick != null) {
+        mask = thick;
+      }
+    }
+    final ok =
+        copper.length == count &&
+        dielectrics.length == count - 1 &&
+        copper.map((c) => c.layer).toList().toString() ==
+            CopperLayer.stack(count).toString();
+    return (
+      layerCount: count,
+      thickness: thickness,
+      stackup: ok
+          ? Stackup(
+              copper: copper,
+              dielectrics: dielectrics,
+              maskThickness: mask,
+            )
+          : null,
+    );
+  }
+
+  static double _mm(double value) => (value * 10000).roundToDouble() / 10000;
 
   // --- nets ------------------------------------------------------------
 

@@ -6,10 +6,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/db/database.dart';
 import '../data/repositories/net_repository.dart';
+import '../data/repositories/note_repository.dart';
 import '../data/repositories/part_repository.dart';
 import '../data/export/project_exporter.dart';
 import '../data/repositories/project_repository.dart';
 import '../data/repositories/board_repository.dart';
+import '../data/repositories/board_sync.dart';
+import '../data/repositories/snapshot_repository.dart';
+import '../data/repositories/project_settings_repository.dart';
+import '../domain/erc/erc.dart';
+import '../data/archive/project_archive.dart';
 import '../data/repositories/footprint_library_repository.dart';
 import '../data/repositories/symbol_library_repository.dart';
 import '../data/libraries/library_file_storage.dart';
@@ -43,6 +49,17 @@ final schematicWiresProvider =
     StreamProvider.family<List<SchematicWire>, String>(
       (ref, projectId) =>
           ref.watch(netRepositoryProvider).watchWires(projectId),
+      isAutoDispose: true,
+    );
+
+final noteRepositoryProvider = Provider<NoteRepository>(
+  (ref) => NoteRepository(ref.watch(databaseProvider)),
+);
+
+/// Text and boxes on a project's schematic sheet.
+final schematicNotesProvider =
+    StreamProvider.family<List<SchematicNote>, String>(
+      (ref, projectId) => ref.watch(noteRepositoryProvider).watch(projectId),
       isAutoDispose: true,
     );
 
@@ -329,6 +346,59 @@ final boardZonesProvider = StreamProvider.family<List<BoardZone>, String>(
   isAutoDispose: true,
 );
 
+/// Brings a board up to date with its schematic.
+final boardSyncProvider = Provider<BoardSync>(
+  (ref) => BoardSync(
+    parts: ref.watch(partRepositoryProvider),
+    boards: ref.watch(boardRepositoryProvider),
+    footprints: ref.watch(footprintLibraryRepositoryProvider),
+  ),
+);
+
+/// What updating the board from the schematic would do right now — worked
+/// out again whenever either side changes, so the board can say when it
+/// has fallen behind.
+final boardSyncPlanProvider = FutureProvider.family<BoardSyncPlan, String>((
+  ref,
+  projectId,
+) async {
+  ref.watch(projectPartsProvider(projectId));
+  ref.watch(boardFootprintsProvider(projectId));
+  ref.watch(boardTracksProvider(projectId));
+  ref.watch(footprintLibrariesProvider);
+  return ref.watch(boardSyncProvider).plan(projectId);
+}, isAutoDispose: true);
+
+/// Named save points, and restoring them.
+final snapshotRepositoryProvider = Provider<SnapshotRepository>(
+  (ref) => SnapshotRepository(ref.watch(databaseProvider)),
+);
+
+final projectSnapshotsProvider =
+    StreamProvider.family<List<ProjectSnapshot>, String>(
+      (ref, projectId) =>
+          ref.watch(snapshotRepositoryProvider).watch(projectId),
+      isAutoDispose: true,
+    );
+
+final projectSettingsRepositoryProvider = Provider<ProjectSettingsRepository>(
+  (ref) => ProjectSettingsRepository(ref.watch(databaseProvider)),
+);
+
+/// Which electrical checks a project cares about, and how much.
+final ercSettingsProvider = StreamProvider.family<ErcSettings, String>(
+  (ref, projectId) => ref
+      .watch(projectSettingsRepositoryProvider)
+      .watchAll(projectId)
+      .map(ErcSettings.fromSettings),
+  isAutoDispose: true,
+);
+
+/// Reads whole projects in and out, for backups.
+final projectArchiverProvider = Provider<ProjectArchiver>(
+  (ref) => ProjectArchiver(ref.watch(databaseProvider)),
+);
+
 /// The copper layer routing is currently happening on.
 final activeLayerProvider = NotifierProvider<ActiveLayer, CopperLayer>(
   ActiveLayer.new,
@@ -342,6 +412,12 @@ class ActiveLayer extends Notifier<CopperLayer> {
   void set(CopperLayer layer) => state = layer;
 
   void toggle() => state = state.other;
+
+  /// Steps down the board's copper, wrapping at the bottom — the layer
+  /// button on a board with more than two.
+  void next(Board board) => state = board.nextLayer(
+    board.hasLayer(state) ? state : CopperLayer.front,
+  );
 }
 
 /// Where exported files are written on the device.
@@ -357,6 +433,7 @@ final projectExporterProvider = Provider<ProjectExporter>(
     libraries: ref.watch(symbolLibraryRepositoryProvider),
     boards: ref.watch(boardRepositoryProvider),
     footprints: ref.watch(footprintLibraryRepositoryProvider),
+    notes: ref.watch(noteRepositoryProvider),
     outputDirectory: ref.watch(exportDirectoryProvider),
   ),
 );

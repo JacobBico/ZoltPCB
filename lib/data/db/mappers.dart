@@ -85,6 +85,11 @@ extension NetRowMapper on NetRow {
 }
 
 extension NetNodeRowMapper on NetNodeRow {
-  NetNode toDomain() =>
-      NetNode(id: id, netId: netId, partPinId: partPinId, createdAt: createdAt);
+  NetNode toDomain() => NetNode(
+    id: id,
+    netId: netId,
+    partPinId: partPinId,
+    createdAt: createdAt,
+    labelled: labelled,
+  );
 }

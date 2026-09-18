@@ -185,6 +185,12 @@ class BoardScene {
   NetClass? classOf(String? netId) =>
       netId == null ? null : netClassByNet[netId];
 
+  /// The width a new track on [netId] is drawn at on [layer]: its class's,
+  /// worked out from the stackup if the class is an impedance, or the
+  /// design rule.
+  double trackWidthFor(String? netId, CopperLayer layer) =>
+      classOf(netId)?.widthOn(board.stackup, layer) ?? board.rules.trackWidth;
+
   /// The gap copper on [netId] needs from other nets: the design rule, or
   /// the net's class clearance where that is wider.
   double clearanceFor(String? netId) {
@@ -534,9 +540,13 @@ class BoardScene {
     for (final via in vias) {
       if (via.netId != netId) continue;
       final at = Offset(via.x, via.y);
-      union(pointNode(at, CopperLayer.front), pointNode(at, CopperLayer.back));
-      bindToPads(at, CopperLayer.front);
-      bindToPads(at, CopperLayer.back);
+      // A via is a plated hole through every layer: it joins all of them
+      // at its own point. Layers the board does not have carry no copper,
+      // so joining them too costs nothing.
+      for (final layer in CopperLayer.values) {
+        union(pointNode(at, CopperLayer.front), pointNode(at, layer));
+        bindToPads(at, layer);
+      }
 
       // A track ending anywhere inside the via's barrel reaches it, the
       // same way a track ending inside a pad reaches the pad.
@@ -634,10 +644,10 @@ class BoardScene {
 
     for (final via in vias) {
       final at = Offset(via.x, via.y);
-      union('via:${via.id}', pointNode(at, CopperLayer.front));
-      union('via:${via.id}', pointNode(at, CopperLayer.back));
-      bindToPads(at, CopperLayer.front);
-      bindToPads(at, CopperLayer.back);
+      for (final layer in CopperLayer.values) {
+        union('via:${via.id}', pointNode(at, layer));
+        bindToPads(at, layer);
+      }
       for (final track in tracks) {
         for (final end in [
           Offset(track.startX, track.startY),

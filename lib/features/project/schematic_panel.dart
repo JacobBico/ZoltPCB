@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/appearance.dart';
+import '../../app/cross_probe.dart';
 import '../../app/edit_history.dart';
 import '../../app/providers.dart';
 import '../../data/repositories/circuit_paster.dart';
@@ -15,6 +16,9 @@ import '../../domain/geometry/polyline_wiring.dart';
 import '../../domain/geometry/segment_wiring.dart';
 import '../../domain/symbols/mcu_essentials.dart';
 import '../../domain/erc/erc.dart';
+import 'bulk_edit_dialog.dart';
+import 'pin_labels_dialog.dart';
+import 'note_dialog.dart';
 import 'erc_sheet.dart';
 import 'power_symbol_sidebar.dart';
 import 'starter_circuit.dart';
@@ -163,6 +167,9 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   Object? _tidiedWires;
   bool _tidying = false;
 
+  /// The drawn wires last checked for one running through a junction.
+  Object? _junctionsCheckedFor;
+
   /// Corners tapped out so far for the wire being drawn from the pending
   /// pin, in sheet millimetres.
   List<Offset> _wireCorners = const [];
@@ -183,6 +190,15 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   // gesture, not one per frame.
   NetLabel? _candidateLabel;
   Offset? _draggingLabelAt;
+
+  /// The sheet's notes, as last built.
+  List<SchematicNote> _notes = const [];
+
+  /// The note picked by a tap, and the one being dragged with where it
+  /// has got to.
+  String? _selectedNoteId;
+  SchematicNote? _candidateNote;
+  Offset? _draggingNoteAt;
   Offset _gestureStartLocal = Offset.zero;
   Offset _dragStartSheet = Offset.zero;
   Offset _dragOriginalPosition = Offset.zero;
@@ -304,6 +320,11 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => _tidyIntoSegments(drawn, tidied),
       );
+    } else if (!identical(drawn, _junctionsCheckedFor)) {
+      _junctionsCheckedFor = drawn;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _splitStoredJunctions(drawn),
+      );
     }
 
     final draggingLabel = _candidateLabel;
@@ -311,6 +332,19 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     if (draggingLabel != null && labelAt != null) {
       scene = scene.withLabelMoved(draggingLabel.netId, labelAt);
     }
+
+    final notes =
+        ref.watch(schematicNotesProvider(widget.project.id)).value ??
+        const <SchematicNote>[];
+    final movingNote = _candidateNote;
+    final noteAt = _draggingNoteAt;
+    _notes = [
+      for (final note in notes)
+        if (movingNote != null && noteAt != null && note.id == movingNote.id)
+          note.copyWith(position: noteAt)
+        else
+          note,
+    ];
 
     final pickerOpen = ref.watch(componentPickerOpenProvider);
 
@@ -600,8 +634,51 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     );
   }
 
+  /// Acts on a probe sent from the board, once the sheet is laid out.
+  void _takeProbe() {
+    if (ref.read(crossProbeProvider)?.target != ProbeTarget.schematic) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _scene == null || _viewport == null) return;
+      final request = ref
+          .read(crossProbeProvider.notifier)
+          .take(ProbeTarget.schematic);
+      if (request == null) return;
+      if (request.partId != null) {
+        _showPart(request.partId, request.netId);
+        return;
+      }
+      final netId = request.netId;
+      final pins = netId == null ? null : _scene!.pinsByNet[netId];
+      if (pins == null || pins.isEmpty) {
+        _notify('That net is not on the schematic');
+        return;
+      }
+      final viewport = _viewport!;
+      final centre = pins.first.sheetPosition;
+      setState(() {
+        _selectedUnitId = null;
+        _highlightedNetId = netId;
+        _viewport = viewport.copyWith(
+          origin: Offset(
+            _canvasSize.width / 2 - centre.dx * viewport.pixelsPerMm,
+            _canvasSize.height / 2 - centre.dy * viewport.pixelsPerMm,
+          ),
+        );
+      });
+    });
+  }
+
+  /// Shows [partId] or [netId] on the board.
+  void _probeBoard({String? partId, String? netId}) => ref
+      .read(crossProbeProvider.notifier)
+      .send(
+        ProbeRequest(target: ProbeTarget.board, partId: partId, netId: netId),
+      );
+
   Widget _canvas(SchematicScene scene) {
     _scene = scene;
+    ref.watch(crossProbeProvider);
+    _takeProbe();
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
@@ -645,6 +722,8 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
                         pendingPinId: ref.watch(pendingPinProvider),
                         pendingWire: _pendingWire(scene),
                         highlightedNetId: _highlightedNetId,
+                        notes: _notes,
+                        selectedNoteId: _selectedNoteId,
                         zigzagResistors:
                             ref.watch(appearanceProvider).resistorStyle ==
                             ResistorStyle.ansi,
@@ -707,6 +786,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     if (_selectedUnitId case final id?) return 'unit:$id';
     if (_selectedWireKey case final key?) return 'wire:$key';
     if (_selectedLabelNetId case final id?) return 'label:$id';
+    if (_selectedNoteId case final id?) return 'note:$id';
     if (ref.read(pendingPinProvider) case final id?) return 'pin:$id';
     return null;
   }
@@ -750,6 +830,11 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
             label: 'Rotate',
             icon: Icons.rotate_90_degrees_ccw_outlined,
             onPressed: () => _rotateGroup(scene, group),
+          ),
+          CanvasAction(
+            label: 'Edit',
+            icon: Icons.edit_note,
+            onPressed: group.isEmpty ? null : () => _bulkEdit(group),
           ),
           CanvasAction(
             label: 'Copy',
@@ -816,6 +901,24 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
         final net = scene.nets.where((n) => n.net.id == wire.netId).firstOrNull;
         title = net?.displayName ?? 'Wire';
         actions.addAll(_wireActions(wire, net, _selectedWireRun));
+      } else if (_notes.where((n) => n.id == _selectedNoteId).firstOrNull
+          case final note?) {
+        title = note.kind == NoteKind.box
+            ? 'Box — drag to move'
+            : 'Note — drag to move';
+        actions.addAll([
+          CanvasAction(
+            label: 'Edit',
+            icon: Icons.edit_outlined,
+            onPressed: () => _editNote(note),
+          ),
+          CanvasAction(
+            label: 'Delete',
+            icon: Icons.delete_outline,
+            danger: true,
+            onPressed: () => _deleteNote(note),
+          ),
+        ]);
       }
     }
 
@@ -842,6 +945,11 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
           label: 'Select',
           icon: Icons.highlight_alt,
           onPressed: _toggleBoxSelect,
+        ),
+        CanvasAction(
+          label: 'Note',
+          icon: Icons.sticky_note_2_outlined,
+          onPressed: () => _addNote(scene),
         ),
         if (clipboard != null)
           CanvasAction(
@@ -911,6 +1019,11 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       onPressed: net == null ? null : () => _labelNet(net),
     ),
     CanvasAction(
+      label: 'On board',
+      icon: Icons.developer_board,
+      onPressed: () => _probeBoard(netId: label.netId),
+    ),
+    CanvasAction(
       label: 'Snap back',
       icon: Icons.restart_alt,
       onPressed: label.pinned ? () => _resetLabel(label) : null,
@@ -972,6 +1085,11 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       label: 'Label',
       icon: Icons.label_outline,
       onPressed: net == null ? null : () => _labelNet(net),
+    ),
+    CanvasAction(
+      label: 'On board',
+      icon: Icons.developer_board,
+      onPressed: () => _probeBoard(netId: wire.netId),
     ),
     CanvasAction(
       label: 'Cut',
@@ -1098,6 +1216,14 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
         icon: Icons.developer_board,
         onPressed: () => _showPinFunctions(unit, symbol),
       ),
+    // Worth offering only where there are pins enough to label in bulk.
+    if (unit.pins.length > 2 &&
+        !SchematicScene.isPowerReference(unit.part.reference))
+      CanvasAction(
+        label: 'Labels',
+        icon: Icons.label_outline,
+        onPressed: () => _labelPins(unit),
+      ),
     CanvasAction(
       label: 'Rotate',
       icon: Icons.rotate_90_degrees_ccw_outlined,
@@ -1113,6 +1239,12 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       icon: Icons.copy_all_outlined,
       onPressed: () => _duplicate(unit),
     ),
+    if (unit.part.onBoard)
+      CanvasAction(
+        label: 'On board',
+        icon: Icons.developer_board,
+        onPressed: () => _probeBoard(partId: unit.part.id),
+      ),
     CanvasAction(
       label: 'Delete',
       icon: Icons.delete_outline,
@@ -1120,6 +1252,52 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       onPressed: () => _delete(unit),
     ),
   ];
+
+  /// Labels many of a part's pins at once. A label is a connection, so
+  /// the same names on another part wire the two together.
+  Future<void> _labelPins(PlacedUnit unit) async {
+    final parts = ref.read(projectPartsProvider(widget.project.id)).value;
+    final nets = ref.read(projectNetsProvider(widget.project.id)).value;
+    final part = parts?.where((p) => p.part.id == unit.part.id).firstOrNull;
+    if (part == null || nets == null) return;
+    final netNameByPin = <String, String>{
+      for (final net in nets)
+        if (net.net.isNamed)
+          for (final e in net.endpoints) e.pin.id: net.displayName,
+    };
+    final assignment = await showPinLabelsDialog(
+      context,
+      part: part,
+      netNameByPin: netNameByPin,
+    );
+    if (assignment == null || assignment.isEmpty || !mounted) return;
+
+    final repository = ref.read(netRepositoryProvider);
+    final projectId = widget.project.id;
+    // Everything a label might join: the pins themselves, and whatever
+    // already carries each name.
+    final touched = <String>{...assignment.keys};
+    for (final name in assignment.values.toSet()) {
+      touched.addAll(await repository.pinsNamed(projectId, name));
+    }
+    final before = await repository.capture(projectId, touched.toList());
+    Future<void> apply() async {
+      for (final entry in assignment.entries) {
+        await repository.labelPin(projectId, entry.key, entry.value);
+      }
+    }
+
+    await apply();
+    _record(
+      'Label ${assignment.length} pins of ${unit.part.reference}',
+      undo: () => repository.restore(before),
+      redo: apply,
+    );
+    _notify(
+      'Labelled ${assignment.length} pins — the same names elsewhere are '
+      'now wired to them',
+    );
+  }
 
   /// Runs the schematic check and shows what it found.
   Future<void> _check(SchematicScene scene) async {
@@ -1129,18 +1307,41 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     final placements = await ref
         .read(boardRepositoryProvider)
         .getFootprints(widget.project.id);
+    final settings = ErcSettings.fromSettings(
+      await ref
+          .read(projectSettingsRepositoryProvider)
+          .getAll(widget.project.id),
+    );
     if (!mounted) return;
     final violations = checkSchematic(
       parts: parts,
       nets: nets,
       partsWithBoardFootprint: {for (final p in placements) p.partId},
+      settings: settings,
     );
     await showErcSheet(
       context,
       violations: violations,
       onShow: (violation) => _showPart(violation.partId, violation.netId),
       onRenumber: _renumber,
+      onRules: () => _editErcRules(scene, settings),
+      ignoredRules: ErcRule.values
+          .where((r) => settings.levelOf(r) == ErcLevel.ignore)
+          .length,
     );
+  }
+
+  Future<void> _editErcRules(SchematicScene scene, ErcSettings before) async {
+    final after = await showErcRulesDialog(context, settings: before);
+    if (after == null || !mounted) return;
+    final repository = ref.read(projectSettingsRepositoryProvider);
+    await repository.setAll(widget.project.id, after.toSettings());
+    _record(
+      'Change the checks',
+      undo: () => repository.setAll(widget.project.id, before.toSettings()),
+      redo: () => repository.setAll(widget.project.id, after.toSettings()),
+    );
+    if (mounted) await _check(scene);
   }
 
   /// Selects a part and brings it to the middle of the view.
@@ -1336,6 +1537,34 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   }
 
   /// Copies a group with its wiring, ready to paste somewhere else.
+  /// One set of fields for every part in the group.
+  Future<void> _bulkEdit(List<PlacedUnit> group) async {
+    // A multi-unit part is one part, however many of its units are boxed.
+    final byId = {for (final unit in group) unit.part.id: unit.part};
+    final parts = byId.values.toList();
+    final edit = await showBulkEditDialog(context, parts: parts);
+    if (edit == null || edit.isEmpty || !mounted) return;
+    final repository = ref.read(partRepositoryProvider);
+    final after = [for (final p in parts) edit.applyTo(p)];
+    for (final part in after) {
+      await repository.updatePart(part);
+    }
+    _record(
+      'Edit ${parts.length} parts',
+      undo: () async {
+        for (final part in parts) {
+          await repository.updatePart(part);
+        }
+      },
+      redo: () async {
+        for (final part in after) {
+          await repository.updatePart(part);
+        }
+      },
+    );
+    _notify('Edited ${parts.length} parts');
+  }
+
   void _copyGroup(SchematicScene scene, List<PlacedUnit> group) {
     final parts = ref.read(projectPartsProvider(widget.project.id)).value;
     final nets = ref.read(projectNetsProvider(widget.project.id)).value;
@@ -1882,6 +2111,22 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
 
       final wireWins = wire != null && wireDistance < unitDistance;
 
+      // Notes lie under the circuit, so they are what a tap means only when
+      // it means nothing else.
+      if (unit == null && wire == null) {
+        final note = _noteAt(sheet, viewport);
+        setState(() {
+          _selectedNoteId = note?.id == _selectedNoteId ? null : note?.id;
+          _selectedUnitId = null;
+          _selectedWireKey = null;
+          _selectedWireRun = null;
+          _highlightedNetId = null;
+        });
+        if (note != null) return;
+      } else if (_selectedNoteId != null) {
+        _selectedNoteId = null;
+      }
+
       setState(() {
         // Tapping the selected symbol again lets go of it. Without a toggle
         // the only way to clear a selection is to find empty sheet, which on
@@ -2148,6 +2393,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     _dragNet = const [];
 
     _candidateLabel = null;
+    _candidateNote = null;
 
     if (details.pointerCount == 1) {
       // Decided where the finger landed, not where the recogniser caught
@@ -2157,10 +2403,21 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       // A label sits on top of everything and is the smallest thing on the
       // sheet you are meant to pick up, so it wins the touch outright.
       final label = _labelAt(scene, sheet);
-      if (label != null) {
+      // Only the net's own label moves; a repeat at another piece of the
+      // net stays where that piece is.
+      if (label != null && label.primary) {
         _candidateLabel = label;
         _dragStartSheet = sheet;
         _dragOriginalPosition = label.position;
+        return;
+      }
+
+      // A selected note moves under the finger that lands on it.
+      if (_notes.where((n) => n.id == _selectedNoteId).firstOrNull
+          case final note? when note.hit(sheet, _hitToleranceMm(viewport))) {
+        _candidateNote = note;
+        _dragStartSheet = sheet;
+        _dragOriginalPosition = note.position;
         return;
       }
 
@@ -2334,6 +2591,22 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
         _isDraggingUnit = true;
         _wireDragAt = pin?.sheetPosition ?? _snapToGrid(sheet);
       });
+      return;
+    }
+
+    if (_candidateNote != null && details.pointerCount == 1) {
+      final travelled = (details.localFocalPoint - _gestureStartLocal).distance;
+      if (!_isDraggingUnit && travelled > _dragSlopPx) {
+        setState(() => _isDraggingUnit = true);
+      }
+      if (_isDraggingUnit) {
+        final sheet = start.toSheet(details.localFocalPoint);
+        setState(() {
+          _draggingNoteAt = _snapToGrid(
+            _dragOriginalPosition + (sheet - _dragStartSheet),
+          );
+        });
+      }
       return;
     }
 
@@ -2528,6 +2801,8 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     final movedUnitId = _isDraggingUnit ? _candidateUnitId : null;
     final nudgedWire = _isDraggingUnit ? _candidateWire : null;
     final movedLabel = _isDraggingUnit ? _candidateLabel : null;
+    final movedNote = _isDraggingUnit ? _candidateNote : null;
+    _candidateNote = null;
 
     _candidateUnitId = null;
     _candidateWire = null;
@@ -2544,8 +2819,100 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
 
     _groupDragging = false;
     if (movedUnitId != null || movedGroup) _commitMove();
-    if (nudgedWire != null) _commitWireSlide(nudgedWire);
+    if (nudgedWire != null) _finishWireSlide(nudgedWire);
     if (movedLabel != null) _recordLabelMove(movedLabel);
+    if (movedNote != null) {
+      _recordNoteMove(movedNote);
+    } else if (_draggingNoteAt != null) {
+      setState(() => _draggingNoteAt = null);
+    }
+  }
+
+  // --- notes -----------------------------------------------------------
+
+  SchematicNote? _noteAt(Offset sheet, SchematicViewport viewport) {
+    final tolerance = math.max(0.8, 10 / viewport.pixelsPerMm);
+    for (final note in _notes.reversed) {
+      if (note.hit(sheet, tolerance)) return note;
+    }
+    return null;
+  }
+
+  Future<void> _addNote(SchematicScene scene) async {
+    final viewport = _viewport;
+    final result = await showNoteDialog(context);
+    if (result == null || !mounted) return;
+    // Where the user last tapped the sheet, or the middle of the view.
+    final at = _snapToGrid(
+      _lastTapSheet ??
+          (viewport == null
+              ? Offset.zero
+              : viewport.toSheet(
+                  Offset(_canvasSize.width / 2, _canvasSize.height / 2),
+                )),
+    );
+    final repository = ref.read(noteRepositoryProvider);
+    final note = await repository.add(
+      projectId: widget.project.id,
+      kind: result.kind,
+      content: result.content,
+      position: at,
+      size: result.size,
+      textSize: result.textSize,
+    );
+    if (!mounted) return;
+    setState(() => _selectedNoteId = note.id);
+    _record(
+      note.kind == NoteKind.box ? 'Add a box' : 'Add a note',
+      undo: () => repository.delete(note.id),
+      redo: () => repository.restore(note),
+    );
+  }
+
+  Future<void> _editNote(SchematicNote note) async {
+    final result = await showNoteDialog(context, existing: note);
+    if (result == null || !mounted) return;
+    final repository = ref.read(noteRepositoryProvider);
+    final after = note.copyWith(
+      kind: result.kind,
+      content: result.content,
+      size: result.size,
+      textSize: result.textSize,
+    );
+    await repository.update(after);
+    _record(
+      'Edit a note',
+      undo: () => repository.update(note),
+      redo: () => repository.update(after),
+    );
+  }
+
+  Future<void> _deleteNote(SchematicNote note) async {
+    final repository = ref.read(noteRepositoryProvider);
+    await repository.delete(note.id);
+    if (mounted) setState(() => _selectedNoteId = null);
+    _record(
+      'Delete a note',
+      undo: () => repository.restore(note),
+      redo: () => repository.delete(note.id),
+    );
+  }
+
+  Future<void> _recordNoteMove(SchematicNote note) async {
+    final after = _draggingNoteAt;
+    if (after == null || after == note.position) {
+      setState(() => _draggingNoteAt = null);
+      return;
+    }
+    final repository = ref.read(noteRepositoryProvider);
+    final moved = note.copyWith(position: after);
+    await repository.update(moved);
+    if (mounted) setState(() => _draggingNoteAt = null);
+    _record(
+      'Move a note',
+      undo: () => repository.update(note),
+      redo: () => repository.update(moved),
+    );
   }
 
   /// Writes a dragged label's new home, once, when the finger lifts.
@@ -2564,6 +2931,77 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       undo: () => repository.setNetLabelPosition(label.netId, before),
       redo: () => repository.setNetLabelPosition(label.netId, after),
     );
+  }
+
+  /// Puts a net's drawing into the shape the dragging rules expect: wires
+  /// shrunk to nothing gone, wires in a straight line one wire, every wire
+  /// ended at every junction, and nothing drawn twice.
+  ///
+  /// Joining straight runs can make a wire run through a junction again,
+  /// and dropping a duplicate can leave two runs meeting in a line, so the
+  /// steps go round until nothing changes.
+  Future<void> _tidyNet(String netId) async {
+    await _dropShrunkWires(netId);
+    for (var round = 0; round < 4; round++) {
+      final (joined, _) = await _mergeCollinear(netId);
+      final (cut, _) = await _splitAtJunctions(netId);
+      final dropped = await _dropCovered(netId);
+      if (joined.isEmpty && cut.isEmpty && dropped.isEmpty) break;
+    }
+  }
+
+  /// Takes away wires of [netId] lying entirely along others of the net.
+  ///
+  /// A wire dragged along the one it hangs off, with its end held at the
+  /// junction, turns a corner that runs back over wire already there. What
+  /// is drawn is the same with or without it, and two wires in one place
+  /// read as a fault — and are one when the sheet is exported. A wire on a
+  /// pin is never taken: it is what holds that pin.
+  Future<List<SchematicWire>> _dropCovered(String netId) async {
+    final repository = ref.read(netRepositoryProvider);
+    final removed = <SchematicWire>[];
+    var wires = [
+      for (final wire in await repository.getWires(widget.project.id))
+        if (wire.netId == netId) wire,
+    ];
+    var dropped = true;
+    while (dropped) {
+      dropped = false;
+      for (final wire in wires) {
+        if (wire.pinAId != null || wire.pinBId != null) continue;
+        final others = [
+          for (final other in wires)
+            if (other.id != wire.id) other.points,
+        ];
+        if (!_coveredBy(wire.points, others)) continue;
+        removed.add(wire);
+        await repository.deleteWire(wire.id);
+        wires = [
+          for (final other in wires)
+            if (other.id != wire.id) other,
+        ];
+        dropped = true;
+        break;
+      }
+    }
+    return removed;
+  }
+
+  /// Whether every bit of [points] lies on one of [others].
+  static bool _coveredBy(List<Offset> points, List<List<Offset>> others) {
+    for (var i = 0; i < points.length - 1; i++) {
+      final a = points[i];
+      final b = points[i + 1];
+      final length = (b - a).distance;
+      final steps = (length / 0.3).ceil().clamp(1, 2000);
+      for (var k = 0; k <= steps; k++) {
+        final at = Offset.lerp(a, b, k / steps)!;
+        if (!others.any((other) => PolylineWiring.covers(other, at))) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   /// Takes away wires of [netId] that have shrunk to nothing.
@@ -2601,55 +3039,95 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     final before = <SchematicWire>[];
     final added = <SchematicWire>[];
 
-    var wires = [
+    final wires = [
       for (final wire in await repository.getWires(widget.project.id))
         if (wire.netId == netId) wire,
     ];
-
-    var cut = true;
-    while (cut) {
-      cut = false;
-      outer:
-      for (final wire in wires) {
-        for (final other in wires) {
-          if (other.id == wire.id) continue;
-          for (final end in [other.points.first, other.points.last]) {
-            // Against its middle, not at one of its own corners.
-            if (wire.points.any((p) => (p - end).distance < 0.01)) continue;
-            if (!PolylineWiring.covers(wire.points, end)) continue;
-
-            final split = DrawnWireGeometry.splitAt(wire.points, end);
-            final at = split.indexWhere((p) => (p - end).distance < 0.01);
-            if (at <= 0 || at >= split.length - 1) continue;
-            final head = split.sublist(0, at + 1);
-            final tail = split.sublist(at);
-
-            before.add(wire);
-            await repository.updateWire(wire.copyWith(points: head));
-            await repository.setWireEnds(
-              wire.id,
-              pinAId: wire.pinAId,
-              pinBId: null,
-            );
-            final laid = await repository.addWire(
-              projectId: widget.project.id,
-              points: tail,
-              pinBId: wire.pinBId,
-              netId: netId,
-            );
-            if (laid != null) added.add(laid);
-
-            wires = [
-              for (final row in await repository.getWires(widget.project.id))
-                if (row.netId == netId) row,
-            ];
-            cut = true;
-            break outer;
-          }
-        }
+    // The rule itself lives with the rest of the dragging rules, so the
+    // canvas and their tests agree on where a wire ends.
+    final split = PolylineWiring.splitAtJunctions([
+      for (final wire in wires)
+        PolylineWire(
+          id: wire.id,
+          points: wire.points,
+          pinA: wire.pinAId,
+          pinB: wire.pinBId,
+        ),
+    ]);
+    for (final wire in wires) {
+      final pieces = [
+        for (final piece in split)
+          if (piece.id == wire.id || piece.id.startsWith('${wire.id}~')) piece,
+      ];
+      if (pieces.length < 2) continue;
+      final head = pieces.firstWhere((piece) => piece.id == wire.id);
+      before.add(wire);
+      await repository.updateWire(wire.copyWith(points: head.points));
+      await repository.setWireEnds(
+        wire.id,
+        pinAId: wire.pinAId,
+        pinBId: head.pinB,
+      );
+      for (final piece in pieces) {
+        if (piece.id == wire.id) continue;
+        final laid = await repository.addWire(
+          projectId: widget.project.id,
+          points: piece.points,
+          pinAId: piece.pinA,
+          pinBId: piece.pinB,
+          netId: netId,
+        );
+        if (laid != null) added.add(laid);
       }
     }
     return (before, added);
+  }
+
+  /// Nets holding a wire that runs straight through a junction — another
+  /// wire of the net ending on its middle rather than at one of its ends.
+  static Set<String> netsWithUnsplitJunctions(List<SchematicWire> wires) {
+    final byNet = <String, List<SchematicWire>>{};
+    for (final wire in wires) {
+      (byNet[wire.netId] ??= []).add(wire);
+    }
+    return {
+      for (final entry in byNet.entries)
+        if (PolylineWiring.splitAtJunctions([
+              for (final wire in entry.value)
+                PolylineWire(
+                  id: wire.id,
+                  points: wire.points,
+                  pinA: wire.pinAId,
+                  pinB: wire.pinBId,
+                ),
+            ]).length >
+            entry.value.length)
+          entry.key,
+    };
+  }
+
+  /// Splits every stored wire that runs straight through a junction.
+  ///
+  /// A junction is where wires end: two wires either side of one are two
+  /// wires, and dragging one leaves the junction, and the other, where
+  /// they are. A branch drawn in the app splits the wire it comes off
+  /// there and then; wires drawn before that, or brought in from a KiCad
+  /// file, a starter circuit or a paste, can still run through one, and
+  /// are split here as soon as the sheet sees them. The drawing looks the
+  /// same either way, so this is a repair rather than an edit, and is not
+  /// put on the undo list.
+  Future<void> _splitStoredJunctions(List<SchematicWire> drawn) async {
+    if (_tidying || _isDraggingUnit || _wireDragging) return;
+    final nets = netsWithUnsplitJunctions(drawn);
+    if (nets.isEmpty) return;
+    _tidying = true;
+    try {
+      for (final netId in nets) {
+        await _splitAtJunctions(netId);
+      }
+    } finally {
+      _tidying = false;
+    }
   }
 
   /// Joins wires of [netId] that meet end-to-end in a straight line.
@@ -3130,6 +3608,31 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   /// of it — the way dragging a wire works in KiCad. The ends are written
   /// too, so the wire stays where it was put instead of springing back to
   /// the pins it was first drawn between.
+  /// Writes a wire drag down, and whatever happens doing so, lets go of it.
+  ///
+  /// The dragged shape is drawn over the stored one until this clears it.
+  /// A write that failed part-way used to leave it there, so the wire sat
+  /// frozen where the finger left it and would not be dragged again.
+  Future<void> _finishWireSlide(WireRunHit hit) async {
+    try {
+      await _commitWireSlide(hit);
+    } catch (error) {
+      _notify('That move could not be saved: $error');
+    } finally {
+      if (mounted &&
+          (_draggingWireKey != null ||
+              _draggingWirePoints != null ||
+              _draggingNeighbours.isNotEmpty)) {
+        setState(() {
+          _draggingWireKey = null;
+          _draggingWirePoints = null;
+          _draggingNeighbours = const {};
+        });
+      }
+      _dragNet = const [];
+    }
+  }
+
   Future<void> _commitWireSlide(WireRunHit hit) async {
     if (_draggingSegments != null && _draggingSegmentNet != null) {
       final netId = _draggingSegmentNet!;
@@ -3341,53 +3844,22 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
 
     // Wires brought end to end in a straight line become one, and putting
     // that back is part of taking the move back.
-    var joinedBefore = const <SchematicWire>[];
-    var joinedAway = const <SchematicWire>[];
-    var splitBefore = const <SchematicWire>[];
-    var splitAdded = const <SchematicWire>[];
-    var shrunk = const <SchematicWire>[];
+    // The net's wires as they stood before tidying, which is what taking
+    // the tidying back puts back.
+    var untidied = const <SchematicWire>[];
 
     Future<void> join() async {
-      shrunk = await _dropShrunkWires(hit.wire.netId);
-      final (was, gone) = await _mergeCollinear(hit.wire.netId);
-      joinedBefore = was;
-      joinedAway = gone;
-      final (cut, pieces) = await _splitAtJunctions(hit.wire.netId);
-      splitBefore = cut;
-      splitAdded = pieces;
+      final netId = hit.wire.netId;
+      untidied = [
+        for (final wire in await repository.getWires(widget.project.id))
+          if (wire.netId == netId) wire,
+      ];
+      await _tidyNet(netId);
     }
 
     Future<void> unjoin() async {
-      for (final wire in splitAdded) {
-        await repository.deleteWire(wire.id);
-      }
-      for (final wire in splitBefore) {
-        await repository.updateWire(wire);
-        await repository.setWireEnds(
-          wire.id,
-          pinAId: wire.pinAId,
-          pinBId: wire.pinBId,
-        );
-      }
-      for (final wire in joinedAway) {
-        await repository.restoreWire(wire);
-      }
-      for (final wire in joinedBefore) {
-        await repository.updateWire(wire);
-        await repository.setWireEnds(
-          wire.id,
-          pinAId: wire.pinAId,
-          pinBId: wire.pinBId,
-        );
-      }
-      for (final wire in shrunk) {
-        await repository.restoreWire(wire);
-      }
-      splitBefore = const [];
-      splitAdded = const [];
-      joinedBefore = const [];
-      joinedAway = const [];
-      shrunk = const [];
+      await _restoreNetWires(hit.wire.netId, untidied);
+      untidied = const [];
     }
 
     if (drawnId != null) {

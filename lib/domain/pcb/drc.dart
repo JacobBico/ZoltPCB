@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'board_layer.dart';
 import 'board_scene.dart';
+import 'courtyard.dart';
 
 /// How much a rule violation matters.
 enum DrcSeverity {
@@ -23,7 +24,10 @@ enum DrcRule {
   offBoard('Outside the board'),
   unplaced('Not placed'),
   missingFootprint('No footprint'),
-  orphanCopper('Copper on no net');
+  orphanCopper('Copper on no net'),
+  courtyardOverlap('Courtyards overlap'),
+  courtyardOffBoard('Part off the board'),
+  missingLayer('No such layer');
 
   const DrcRule(this.label);
 
@@ -175,7 +179,79 @@ List<DrcViolation> checkBoard(BoardScene scene) {
     }
   }
 
+  // A track left on a layer the board no longer has — drawn on In3, then
+  // the board cut back to four layers — would simply vanish at the fab.
+  final layers = scene.board.copperLayers.toSet();
+  for (final track in scene.tracks) {
+    if (layers.contains(track.layer)) continue;
+    violations.add(
+      DrcViolation(
+        rule: DrcRule.missingLayer,
+        severity: DrcSeverity.error,
+        message:
+            'A track is on ${track.layer.label}, which this '
+            '${scene.board.copperLayerCount}-layer board does not have',
+        position: Offset(track.startX, track.startY),
+        netId: track.netId,
+      ),
+    );
+  }
+
   violations.addAll(_clearanceViolations(scene));
+  violations.addAll(courtyardViolations(scene));
+  return violations;
+}
+
+/// Parts that physically collide, and parts hanging off the board.
+///
+/// Compared courtyard to courtyard on the same side, the way KiCad does:
+/// a resistor on the back can sit under a chip on the front. A part with
+/// no courtyard drawn is not checked — there is nothing to check it with —
+/// rather than guessed at from its silkscreen.
+List<DrcViolation> courtyardViolations(BoardScene scene) {
+  final courtyards = Courtyard.of(scene);
+  final violations = <DrcViolation>[];
+
+  for (var i = 0; i < courtyards.length; i++) {
+    for (var j = i + 1; j < courtyards.length; j++) {
+      final a = courtyards[i];
+      final b = courtyards[j];
+      if (a.footprint.ref.id == b.footprint.ref.id) continue;
+      if (!a.overlaps(b)) continue;
+      final overlap = a.bounds.intersect(b.bounds);
+      violations.add(
+        DrcViolation(
+          rule: DrcRule.courtyardOverlap,
+          severity: DrcSeverity.error,
+          message:
+              '${a.reference} and ${b.reference} overlap on the '
+              '${a.back ? 'back' : 'front'} — there is not room to fit both',
+          position: overlap.isEmpty ? a.bounds.center : overlap.center,
+        ),
+      );
+    }
+  }
+
+  // Off the board: a courtyard corner outside the outline. A warning, not
+  // an error — a connector overhanging the edge on purpose is common, and
+  // is exactly what this should make sure was on purpose.
+  final outline = scene.outline;
+  for (final courtyard in courtyards) {
+    final outside = <Offset>[
+      for (final shape in courtyard.outlines)
+        for (final p in shape)
+          if (!outline.contains(p)) p,
+    ];
+    if (outside.isEmpty) continue;
+    violations.add(
+      DrcViolation(
+        rule: DrcRule.courtyardOffBoard,
+        severity: DrcSeverity.warning,
+        message: '${courtyard.reference} hangs over the edge of the board',
+        position: outside.first,
+      ),
+    );
+  }
   return violations;
 }
 
@@ -325,7 +401,10 @@ List<_CopperItem> _copperItems(BoardScene scene) {
     items.add(
       _CopperItem(
         netId: via.netId,
-        layers: const {'F.Cu', 'B.Cu'},
+        // Through every layer the board has, inner ones included.
+        layers: {
+          for (final layer in scene.board.copperLayers) layer.layer.token,
+        },
         a: Offset(via.x, via.y),
         b: Offset(via.x, via.y),
         width: via.diameter,

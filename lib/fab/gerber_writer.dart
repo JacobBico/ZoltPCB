@@ -29,8 +29,13 @@ abstract final class FabricationWriter {
     BoardScene scene, {
     required String baseName,
   }) => [
-    FabricationFile('$baseName-F_Cu.gbr', _copper(scene, CopperLayer.front)),
-    FabricationFile('$baseName-B_Cu.gbr', _copper(scene, CopperLayer.back)),
+    // Top to bottom, inner layers included: `In1_Cu` is the name every
+    // fab's upload page expects for the first one down.
+    for (final layer in scene.board.copperLayers)
+      FabricationFile(
+        '$baseName-${layer.layer.token.replaceAll('.', '_')}.gbr',
+        _copper(scene, layer),
+      ),
     FabricationFile('$baseName-F_Mask.gbr', _mask(scene, front: true)),
     FabricationFile('$baseName-B_Mask.gbr', _mask(scene, front: false)),
     FabricationFile('$baseName-F_Paste.gbr', _paste(scene, front: true)),
@@ -72,9 +77,7 @@ abstract final class FabricationWriter {
   // --- copper ----------------------------------------------------------
 
   static String _copper(BoardScene scene, CopperLayer layer) {
-    final g = _Gerber(
-      layer == CopperLayer.front ? 'Copper,L1,Top' : 'Copper,L2,Bot',
-    );
+    final g = _Gerber(layer.fileFunction(scene.board.copperLayerCount));
     final pads = [
       for (final footprint in scene.footprints)
         for (final pad in footprint.pads)

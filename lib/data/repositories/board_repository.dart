@@ -67,6 +67,9 @@ class BoardRepository {
         trackWidths: Value(_encodeWidths(board.trackWidths)),
         viaSizes: Value(_encodeViaSizes(board.viaSizes)),
         gridMm: Value(board.gridMm),
+        copperLayers: Value(board.copperLayerCount),
+        thickness: Value(board.thickness),
+        stackup: Value(board.hasCustomStackup ? board.stackup.encode() : ''),
         modifiedAt: Value(DateTime.now()),
       ),
     );
@@ -143,6 +146,41 @@ class BoardRepository {
         labelHidden: Value(footprint.labelHidden),
       ),
     );
+  }
+
+  /// Makes the project's footprint placements exactly [footprints], ids
+  /// and all — the undo of a change that added, swapped and removed
+  /// several at once.
+  Future<void> replaceFootprints(
+    String projectId,
+    List<PlacedFootprintRef> footprints,
+  ) async {
+    await _db.transaction(() async {
+      await (_db.delete(
+        _db.boardFootprints,
+      )..where((t) => t.projectId.equals(projectId))).go();
+      for (final f in footprints) {
+        await _db
+            .into(_db.boardFootprints)
+            .insert(
+              BoardFootprintsCompanion.insert(
+                id: f.id,
+                projectId: projectId,
+                partId: f.partId,
+                libId: f.libId,
+                x: Value(f.x),
+                y: Value(f.y),
+                rotation: Value(f.rotation),
+                flipped: Value(f.flipped),
+                placed: Value(f.placed),
+                labelX: Value(f.labelOffset?.dx),
+                labelY: Value(f.labelOffset?.dy),
+                labelSize: Value(f.labelSize),
+                labelHidden: Value(f.labelHidden),
+              ),
+            );
+      }
+    });
   }
 
   Future<void> removeFootprint(String partId) async {
@@ -441,6 +479,7 @@ class BoardRepository {
           name: row.name,
           trackWidth: row.trackWidth,
           clearance: row.clearance,
+          impedance: row.impedance,
         ),
     ];
   }
@@ -453,6 +492,7 @@ class BoardRepository {
     required String name,
     required double trackWidth,
     double? clearance,
+    double? impedance,
   }) async {
     final netClass = NetClass(
       id: newId(),
@@ -460,6 +500,7 @@ class BoardRepository {
       name: name,
       trackWidth: trackWidth,
       clearance: clearance,
+      impedance: impedance,
     );
     await _db
         .into(_db.netClasses)
@@ -470,6 +511,7 @@ class BoardRepository {
             name: name,
             trackWidth: trackWidth,
             clearance: Value(clearance),
+            impedance: Value(impedance),
             createdAt: DateTime.now(),
           ),
         );
@@ -484,6 +526,7 @@ class BoardRepository {
         name: Value(netClass.name),
         trackWidth: Value(netClass.trackWidth),
         clearance: Value(netClass.clearance),
+        impedance: Value(netClass.impedance),
       ),
     );
   }
@@ -761,6 +804,11 @@ class BoardRepository {
     viaSizes: _decodeViaSizes(row.viaSizes),
     gridMm: row.gridMm,
     modifiedAt: row.modifiedAt,
+    copperLayerCount: CopperLayer.layerCounts.contains(row.copperLayers)
+        ? row.copperLayers
+        : 2,
+    thickness: row.thickness,
+    customStackup: Stackup.decode(row.stackup, layerCount: row.copperLayers),
   );
 
   static PlacedFootprintRef _toFootprint(BoardFootprintRow row) =>
@@ -785,9 +833,7 @@ class BoardRepository {
     id: row.id,
     projectId: row.projectId,
     netId: row.netId,
-    layer: row.layer == BoardLayer.backCopper.token
-        ? CopperLayer.back
-        : CopperLayer.front,
+    layer: CopperLayer.fromToken(row.layer) ?? CopperLayer.front,
     startX: row.startX,
     startY: row.startY,
     endX: row.endX,

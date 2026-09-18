@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import '../core/util/ids.dart';
 import '../domain/export/schematic_document.dart';
+import '../domain/geometry/drawn_wire_geometry.dart';
 import '../domain/geometry/net_routing.dart';
 import '../domain/geometry/placement.dart';
 import '../domain/models/models.dart';
@@ -63,6 +64,7 @@ class SchematicWriter {
       ..._noConnects(document, connectivity),
       ..._wires(connectivity),
       ..._labels(document, connectivity),
+      ..._notes(document),
       ..._symbols(document, sheetUuid),
       S.list('sheet_instances', [
         SList([
@@ -263,9 +265,13 @@ class SchematicWriter {
 
       // A net the wires already join needs a label only to carry a name the
       // user chose. Labelling every pin of a wired net would bury the
-      // drawing under text saying nothing the wires do not already say.
+      // drawing under text saying nothing the wires do not already say. A
+      // named net in separate pieces — a bus label on two chips — gets one
+      // label per piece, which is what joins them.
       final endpoints = drawn
           ? (net.net.isNamed ? net.endpoints.take(1) : const <NetEndpoint>[])
+          : net.net.isNamed
+          ? connectivity.onePerPiece(net)
           : net.endpoints;
 
       for (final endpoint in endpoints) {
@@ -283,6 +289,50 @@ class SchematicWriter {
       }
     }
     return labels;
+  }
+
+  /// Notes as KiCad's own sheet text, and boxes as dashed rectangles with
+  /// their caption inside the top-left corner — how KiCad draws a note box.
+  List<SList> _notes(SchematicDocument document) {
+    final items = <SList>[];
+    for (final note in document.notes) {
+      final at = note.position;
+      if (note.kind == NoteKind.box) {
+        items.add(
+          S.list('rectangle', [
+            S.of('start', [at.dx, at.dy]),
+            S.of('end', [at.dx + note.size.width, at.dy + note.size.height]),
+            S.list('stroke', [
+              S.of('width', [0]),
+              S.of('type', [SAtom('dash')]),
+            ]),
+            S.list('fill', [
+              S.of('type', [SAtom('none')]),
+            ]),
+            SList([SAtom('uuid'), S.text(note.id)]),
+          ]),
+        );
+      }
+      if (note.content.isEmpty) continue;
+      final inset = note.kind == NoteKind.box
+          ? Offset(note.textSize * 0.6, note.textSize * 0.5)
+          : Offset.zero;
+      items.add(
+        SList([
+          SAtom('text'),
+          S.text(note.content),
+          S.flag('exclude_from_sim', false),
+          S.of('at', [at.dx + inset.dx, at.dy + inset.dy, 0]),
+          SymbolWriter.effects(
+            size: note.textSize,
+            italic: note.kind == NoteKind.text,
+            justify: 'left top',
+          ),
+          SList([SAtom('uuid'), S.text(derivedId('note-text:${note.id}'))]),
+        ]),
+      );
+    }
+    return items;
   }
 
   /// The drawn connections, as KiCad's two-point wire segments.
@@ -423,6 +473,11 @@ class _Connectivity {
     for (final wire in document.drawnWires) {
       (drawnByNet[wire.netId] ??= []).add(wire);
     }
+    final labelledPins = {
+      for (final net in document.nets)
+        for (final e in net.endpoints)
+          if (e.node.labelled) e.pin.id,
+    };
     final routed = [
       for (final entry in pinsByNet.entries)
         ...NetRouting.routeNetWithDrawn(
@@ -431,6 +486,7 @@ class _Connectivity {
           drawn: drawnByNet[entry.key] ?? const [],
           obstacles: obstacles,
           hints: document.routeHints,
+          labelledPins: labelledPins,
         ),
     ];
 
@@ -445,6 +501,58 @@ class _Connectivity {
 
   final Map<String, Offset> pinPositions;
   final List<RoutedWire> wires;
+
+  /// One endpoint from each separately wired piece of [net].
+  List<NetEndpoint> onePerPiece(NetWithEndpoints net) {
+    final parent = <String, String>{};
+    String find(String a) {
+      var root = parent.putIfAbsent(a, () => a);
+      while (parent[root] != root) {
+        root = parent[root]!;
+      }
+      return root;
+    }
+
+    void union(String a, String b) {
+      final ra = find(a);
+      final rb = find(b);
+      if (ra != rb) parent[ra] = rb;
+    }
+
+    final netWires = [
+      for (final w in wires)
+        if (w.netId == net.id) w,
+    ];
+    for (var i = 0; i < netWires.length; i++) {
+      final wire = netWires[i];
+      if (wire.pinAId.isNotEmpty) union('w$i', wire.pinAId);
+      if (wire.pinBId.isNotEmpty) union('w$i', wire.pinBId);
+      for (final e in net.endpoints) {
+        final at = pinPositions[e.pin.id];
+        if (at == null) continue;
+        if ((wire.points.first - at).distance < _touchMm ||
+            (wire.points.last - at).distance < _touchMm) {
+          union('w$i', e.pin.id);
+        }
+      }
+      for (var j = 0; j < i; j++) {
+        final other = netWires[j];
+        for (final end in [wire.points.first, wire.points.last]) {
+          final (_, d) = DrawnWireGeometry.nearestRun(other.points, end);
+          if (d < _touchMm) union('w$i', 'w$j');
+        }
+        for (final end in [other.points.first, other.points.last]) {
+          final (_, d) = DrawnWireGeometry.nearestRun(wire.points, end);
+          if (d < _touchMm) union('w$i', 'w$j');
+        }
+      }
+    }
+    final seen = <String>{};
+    return [
+      for (final e in net.endpoints)
+        if (seen.add(find(e.pin.id))) e,
+    ];
+  }
 
   /// Nets whose every pin is reachable through the wires that survived, and
   /// which therefore need no labels to hold themselves together.

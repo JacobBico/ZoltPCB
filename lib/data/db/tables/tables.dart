@@ -157,6 +157,11 @@ class NetClasses extends Table {
   /// Null uses the board's design rule.
   RealColumn get clearance => real().nullable()();
 
+  /// The characteristic impedance this class is routed to, in ohms. When
+  /// set, a track's width comes from the stackup of the layer it is drawn
+  /// on rather than from [trackWidth], which is then only the fallback.
+  RealColumn get impedance => real().nullable()();
+
   DateTimeColumn get createdAt => dateTime()();
 
   @override
@@ -205,6 +210,13 @@ class NetNodes extends Table {
       text().references(Nets, #id, onDelete: KeyAction.cascade)();
   TextColumn get partPinId =>
       text().references(PartPins, #id, onDelete: KeyAction.cascade)();
+
+  /// The pin carries a label of its own — it is on this net by name, the
+  /// way a KiCad label at a pin puts it there, rather than by a wire. The
+  /// sheet then shows the name at the pin instead of routing a wire to
+  /// the rest of the net.
+  BoolColumn get labelled => boolean().withDefault(const Constant(false))();
+
   DateTimeColumn get createdAt => dateTime()();
 
   @override
@@ -411,6 +423,17 @@ class Boards extends Table {
   /// laid out in a much finer world than schematics.
   RealColumn get gridMm => real().withDefault(const Constant(0.5))();
 
+  /// How many copper layers the board has: 2, 4, 6 or 8.
+  IntColumn get copperLayers => integer().withDefault(const Constant(2))();
+
+  /// Finished board thickness, in millimetres.
+  RealColumn get thickness => real().withDefault(const Constant(1.6))();
+
+  /// The layer build-up — copper weights, dielectric heights and materials —
+  /// as JSON. Empty means "the standard build for this many layers and
+  /// this thickness", worked out rather than stored.
+  TextColumn get stackup => text().withDefault(const Constant(''))();
+
   DateTimeColumn get modifiedAt => dateTime()();
 
   @override
@@ -612,4 +635,75 @@ class AppSettings extends Table {
 
   @override
   Set<Column<Object>> get primaryKey => {key};
+}
+
+/// A saved copy of a whole project, to go back to.
+///
+/// Stored as the same archive a backup file holds, so a snapshot and a
+/// backup are one format and one code path: the only difference is whether
+/// it lives in the database or in a file.
+@TableIndex(name: 'idx_project_snapshots_project', columns: {#projectId})
+@DataClassName('ProjectSnapshotRow')
+class ProjectSnapshots extends Table {
+  TextColumn get id => text()();
+  TextColumn get projectId =>
+      text().references(Projects, #id, onDelete: KeyAction.cascade)();
+  TextColumn get name => text()();
+
+  /// Taken by the app rather than the user — before a restore, say.
+  BoolColumn get automatic => boolean().withDefault(const Constant(false))();
+
+  /// The project archive, as JSON.
+  TextColumn get data => text()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// Free text and boxes drawn on the schematic sheet.
+///
+/// Not connectivity and not a component: a note says what a section is
+/// for, a box groups it. Both are exported to KiCad as its own text and
+/// rectangle items.
+@TableIndex(name: 'idx_schematic_notes_project', columns: {#projectId})
+@DataClassName('SchematicNoteRow')
+class SchematicNotes extends Table {
+  TextColumn get id => text()();
+  TextColumn get projectId =>
+      text().references(Projects, #id, onDelete: KeyAction.cascade)();
+
+  /// `text` or `box`.
+  TextColumn get kind => text().withDefault(const Constant('text'))();
+
+  /// What the note says; a box's caption.
+  TextColumn get content => text().withDefault(const Constant(''))();
+
+  /// Top-left corner, in sheet millimetres.
+  RealColumn get x => real()();
+  RealColumn get y => real()();
+
+  /// A box's size; zero for a text note.
+  RealColumn get width => real().withDefault(const Constant(0))();
+  RealColumn get height => real().withDefault(const Constant(0))();
+
+  /// Character height, in millimetres.
+  RealColumn get size => real().withDefault(const Constant(1.27))();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// Per-project preferences — which electrical checks matter, for one — as
+/// key/value text, for the same reason [AppSettings] is.
+@DataClassName('ProjectSettingRow')
+class ProjectSettings extends Table {
+  TextColumn get projectId =>
+      text().references(Projects, #id, onDelete: KeyAction.cascade)();
+  TextColumn get key => text()();
+  TextColumn get value => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {projectId, key};
 }

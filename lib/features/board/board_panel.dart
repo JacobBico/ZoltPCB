@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/cross_probe.dart';
 import '../../app/edit_history.dart';
 import '../../app/providers.dart';
 import '../../core/theme/kicad_palette.dart';
@@ -17,6 +18,10 @@ import '../../domain/pcb/pcb.dart';
 import '../../rendering/schematic_viewport.dart';
 import '../project/canvas_action_bar.dart';
 import 'board_painter.dart';
+import 'board_sync_dialog.dart';
+import 'impedance_dialog.dart';
+import 'net_lengths_dialog.dart';
+import 'stackup_dialog.dart';
 import 'board_shape_editor.dart';
 import 'edge_cut_editor.dart';
 import 'zone_editor.dart';
@@ -161,6 +166,8 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
     // still under the finger and jumps to its new place on release — which
     // reads as the canvas lagging rather than as nothing having moved.
     final scene = _withLiveDrag(committed);
+    ref.watch(crossProbeProvider);
+    _takeProbe(committed);
     _persistCopperCorrections(committed);
 
     final parts = ref.watch(projectPartsProvider(widget.project.id)).value;
@@ -438,7 +445,17 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
       CanvasAction(
         label: layer.label,
         icon: Icons.layers_outlined,
-        onPressed: () => ref.read(activeLayerProvider.notifier).toggle(),
+        onPressed: () {
+          final board = ref
+              .read(boardSceneProvider(widget.project.id))
+              .value
+              ?.board;
+          if (board == null) {
+            ref.read(activeLayerProvider.notifier).toggle();
+          } else {
+            ref.read(activeLayerProvider.notifier).next(board);
+          }
+        },
       ),
     ];
 
@@ -836,6 +853,35 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
                   () => _editZone(scene, null),
                   subtitle: 'A ground plane, usually',
                 ),
+                item(Icons.sync, 'Update from schematic', () async {
+                  final message = await showBoardSyncDialog(
+                    context,
+                    projectId: widget.project.id,
+                  );
+                  if (message != null) _notify(message);
+                }),
+                item(
+                  Icons.layers_outlined,
+                  'Board build',
+                  () => _editBuild(scene),
+                  subtitle:
+                      '${scene.board.copperLayerCount} layers · '
+                      '${scene.board.stackup.thickness.toStringAsFixed(2)} mm',
+                ),
+                item(
+                  Icons.speed,
+                  'Impedance calculator',
+                  () => showImpedanceCalculator(
+                    context,
+                    board: scene.board,
+                    layer: ref.read(activeLayerProvider),
+                  ),
+                ),
+                item(
+                  Icons.straighten,
+                  'Net lengths',
+                  () => showNetLengthsDialog(context, scene: scene),
+                ),
                 item(
                   Icons.tune,
                   'Design rules',
@@ -871,6 +917,27 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
     );
   }
 
+  Future<void> _editBuild(BoardScene scene) async {
+    final used = {for (final t in scene.tracks) t.layer};
+    final after = await showStackupDialog(
+      context,
+      board: scene.board,
+      usedLayers: used,
+    );
+    if (after == null || !mounted) return;
+    final repository = ref.read(boardRepositoryProvider);
+    final before = scene.board;
+    await repository.updateBoard(after);
+    if (!after.hasLayer(ref.read(activeLayerProvider))) {
+      ref.read(activeLayerProvider.notifier).set(CopperLayer.front);
+    }
+    _record(
+      'Board build',
+      undo: () => repository.updateBoard(before),
+      redo: () => repository.updateBoard(after),
+    );
+  }
+
   CanvasAction _ratsnestAction(BoardScene scene) => CanvasAction(
     label: _showRatsnest ? 'Hide rats' : 'Show rats',
     icon: _showRatsnest ? Icons.visibility_off : Icons.visibility,
@@ -893,6 +960,37 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
   );
 
   /// Centres the view on a point of the board, close enough to see it.
+  /// Acts on a probe sent from the schematic: selects the part, or lights
+  /// up the net, and brings it into view.
+  void _takeProbe(BoardScene scene) {
+    if (ref.read(crossProbeProvider)?.target != ProbeTarget.board) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final request = ref
+          .read(crossProbeProvider.notifier)
+          .take(ProbeTarget.board);
+      if (request == null) return;
+      final footprint = scene.footprints
+          .where((f) => f.part.id == request.partId)
+          .firstOrNull;
+      final pad = scene.pads.where((p) => p.netId == request.netId).firstOrNull;
+      if (footprint == null && pad == null) {
+        _notify('Not on the board yet');
+        return;
+      }
+      setState(() {
+        _selectedFootprintId = footprint?.ref.id;
+        _selectedTrackId = null;
+        _highlightedNetId = request.netId;
+      });
+      _focusOn(
+        footprint != null
+            ? Offset(footprint.ref.x, footprint.ref.y)
+            : pad!.position,
+      );
+    });
+  }
+
   void _focusOn(Offset board) {
     final viewport = _viewport;
     final size = _canvasSize;
@@ -1179,7 +1277,9 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
   CopperLayer _layerFor(PlacedPad pad) {
     final active = ref.read(activeLayerProvider);
     if (pad.reaches(active)) return active;
-    final other = active.other;
+    final other = pad.layers.contains(BoardLayer.backCopper)
+        ? CopperLayer.back
+        : CopperLayer.front;
     // Following the pad's side here keeps the layer control honest about
     // what is being drawn.
     ref.read(activeLayerProvider.notifier).set(other);
@@ -1910,7 +2010,7 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
           startY: points[i].dy,
           endX: points[i + 1].dx,
           endY: points[i + 1].dy,
-          width: scene.board.rules.trackWidth,
+          width: scene.trackWidthFor(netId, layer),
           netId: netId,
         ),
       );
@@ -2001,9 +2101,9 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
         ..add(at);
       _routeNetId = netId;
       _routeStartPadId = null;
-      _routeLayer = layer.other;
+      _routeLayer = scene.board.nextLayer(layer);
     });
-    ref.read(activeLayerProvider.notifier).set(layer.other);
+    ref.read(activeLayerProvider.notifier).set(scene.board.nextLayer(layer));
   }
 
   void _cancelRoute() {

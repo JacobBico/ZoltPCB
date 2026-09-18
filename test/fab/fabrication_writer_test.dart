@@ -58,6 +58,41 @@ void main() {
     ]);
   });
 
+  test('a four-layer board gets its inner copper, numbered from the top', () {
+    final scene = BoardScene(
+      board: _board().copyWith(copperLayerCount: 4),
+      footprints: const [],
+      pads: const [],
+      tracks: const [
+        Track(
+          id: 't',
+          projectId: 'p',
+          layer: CopperLayer.inner1,
+          startX: 5,
+          startY: 5,
+          endX: 15,
+          endY: 5,
+          width: 0.2,
+        ),
+      ],
+      vias: const [],
+      ratsnest: const [],
+      unplaced: const [],
+    );
+    final files = _files(scene);
+    expect(files.keys.take(4), [
+      'F_Cu.gbr',
+      'In1_Cu.gbr',
+      'In2_Cu.gbr',
+      'B_Cu.gbr',
+    ]);
+    expect(files['In1_Cu.gbr'], contains('%TF.FileFunction,Copper,L2,Inr*%'));
+    expect(files['B_Cu.gbr'], contains('%TF.FileFunction,Copper,L4,Bot*%'));
+    expect(files['In1_Cu.gbr'], contains('D01*'));
+    expect(files['In2_Cu.gbr'], isNot(contains('D01*')));
+    expect(files['F_Cu.gbr'], isNot(contains('D01*')));
+  });
+
   test('a Gerber is well formed: header, apertures before use, end', () {
     final copper = _files(
       _scene(

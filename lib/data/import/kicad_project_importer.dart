@@ -6,6 +6,7 @@ import '../../domain/geometry/placement.dart';
 import '../../domain/models/models.dart';
 import '../../domain/pcb/pcb.dart';
 import '../../domain/symbols/symbols.dart';
+import '../../kicad/board_writer.dart';
 import '../../kicad/board_project_writer.dart';
 import '../../kicad/sexpr/sexpr.dart';
 import '../../kicad/sexpr/sexpr_parser.dart';
@@ -423,7 +424,12 @@ class KicadProjectImporter {
         }
         netId = await nets.netIdForPin(members[0]);
       } else if (name != null) {
-        netId = await nets.labelPin(project.id, members[0], name);
+        netId = await nets.labelPin(
+          project.id,
+          members[0],
+          name,
+          joinByName: false,
+        );
       }
       if (netId != null && name != null) {
         await nets.renameNet(netId, name);
@@ -604,11 +610,8 @@ class KicadProjectImporter {
 
     // --- copper
     var trackCount = 0;
-    CopperLayer? copper(String? token) => switch (token) {
-      'F.Cu' => CopperLayer.front,
-      'B.Cu' => CopperLayer.back,
-      _ => null,
-    };
+    CopperLayer? copper(String? token) =>
+        token == null ? null : CopperLayer.fromToken(token);
     for (final kind in const ['segment', 'arc']) {
       for (final node in root.children(kind)) {
         final layer = copper(node.childAtom('layer'));
@@ -684,6 +687,19 @@ class KicadProjectImporter {
             node.child('effects')?.child('font')?.child('size')?.number(1) ??
             1.0,
         back: layer == 'B.SilkS',
+      );
+    }
+
+    // --- the build: layer count and stackup
+    final build = BoardWriter.readBuild(root);
+    {
+      final current = await boards.ensureBoard(project.id);
+      await boards.updateBoard(
+        current.copyWith(
+          copperLayerCount: build.layerCount,
+          thickness: build.stackup?.thickness ?? build.thickness,
+          stackup: build.stackup,
+        ),
       );
     }
 

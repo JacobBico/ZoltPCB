@@ -1,6 +1,7 @@
 @Tags(['kicad'])
 library;
 
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
 import 'dart:typed_data';
@@ -18,6 +19,7 @@ import 'package:hintpcb/domain/models/models.dart';
 import 'package:hintpcb/domain/pcb/pcb.dart';
 import 'package:hintpcb/kicad/board_project_writer.dart';
 import 'package:hintpcb/kicad/board_writer.dart';
+import 'package:hintpcb/kicad/sexpr/sexpr_parser.dart';
 
 import '../helpers/fixtures.dart';
 
@@ -484,6 +486,197 @@ void main() {
 
       // ignore: avoid_print
       print('kicad-cli accepted a circular board outline');
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
+  );
+
+  test(
+    'a six-layer board keeps its inner copper and its stackup in KiCad',
+    () async {
+      final projects = ProjectRepository(db);
+      final parts = PartRepository(db);
+      final nets = NetRepository(db);
+      final boards = BoardRepository(db);
+      final footprints = FootprintLibraryRepository(
+        db,
+        InMemoryLibraryStorage(),
+      );
+      await footprints.import(
+        nickname: 'Resistor_SMD',
+        sources: readLibrary('Resistor_SMD'),
+      );
+
+      final project = await projects.create(name: 'Six Layers');
+      final r1 = await parts.addPart(project.id, resistorSpec());
+      final r2 = await parts.addPart(project.id, resistorSpec());
+      final net = await nets.connectPins(r1.pins.first.id, r2.pins.first.id);
+      await nets.renameNet(net.id, 'SIG');
+
+      // A build nobody would get by default: 2 oz outside, a low-loss
+      // laminate, 1.2 mm overall.
+      final base = Stackup.standard(
+        layerCount: 6,
+        thickness: 1.2,
+        outer: CopperWeight.two,
+      );
+      final stackup = base.copyWith(
+        dielectrics: [
+          for (final d in base.dielectrics)
+            d.copyWith(epsilonR: 3.66, material: 'RO4350B'),
+        ],
+      );
+      final board = await boards.ensureBoard(project.id);
+      await boards.updateBoard(
+        board.copyWith(
+          outlineX: 0,
+          outlineY: 0,
+          outlineWidth: 30,
+          outlineHeight: 20,
+          copperLayerCount: 6,
+          thickness: stackup.thickness,
+          stackup: stackup,
+        ),
+      );
+
+      const libId = 'Resistor_SMD:R_0805_2012Metric';
+      for (final (part, x) in [(r1, 8.0), (r2, 22.0)]) {
+        final ref = await boards.assignFootprint(
+          projectId: project.id,
+          partId: part.part.id,
+          libId: libId,
+        );
+        await boards.updatePlacement(ref.copyWith(x: x, y: 10, placed: true));
+      }
+
+      var scene = BoardScene.build(
+        board: (await boards.getBoard(project.id))!,
+        parts: await parts.getPartsWithDetails(project.id),
+        nets: await nets.getNets(project.id),
+        placements: await boards.getFootprints(project.id),
+        definitions: {libId: (await footprints.loadFootprint(libId))!},
+      );
+      final padA = scene.pads.firstWhere(
+        (p) => p.reference == 'R1' && p.pad.number == '1',
+      );
+      final padB = scene.pads.firstWhere(
+        (p) => p.reference == 'R2' && p.pad.number == '1',
+      );
+
+      // Down from R1 through a via, along In2, and up again at R2.
+      final viaA = Offset(padA.position.dx, 14);
+      final viaB = Offset(padB.position.dx, 14);
+      Future<void> track(Offset a, Offset b, CopperLayer layer) =>
+          boards.addTrack(
+            projectId: project.id,
+            layer: layer,
+            startX: a.dx,
+            startY: a.dy,
+            endX: b.dx,
+            endY: b.dy,
+            width: 0.2,
+            netId: net.id,
+          );
+      await track(padA.position, viaA, CopperLayer.front);
+      await track(viaA, viaB, CopperLayer.inner2);
+      await track(viaB, padB.position, CopperLayer.front);
+      for (final at in [viaA, viaB]) {
+        await boards.addVia(
+          projectId: project.id,
+          x: at.dx,
+          y: at.dy,
+          diameter: 0.6,
+          drill: 0.3,
+          netId: net.id,
+        );
+      }
+
+      scene = BoardScene.build(
+        board: (await boards.getBoard(project.id))!,
+        parts: await parts.getPartsWithDetails(project.id),
+        nets: await nets.getNets(project.id),
+        placements: await boards.getFootprints(project.id),
+        definitions: {libId: (await footprints.loadFootprint(libId))!},
+        tracks: await boards.getTracks(project.id),
+        vias: await boards.getVias(project.id),
+      );
+      expect(scene.isFullyRouted, isTrue, reason: 'the via joins In2 to F.Cu');
+
+      final document = BoardDocument(
+        project: (await projects.getById(project.id))!,
+        scene: scene,
+        nets: await nets.getNets(project.id),
+        footprintSources: {libId: (await footprints.loadFootprintNode(libId))!},
+      );
+      final file = File('${workDir.path}/six.kicad_pcb');
+      final text = const BoardWriter().write(document);
+      await file.writeAsString(text);
+      await File('${workDir.path}/six.kicad_pro').writeAsString(
+        BoardProjectWriter.write(document, fileName: 'six.kicad_pro'),
+      );
+
+      expect(text, contains('(4 "In1.Cu" power)'));
+      expect(text, contains('(6 "In2.Cu" signal)'));
+      expect(text, contains('(10 "In4.Cu" power)'));
+      expect(text, contains('(layer "In2.Cu")'));
+      expect(text, contains('"RO4350B"'));
+
+      final drc = await Process.run(
+        kicadCli,
+        [
+          'pcb',
+          'drc',
+          '--format',
+          'json',
+          '--output',
+          '${workDir.path}/six-drc.json',
+          file.path,
+        ],
+        environment: {'HOME': workDir.path},
+      );
+      expect(
+        drc.exitCode,
+        anyOf(0, 5),
+        reason: 'kicad-cli refused the six-layer board\n${drc.stderr}',
+      );
+      final report = File('${workDir.path}/six-drc.json').readAsStringSync();
+      expect(report.toLowerCase(), isNot(contains('failed to load')));
+      // KiCad rebuilt connectivity through the vias and the inner layer:
+      // nothing is left unconnected.
+      final json = jsonDecode(report) as Map<String, Object?>;
+      expect(json['unconnected_items'], isEmpty);
+      expect(report, contains('on In2.Cu'));
+
+      // KiCad plots In2 only if it agrees the board has an In2.
+      final plot = await Process.run(
+        kicadCli,
+        [
+          'pcb',
+          'export',
+          'gerbers',
+          '--layers',
+          'In2.Cu,In4.Cu',
+          '--output',
+          '${workDir.path}/gerbers/',
+          file.path,
+        ],
+        environment: {'HOME': workDir.path},
+      );
+      expect(plot.exitCode, 0, reason: '${plot.stdout}\n${plot.stderr}');
+      final plotted = Directory(
+        '${workDir.path}/gerbers',
+      ).listSync().map((f) => f.path.split('/').last).toList();
+      expect(plotted.any((name) => name.contains('In2_Cu')), isTrue);
+
+      // And the build comes back the way it went out.
+      final build = BoardWriter.readBuild(SExprParser.parseDocument(text));
+      expect(build.layerCount, 6);
+      expect(build.stackup, isNotNull);
+      expect(build.stackup!.thickness, closeTo(stackup.thickness, 0.001));
+      expect(build.stackup!.dielectrics.first.material, 'RO4350B');
+      expect(build.stackup!.copperOf(CopperLayer.inner1).role, LayerRole.plane);
+
+      // ignore: avoid_print
+      print('kicad-cli accepted a six-layer board and plotted In2.Cu');
     },
     timeout: const Timeout(Duration(minutes: 3)),
   );

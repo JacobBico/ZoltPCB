@@ -88,8 +88,27 @@ List<_Sheet> _sheets() => [
 
 void main() {
   for (final sheet in _sheets()) {
-    _runSheet(sheet);
+    _runSheet(_splitAtJunctions(sheet));
   }
+}
+
+/// [sheet] with every wire that runs through a junction split there — the
+/// shape the app keeps every net in, so the runs dragged are the wires the
+/// sheet actually holds.
+_Sheet _splitAtJunctions(_Sheet sheet) {
+  final wires = <_Wire>[];
+  for (final net in {for (final w in sheet.wires) w.net}) {
+    final split = PolylineWiring.splitAtJunctions([
+      for (final (i, w) in sheet.wires.indexed)
+        if (w.net == net)
+          PolylineWire(id: '$i', points: w.points, pinA: w.a, pinB: w.b),
+    ]);
+    wires.addAll([
+      for (final piece in split)
+        _Wire(piece.points, a: piece.pinA, b: piece.pinB, net: net),
+    ]);
+  }
+  return _Sheet(sheet.name, wires);
 }
 
 void _runSheet(_Sheet sheet) {

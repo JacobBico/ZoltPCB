@@ -74,9 +74,19 @@ Each stage is independently usable. All ten are built.
 Added afterwards, outside the original plan:
 
 - [x] **Board editor.** Footprint libraries, footprint assignment, placement,
-      two-layer manual routing with vias, a ratsnest that shrinks as you
-      route, design rules, DRC, and `.kicad_pcb` export verified against real
-      KiCad.
+      manual routing with vias, a ratsnest that shrinks as you route, design
+      rules, DRC, and `.kicad_pcb` export verified against real KiCad.
+- [x] **Multi-layer boards.** 2, 4, 6 or 8 copper layers with an editable
+      stackup (copper weight, thickness, dielectric heights and materials),
+      written to KiCad's own `stackup` and plotted as `In1_Cu`… Gerbers.
+- [x] **Impedance and length.** Closed-form impedance from the stackup,
+      net classes routed to a target impedance, net length and delay, and
+      meanders that add an exact length.
+- [x] **Workflow.** Update board from schematic, courtyard DRC, project
+      backups (`.hintpcb`), snapshots, save-to-folder, and cross-probing
+      between schematic and board.
+- [x] **Schematic tools.** Label ranges (`D[0..7]`) that join parts by name,
+      sheet notes and boxes, bulk field edit, and per-project ERC severities.
 
 ## How connectivity is exported
 

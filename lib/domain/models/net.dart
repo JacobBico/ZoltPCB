@@ -77,12 +77,17 @@ class NetNode {
     required this.netId,
     required this.partPinId,
     required this.createdAt,
+    this.labelled = false,
   });
 
   final String id;
   final String netId;
   final String partPinId;
   final DateTime createdAt;
+
+  /// The pin carries its own label: it is on the net by name rather than
+  /// by a wire.
+  final bool labelled;
 
   @override
   bool operator ==(Object other) =>

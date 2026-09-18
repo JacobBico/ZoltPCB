@@ -8,6 +8,7 @@ import 'schematic_painter_support.dart';
 import 'schematic_scene.dart';
 import '../domain/geometry/drawn_wire_geometry.dart';
 import '../domain/geometry/wire_router.dart';
+import '../domain/models/schematic_note.dart';
 import 'schematic_viewport.dart';
 import 'symbol_renderer.dart';
 
@@ -28,7 +29,15 @@ class SchematicPainter extends CustomPainter {
     this.highlightedNetId,
     this.showGrid = true,
     this.zigzagResistors = false,
+    this.notes = const [],
+    this.selectedNoteId,
   }) : palette = KicadPalette.current;
+
+  /// Text and boxes on the sheet, drawn under everything else.
+  final List<SchematicNote> notes;
+
+  /// The note the user has hold of, drawn picked out.
+  final String? selectedNoteId;
 
   /// Draw resistors the American way. See [isResistor].
   final bool zigzagResistors;
@@ -82,11 +91,69 @@ class SchematicPainter extends CustomPainter {
     canvas.clipRect(Offset.zero & size);
     _paintPage(canvas);
     if (showGrid) _paintGrid(canvas, size);
+    _paintNotes(canvas);
     _paintConnections(canvas);
     _paintUnits(canvas);
     _paintNetLabels(canvas);
     _paintPendingWire(canvas);
     _paintSelectionBox(canvas);
+  }
+
+  /// Notes in KiCad's note colour: dashed frames for boxes, plain text for
+  /// words, both beneath the circuit so they never hide it.
+  void _paintNotes(Canvas canvas) {
+    for (final note in notes) {
+      final selected = note.id == selectedNoteId;
+      final colour = selected ? colors.highlight : KicadPalette.notes;
+      if (note.kind == NoteKind.box) {
+        final rect = _rectToScreen(note.bounds);
+        final paint = Paint()
+          ..color = colour
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = selected ? 2 : 1.2;
+        // Dashed, the way KiCad draws a note box.
+        const dash = 6.0;
+        const gap = 4.0;
+        void dashed(Offset a, Offset b) {
+          final length = (b - a).distance;
+          if (length == 0) return;
+          final step = (b - a) / length;
+          for (var t = 0.0; t < length; t += dash + gap) {
+            canvas.drawLine(
+              a + step * t,
+              a + step * math.min(t + dash, length),
+              paint,
+            );
+          }
+        }
+
+        dashed(rect.topLeft, rect.topRight);
+        dashed(rect.topRight, rect.bottomRight);
+        dashed(rect.bottomRight, rect.bottomLeft);
+        dashed(rect.bottomLeft, rect.topLeft);
+      }
+      if (note.content.isEmpty) continue;
+      final fontSize = viewport.lengthToScreen(note.textSize);
+      if (fontSize < 3) continue;
+      final painter = TextPainter(
+        text: TextSpan(
+          text: note.content,
+          style: TextStyle(
+            color: colour,
+            fontSize: fontSize,
+            height: 1.25,
+            fontStyle: note.kind == NoteKind.text
+                ? FontStyle.italic
+                : FontStyle.normal,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final inset = note.kind == NoteKind.box
+          ? Offset(fontSize * 0.4, fontSize * 0.3)
+          : Offset.zero;
+      painter.paint(canvas, viewport.toScreen(note.position) + inset);
+    }
   }
 
   void _paintPendingWire(Canvas canvas) {
@@ -662,5 +729,7 @@ class SchematicPainter extends CustomPainter {
       old.pendingPinId != pendingPinId ||
       !listEquals(old.pendingWire, pendingWire) ||
       old.highlightedNetId != highlightedNetId ||
-      old.showGrid != showGrid;
+      old.showGrid != showGrid ||
+      !listEquals(old.notes, notes) ||
+      old.selectedNoteId != selectedNoteId;
 }

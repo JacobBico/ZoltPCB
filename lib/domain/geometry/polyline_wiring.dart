@@ -52,6 +52,11 @@ class PolylineWiring {
   /// of one that cannot stretch after it, because a pin holds it — is held
   /// at the last place where everything is still joined. The wire stops
   /// rather than the net quietly coming apart.
+  ///
+  /// "Joined" is judged against how the net stood before the drag: a net
+  /// already in more than one piece — a wire cut loose, pieces joined only
+  /// by a label — can still be dragged, as long as the drag does not break
+  /// it into more.
   static WiringDrag drag(
     List<PolylineWire> net,
     String id,
@@ -59,9 +64,11 @@ class PolylineWiring {
     Offset delta, {
     double grid = 1.27,
   }) {
+    final before = pieceCount([for (final wire in net) wire.points]);
+    final fixed = junctionsOf(net);
     var tried = delta;
     for (var attempt = 0; attempt < 40; attempt++) {
-      final result = _dragOnce(net, id, run, tried);
+      final result = _dragOnce(net, id, run, tried, fixed);
       final shapes = [
         for (final wire in net)
           if (wire.id == id)
@@ -69,7 +76,7 @@ class PolylineWiring {
           else
             result.followers[wire.id] ?? wire.points,
       ];
-      if (allJoined(shapes)) return result;
+      if (pieceCount(shapes) <= before) return result;
 
       final length = tried.distance;
       if (length <= grid) break;
@@ -78,25 +85,49 @@ class PolylineWiring {
     return const WiringDrag(dragged: [], followers: {});
   }
 
+  /// The junctions of [net]: every point where three or more directions of
+  /// wire meet, or two meet on a pin. These never move in a drag.
+  static List<Offset> junctionsOf(List<PolylineWire> net) =>
+      DrawnWireGeometry.junctions(
+        [for (final wire in net) wire.points],
+        pins: [
+          for (final wire in net) ...[
+            if (wire.startPinned) wire.points.first,
+            if (wire.endPinned) wire.points.last,
+          ],
+        ],
+      );
+
   static WiringDrag _dragOnce(
     List<PolylineWire> net,
     String id,
     int run,
     Offset delta,
+    List<Offset> fixed,
   ) {
     final wire = net.where((w) => w.id == id).firstOrNull;
     if (wire == null || run < 0 || run + 1 >= wire.points.length) {
       return const WiringDrag(dragged: [], followers: {});
     }
 
-    // An end not held by a pin travels with the run it belongs to, so a
-    // wire can be dragged somewhere else; one on a pin stays on its pin.
+    bool isJunction(Offset at) =>
+        fixed.any((j) => (j - at).distance < tolerance);
+
+    // An end not held by a pin or a junction travels with the run it
+    // belongs to, so a wire can be dragged somewhere else. One on a pin
+    // stays on its pin, and one at a junction stays at the junction: the
+    // wire turns a corner there rather than taking the junction, and every
+    // other wire meeting at it, along.
     final moved = DrawnWireGeometry.slideRun(
       wire.points,
       run,
       delta,
-      carryStart: run == 0 && !wire.startPinned,
-      carryEnd: run == wire.points.length - 2 && !wire.endPinned,
+      carryStart:
+          run == 0 && !wire.startPinned && !isJunction(wire.points.first),
+      carryEnd:
+          run == wire.points.length - 2 &&
+          !wire.endPinned &&
+          !isJunction(wire.points.last),
     );
     final shift = DrawnWireGeometry.runShift(wire.points, run, delta);
     final from = wire.points[run];
@@ -132,14 +163,15 @@ class PolylineWiring {
       // and they are one run of wire between them: dragging one takes the
       // other's end with it, so the pair lengthens and shortens together.
       //
-      // Against its middle, though, is a junction: the meeting point slides
-      // along the dragged wire and this one stays exactly where it was put.
-      // That is the difference between shortening a wire and shoving
-      // everything hanging off it.
+      // At a junction nothing moves: three or more wires meet there, each
+      // is a wire of its own, and dragging one leaves the junction and the
+      // others where they are.
       final moving = <(Offset, Offset)>[];
       for (var i = 0; i < shape.length; i++) {
         if (i == 0 && other.startPinned) continue;
         if (i == shape.length - 1 && other.endPinned) continue;
+        // A junction stays where it is, whatever is dragged beside it.
+        if (isJunction(shape[i])) continue;
         if (taken(shape[i]) case final at?) {
           final endToEnd =
               (shape[i] - wire.points.first).distance < tolerance ||
@@ -187,6 +219,63 @@ class PolylineWiring {
     return WiringDrag(dragged: moved, followers: followers);
   }
 
+  /// [net] with every wire that runs through a junction split there.
+  ///
+  /// Where another wire ends on the middle of this one, that point is a
+  /// junction, and a junction is where wires end: this one becomes two. The
+  /// piece before keeps the wire's id and its first pin; the piece after is
+  /// `id~1` (then `~2`, …) and keeps the last. The drawing is unchanged.
+  static List<PolylineWire> splitAtJunctions(List<PolylineWire> net) {
+    var wires = [...net];
+    var counter = 0;
+    var cut = true;
+    while (cut) {
+      cut = false;
+      // Only a real junction splits — three or more directions of wire
+      // meeting, the points that get a dot. A wire lying along another, or
+      // ending where it bends, is not one.
+      final junctions = junctionsOf(wires);
+      bool isJunction(Offset at) =>
+          junctions.any((j) => (j - at).distance < tolerance);
+      outer:
+      for (var i = 0; i < wires.length; i++) {
+        final wire = wires[i];
+        for (final other in wires) {
+          if (identical(other, wire)) continue;
+          for (final end in [other.points.first, other.points.last]) {
+            // At one of its own ends is where wires meet anyway; anywhere
+            // else — a straight stretch or a corner — is its middle.
+            if ((wire.points.first - end).distance < tolerance ||
+                (wire.points.last - end).distance < tolerance) {
+              continue;
+            }
+            if (!covers(wire.points, end) || !isJunction(end)) continue;
+            final split = DrawnWireGeometry.splitAt(wire.points, end);
+            final at = split.indexWhere((p) => (p - end).distance < tolerance);
+            if (at <= 0 || at >= split.length - 1) continue;
+            wires = [
+              ...wires.sublist(0, i),
+              PolylineWire(
+                id: wire.id,
+                points: split.sublist(0, at + 1),
+                pinA: wire.pinA,
+              ),
+              PolylineWire(
+                id: '${wire.id.split('~').first}~${++counter}',
+                points: split.sublist(at),
+                pinB: wire.pinB,
+              ),
+              ...wires.sublist(i + 1),
+            ];
+            cut = true;
+            break outer;
+          }
+        }
+      }
+    }
+    return wires;
+  }
+
   /// Whether [at] lies anywhere on the chain [points].
   static bool covers(List<Offset> points, Offset at) {
     for (var i = 0; i < points.length - 1; i++) {
@@ -203,6 +292,47 @@ class PolylineWiring {
       if ((a[i] - b[i]).distance >= 1e-6) return false;
     }
     return true;
+  }
+
+  /// How many separate pieces [wires] make: 1 for a net drawn in one
+  /// piece. Wires meet by ending on one another and by crossing.
+  static int pieceCount(List<List<Offset>> wires) {
+    if (wires.isEmpty) return 0;
+    final seen = <int>{};
+    var pieces = 0;
+    for (var start = 0; start < wires.length; start++) {
+      if (seen.contains(start)) continue;
+      pieces++;
+      final stack = [start];
+      seen.add(start);
+      while (stack.isNotEmpty) {
+        final i = stack.removeLast();
+        for (var j = 0; j < wires.length; j++) {
+          if (seen.contains(j) || !_meet(wires[i], wires[j])) continue;
+          seen.add(j);
+          stack.add(j);
+        }
+      }
+    }
+    return pieces;
+  }
+
+  static bool _meet(List<Offset> a, List<Offset> b) {
+    for (final point in [a.first, a.last]) {
+      if (covers(b, point)) return true;
+    }
+    for (final point in [b.first, b.last]) {
+      if (covers(a, point)) return true;
+    }
+    for (var i = 0; i < a.length - 1; i++) {
+      for (var j = 0; j < b.length - 1; j++) {
+        if (DrawnWireGeometry.crossing(a[i], a[i + 1], b[j], b[j + 1]) !=
+            null) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   /// Whether every wire is reachable from every other: the net drawn in one

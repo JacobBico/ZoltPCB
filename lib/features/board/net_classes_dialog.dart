@@ -15,16 +15,28 @@ Future<void> showNetClassesDialog(
   BuildContext context, {
   required String projectId,
   required DesignRules rules,
+  Stackup? stackup,
 }) => showDialog<void>(
   context: context,
-  builder: (_) => _NetClassesDialog(projectId: projectId, rules: rules),
+  builder: (_) => _NetClassesDialog(
+    projectId: projectId,
+    rules: rules,
+    stackup: stackup ?? Stackup.standard(),
+  ),
 );
 
 class _NetClassesDialog extends ConsumerWidget {
-  const _NetClassesDialog({required this.projectId, required this.rules});
+  const _NetClassesDialog({
+    required this.projectId,
+    required this.rules,
+    required this.stackup,
+  });
 
   final String projectId;
   final DesignRules rules;
+
+  /// The board's build, which an impedance class takes its widths from.
+  final Stackup stackup;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -87,6 +99,7 @@ class _NetClassesDialog extends ConsumerWidget {
                           final edited = await _editClass(
                             context,
                             existing: netClass,
+                            stackup: stackup,
                           );
                           if (edited != null) {
                             await repository.updateNetClass(edited);
@@ -114,13 +127,18 @@ class _NetClassesDialog extends ConsumerWidget {
           icon: const Icon(Icons.add, size: 18),
           label: const Text('ADD CLASS'),
           onPressed: () async {
-            final created = await _editClass(context, projectId: projectId);
+            final created = await _editClass(
+              context,
+              projectId: projectId,
+              stackup: stackup,
+            );
             if (created == null) return;
             await repository.addNetClass(
               projectId: projectId,
               name: created.name,
               trackWidth: created.trackWidth,
               clearance: created.clearance,
+              impedance: created.impedance,
             );
           },
         ),
@@ -206,19 +224,26 @@ Future<NetClass?> _editClass(
   BuildContext context, {
   NetClass? existing,
   String? projectId,
+  required Stackup stackup,
 }) => showDialog<NetClass>(
   context: context,
   builder: (_) => _NetClassEditor(
     existing: existing,
     projectId: projectId ?? existing!.projectId,
+    stackup: stackup,
   ),
 );
 
 class _NetClassEditor extends StatefulWidget {
-  const _NetClassEditor({required this.existing, required this.projectId});
+  const _NetClassEditor({
+    required this.existing,
+    required this.projectId,
+    required this.stackup,
+  });
 
   final NetClass? existing;
   final String projectId;
+  final Stackup stackup;
 
   @override
   State<_NetClassEditor> createState() => _NetClassEditorState();
@@ -234,10 +259,15 @@ class _NetClassEditorState extends State<_NetClassEditor> {
         ? ''
         : _mm(widget.existing!.clearance!),
   );
+  late final _impedance = TextEditingController(
+    text: widget.existing?.impedance == null
+        ? ''
+        : _mm(widget.existing!.impedance!),
+  );
 
   @override
   void dispose() {
-    for (final c in [_name, _width, _clearance]) {
+    for (final c in [_name, _width, _clearance, _impedance]) {
       c.dispose();
     }
     super.dispose();
@@ -256,7 +286,38 @@ class _NetClassEditorState extends State<_NetClassEditor> {
         return 'Clearance must be a number, or blank for the design rule';
       }
     }
+    if (_impedance.text.trim().isNotEmpty) {
+      final z = _parse(_impedance);
+      if (z == null || z <= 0) {
+        return 'Impedance must be a number, or blank to route by width';
+      }
+    }
     return null;
+  }
+
+  /// What an impedance target means on each layer of this board.
+  String? get _widthsPreview {
+    final z = _parse(_impedance);
+    if (_impedance.text.trim().isEmpty || z == null || z <= 0) return null;
+    final probe = NetClass(
+      id: '',
+      projectId: '',
+      name: '',
+      trackWidth: _parse(_width) ?? 0.25,
+      impedance: z,
+    );
+    final parts = <String>[];
+    for (final layer in widget.stackup.layers) {
+      final width = ImpedanceCalculator.widthFor(
+        widget.stackup,
+        layer,
+        target: z,
+      );
+      parts.add(
+        '${layer.shortLabel} ${width == null ? '—' : _mm(probe.widthOn(widget.stackup, layer))}',
+      );
+    }
+    return 'Routed at ${parts.join(' · ')} mm on this board';
   }
 
   @override
@@ -311,6 +372,31 @@ class _NetClassEditorState extends State<_NetClassEditor> {
                   ),
                 ],
               ),
+              const SizedBox(height: 10),
+              TextField(
+                key: const ValueKey('net-class-impedance'),
+                controller: _impedance,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: numbers,
+                decoration: field(
+                  'Impedance Ω',
+                  hint: 'blank = route by width',
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              if (_widthsPreview case final preview?)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    preview,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: KicadPalette.textSecondary,
+                    ),
+                  ),
+                ),
               if (problem != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -335,6 +421,9 @@ class _NetClassEditorState extends State<_NetClassEditor> {
                   final clearance = _clearance.text.trim().isEmpty
                       ? null
                       : _parse(_clearance);
+                  final impedance = _impedance.text.trim().isEmpty
+                      ? null
+                      : _parse(_impedance);
                   final existing = widget.existing;
                   Navigator.of(context).pop(
                     existing == null
@@ -344,12 +433,15 @@ class _NetClassEditorState extends State<_NetClassEditor> {
                             name: _name.text.trim(),
                             trackWidth: _parse(_width)!,
                             clearance: clearance,
+                            impedance: impedance,
                           )
                         : existing.copyWith(
                             name: _name.text.trim(),
                             trackWidth: _parse(_width),
                             clearance: clearance,
                             clearClearance: clearance == null,
+                            impedance: impedance,
+                            clearImpedance: impedance == null,
                           ),
                   );
                 },

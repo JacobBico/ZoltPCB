@@ -99,6 +99,7 @@ class BoardPainter extends CustomPainter {
   static Color colorFor(CopperLayer layer) => switch (layer) {
     CopperLayer.front => KicadPalette.frontCopper,
     CopperLayer.back => KicadPalette.backCopper,
+    _ => KicadPalette.innerCopper[layer.index - 1],
   };
 
   @override
@@ -121,7 +122,10 @@ class BoardPainter extends CustomPainter {
 
     // The layer you are not working on stays visible but recedes, so it
     // still tells you where you cannot go without competing for attention.
-    _paintTracks(canvas, activeLayer.other, dimmed: true);
+    // Bottom up, so what is nearer the top is drawn over what is below.
+    for (final layer in scene.board.copperLayers.reversed) {
+      if (layer != activeLayer) _paintTracks(canvas, layer, dimmed: true);
+    }
     _paintTracks(canvas, activeLayer, dimmed: false);
     _paintVias(canvas);
 

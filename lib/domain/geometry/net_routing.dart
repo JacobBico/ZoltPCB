@@ -131,12 +131,18 @@ abstract final class NetRouting {
   /// routed automatically — one connection between each pair of pieces —
   /// so a net drawn by hand shows no extra wires, and one joined in a hurry
   /// still shows how it is joined.
+  ///
+  /// A piece holding one of [labelledPins] is joined by its name, the way
+  /// a KiCad label joins it, and is never bridged to another such piece by
+  /// a wire routed across the sheet. With no labelled pins the routing is
+  /// exactly what it always was.
   static List<RoutedWire> routeNetWithDrawn(
     String netId,
     List<RoutablePin> pins, {
     List<SchematicWire> drawn = const [],
     List<Rect> obstacles = const [],
     Map<String, List<double>> hints = const {},
+    Set<String> labelledPins = const {},
   }) {
     final byId = {for (final pin in pins) pin.id: pin};
     final wires = <RoutedWire>[];
@@ -237,6 +243,73 @@ abstract final class NetRouting {
     final pieces = groups.values.toList();
     if (pieces.length < 2) return wires;
 
+    RoutedWire bridge(RoutablePin a, RoutablePin b) {
+      final route = WireRouter.route(
+        from: a.position,
+        fromExit: a.exitDirection,
+        to: b.position,
+        toExit: b.exitDirection,
+        obstacles: obstacles,
+        offsets: hints[routeKey(a.id, b.id)] ?? const [],
+      );
+      return RoutedWire(
+        netId: netId,
+        pinAId: a.id,
+        pinBId: b.id,
+        points: route.points,
+        handles: route.handles,
+      );
+    }
+
+    // Only pieces with a pin labelled by the Labels action are joined by
+    // name. Without one, this is the routing the drag rules were built and
+    // tested against, unchanged.
+    final anchored = <int>{
+      for (var i = 0; i < pieces.length; i++)
+        if (pieces[i].any((pin) => labelledPins.contains(pin.id))) i,
+    };
+    if (anchored.isNotEmpty) {
+      (RoutablePin, RoutablePin, double)? closest(
+        List<RoutablePin> from,
+        List<RoutablePin> to,
+      ) {
+        (RoutablePin, RoutablePin, double)? best;
+        for (final a in from) {
+          for (final b in to) {
+            final d = (a.position - b.position).distance;
+            if (best == null || d < best.$3) best = (a, b, d);
+          }
+        }
+        return best;
+      }
+
+      // Everything else joins the nearest piece already placed, never
+      // making a bridge between two labelled pieces.
+      final done = {...anchored};
+      final waiting = [
+        for (var i = 0; i < pieces.length; i++)
+          if (!done.contains(i)) i,
+      ];
+      while (waiting.isNotEmpty) {
+        (RoutablePin, RoutablePin, double)? best;
+        int? next;
+        for (final i in waiting) {
+          for (final j in done) {
+            final pair = closest(pieces[i], pieces[j]);
+            if (pair != null && (best == null || pair.$3 < best.$3)) {
+              best = pair;
+              next = i;
+            }
+          }
+        }
+        if (best == null || next == null) break;
+        wires.add(bridge(best.$1, best.$2));
+        done.add(next);
+        waiting.remove(next);
+      }
+      return wires;
+    }
+
     final inTree = <int>{0};
     while (inTree.length < pieces.length) {
       (RoutablePin, RoutablePin)? bestPair;
@@ -260,23 +333,7 @@ abstract final class NetRouting {
       if (bestPair == null || bestPiece == null) break;
       inTree.add(bestPiece);
       final (a, b) = bestPair;
-      final route = WireRouter.route(
-        from: a.position,
-        fromExit: a.exitDirection,
-        to: b.position,
-        toExit: b.exitDirection,
-        obstacles: obstacles,
-        offsets: hints[routeKey(a.id, b.id)] ?? const [],
-      );
-      wires.add(
-        RoutedWire(
-          netId: netId,
-          pinAId: a.id,
-          pinBId: b.id,
-          points: route.points,
-          handles: route.handles,
-        ),
-      );
+      wires.add(bridge(a, b));
     }
     return wires;
   }

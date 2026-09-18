@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../app/file_saver.dart';
 import '../../app/providers.dart';
 import '../../core/theme/kicad_palette.dart';
 import '../../core/util/formatting_bytes.dart';
@@ -12,6 +13,7 @@ import '../../data/export/project_exporter.dart';
 import '../../domain/export/export_preview.dart';
 import '../../domain/pcb/pcb.dart';
 import '../../domain/models/models.dart';
+import 'backup_actions.dart';
 
 /// Writes the design out and hands the files to the rest of the phone.
 ///
@@ -52,6 +54,11 @@ class _ExportPanelState extends ConsumerState<ExportPanel> {
         board: ref.watch(boardSceneProvider(widget.project.id)).value,
         onExport: _export,
         onShare: _share,
+        onSaveToFolder: _saveToFolder,
+        onBackup: () => backUpProject(context, ref, widget.project),
+        onShareBackup: () =>
+            backUpProject(context, ref, widget.project, share: true),
+        onSnapshots: () => showSnapshotsDialog(context, widget.project),
         onFabrication: () => _makeAndShare(
           'Gerbers',
           () => ref
@@ -177,6 +184,29 @@ class _ExportPanelState extends ConsumerState<ExportPanel> {
     }
   }
 
+  /// Writes the whole export as one zip into a folder the user picks —
+  /// Downloads, a cloud drive's folder — rather than handing it to an app.
+  Future<void> _saveToFolder() async {
+    setState(() => _busy = true);
+    try {
+      final bundle = await ref
+          .read(projectExporterProvider)
+          .exportBundle(widget.project.id, into: _shareDirectory);
+      final saved = await ref
+          .read(fileSaverProvider)
+          .save(
+            fileName: bundle.fileName,
+            bytes: await File(bundle.path).readAsBytes(),
+            mimeType: 'application/zip',
+          );
+      if (mounted && saved) _report('Saved ${bundle.fileName}');
+    } catch (error) {
+      if (mounted) _report('Could not save: $error', isError: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   void _report(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
@@ -202,7 +232,16 @@ class _ExportBody extends StatelessWidget {
     required this.onShare,
     required this.onFabrication,
     required this.onPdf,
+    required this.onSaveToFolder,
+    required this.onBackup,
+    required this.onShareBackup,
+    required this.onSnapshots,
   });
+
+  final VoidCallback onSaveToFolder;
+  final VoidCallback onBackup;
+  final VoidCallback onShareBackup;
+  final VoidCallback onSnapshots;
 
   final Project project;
   final ExportPreview preview;
@@ -324,10 +363,28 @@ class _ExportBody extends StatelessWidget {
             label: const Text('WRITE FILES'),
           ),
           const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: busy ? null : onShare,
-            icon: const Icon(Icons.ios_share, size: 16),
-            label: const Text('SHARE'),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: busy ? null : onShare,
+                  icon: const Icon(Icons.ios_share, size: 16),
+                  label: const Text('SHARE'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: const ValueKey('save-to-folder'),
+                  onPressed: busy ? null : onSaveToFolder,
+                  icon: const Icon(
+                    Icons.drive_folder_upload_outlined,
+                    size: 16,
+                  ),
+                  label: const Text('SAVE TO…'),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           const PanelHeading('To order or to show'),
@@ -353,6 +410,39 @@ class _ExportBody extends StatelessWidget {
               ),
             ),
           ],
+          const SizedBox(height: 16),
+          const PanelHeading('Keep it safe'),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: const ValueKey('backup-project'),
+                  onPressed: busy ? null : onBackup,
+                  icon: const Icon(Icons.backup_outlined, size: 16),
+                  label: const Text('BACK UP'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: 'Share a backup',
+                onPressed: busy ? null : onShareBackup,
+                icon: const Icon(Icons.share_outlined, size: 18),
+              ),
+              IconButton(
+                tooltip: 'Snapshots',
+                onPressed: onSnapshots,
+                icon: const Icon(Icons.history, size: 18),
+              ),
+            ],
+          ),
+          Text(
+            'A backup is the whole project in one .hintpcb file — restore '
+            'it from the project list, on this phone or another.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: KicadPalette.textSecondary,
+            ),
+          ),
           const SizedBox(height: 12),
           Text(
             'Files are written to this app\'s storage, then shared with '

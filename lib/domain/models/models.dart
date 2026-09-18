@@ -12,4 +12,6 @@ export 'part_clone.dart';
 export 'part_spec.dart';
 export 'pin.dart';
 export 'project.dart';
+export 'schematic_note.dart';
 export 'schematic_wire.dart';
+export 'label_pattern.dart';

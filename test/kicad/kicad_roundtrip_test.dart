@@ -2,6 +2,7 @@
 library;
 
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hintpcb/data/db/database.dart';
@@ -12,6 +13,7 @@ import 'package:hintpcb/domain/export/schematic_document.dart';
 import 'package:hintpcb/domain/models/models.dart';
 import 'package:hintpcb/domain/symbols/symbols.dart';
 import 'package:hintpcb/kicad/schematic_writer.dart';
+import 'package:hintpcb/kicad/sexpr/sexpr_parser.dart';
 import 'package:hintpcb/kicad/symbol_library_reader.dart';
 
 /// Exports a design and hands it to the real KiCad.
@@ -226,6 +228,106 @@ void main() {
         'kicad-cli accepted the export: ${extracted.length} nets from '
         '${document.parts.length} parts, $wireCount wire segments, ERC clean',
       );
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
+  );
+
+  test(
+    'bus labels join two connectors, and notes come through, in KiCad',
+    () async {
+      final projects = ProjectRepository(db);
+      final parts = PartRepository(db);
+      final nets = NetRepository(db);
+      final project = await projects.create(name: 'Bus Labels');
+
+      final symbols = {
+        'Connector_Generic:Conn_01x04': load('Connector_Generic', 'Conn_01x04'),
+      };
+      final j1 = await parts.addPart(
+        project.id,
+        symbols['Connector_Generic:Conn_01x04']!.toNewPartSpec(),
+      );
+      final j2 = await parts.addPart(
+        project.id,
+        symbols['Connector_Generic:Conn_01x04']!.toNewPartSpec(),
+      );
+      // Put J2 well away from J1, so only the labels can join them.
+      await parts.updateUnitPlacement(
+        j2.units.single.copyWith(x: 80, y: 40, placed: true),
+      );
+
+      // The way the Labels action does it: D[0..3] on each connector.
+      final names = LabelPattern.expand('D[0..3]');
+      for (final part in [j1, j2]) {
+        final pins = [...part.pins]
+          ..sort((a, b) => int.parse(a.number).compareTo(int.parse(b.number)));
+        for (var i = 0; i < pins.length; i++) {
+          await nets.labelPin(project.id, pins[i].id, names[i]);
+        }
+      }
+
+      final document = SchematicDocument(
+        project: (await projects.getById(project.id))!,
+        parts: await parts.getPartsWithDetails(project.id),
+        nets: await nets.getNets(project.id),
+        symbols: symbols,
+        notes: [
+          SchematicNote(
+            id: 'note-a',
+            projectId: project.id,
+            kind: NoteKind.text,
+            content: 'Data bus\nto the display',
+            position: const Offset(20, 20),
+          ),
+          SchematicNote(
+            id: 'note-b',
+            projectId: project.id,
+            kind: NoteKind.box,
+            content: 'Connectors',
+            position: const Offset(10, 10),
+            size: const Size(120, 60),
+          ),
+        ],
+      );
+      final file = File('${workDir.path}/bus.kicad_sch');
+      final text = const SchematicWriter().write(document);
+      await file.writeAsString(text);
+      // One box on the sheet itself; the connector's body is a rectangle
+      // too, but inside its symbol definition.
+      expect(SExprParser.parseDocument(text).children('rectangle').length, 1);
+      expect(text, contains(r'"Data bus\nto the display"'));
+
+      final netlistPath = '${workDir.path}/bus.net';
+      final result = await Process.run(
+        kicadCli,
+        ['sch', 'export', 'netlist', '--output', netlistPath, file.path],
+        environment: {'HOME': workDir.path},
+      );
+      expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
+      final extracted = _parseNets(File(netlistPath).readAsStringSync());
+      for (var i = 0; i < 4; i++) {
+        expect(extracted['D$i'], {
+          'J1.${i + 1}',
+          'J2.${i + 1}',
+        }, reason: 'D$i joins pin ${i + 1} of both connectors');
+      }
+
+      final erc = await Process.run(
+        kicadCli,
+        ['sch', 'erc', '--output', '${workDir.path}/bus.rpt', file.path],
+        environment: {'HOME': workDir.path},
+      );
+      expect(erc.exitCode, 0, reason: '${erc.stdout}\n${erc.stderr}');
+      final report = File('${workDir.path}/bus.rpt').readAsStringSync();
+      for (final complaint in [
+        'failed to load',
+        'unable to parse',
+        'malformed',
+      ]) {
+        expect(report.toLowerCase(), isNot(contains(complaint)));
+      }
+      // ignore: avoid_print
+      print('kicad-cli joined D0..D3 across two connectors by label alone');
     },
     timeout: const Timeout(Duration(minutes: 3)),
   );

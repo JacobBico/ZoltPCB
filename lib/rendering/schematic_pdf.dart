@@ -7,6 +7,7 @@ import 'package:flutter/painting.dart';
 import '../core/theme/kicad_palette.dart';
 import '../data/export/pdf_writer.dart';
 import 'schematic_painter.dart';
+import '../domain/models/schematic_note.dart';
 import 'schematic_scene.dart';
 import 'schematic_viewport.dart';
 
@@ -36,6 +37,7 @@ const printColors = SchematicColors(
 Future<Uint8List> renderSchematicPdf(
   SchematicScene scene, {
   required String title,
+  List<SchematicNote> notes = const [],
   double dpi = 200,
   int maxPixels = 3600,
 }) async {
@@ -58,6 +60,7 @@ Future<Uint8List> renderSchematicPdf(
     viewport: SchematicViewport(pixelsPerMm: pxPerMm, origin: Offset.zero),
     colors: printColors,
     showGrid: false,
+    notes: notes,
   ).paint(canvas, Size(width.toDouble(), height.toDouble()));
 
   final image = await recorder.endRecording().toImage(width, height);

@@ -3,15 +3,130 @@ import '../models/models.dart';
 enum ErcSeverity { error, warning }
 
 enum ErcRule {
-  unconnectedPin('Unconnected pins'),
-  lonelyNet('Net with one pin'),
-  undrivenPower('Supply with nothing driving it'),
-  outputsTogether('Outputs driving each other'),
-  missingFootprint('No footprint'),
-  unannotated('Not numbered');
+  unconnectedPin('Unconnected pins', ErcSeverity.warning),
+  lonelyNet('Net with one pin', ErcSeverity.warning),
+  undrivenPower('Supply with nothing driving it', ErcSeverity.error),
+  outputsTogether('Outputs driving each other', ErcSeverity.error),
+  missingFootprint('No footprint', ErcSeverity.warning),
+  unannotated('Not numbered', ErcSeverity.warning);
 
-  const ErcRule(this.label);
+  const ErcRule(this.label, this.defaultSeverity);
   final String label;
+
+  /// How much it matters unless the project says otherwise.
+  final ErcSeverity defaultSeverity;
+}
+
+/// What a project wants done about one rule.
+enum ErcLevel {
+  error('Error'),
+  warning('Warning'),
+  ignore('Off');
+
+  const ErcLevel(this.label);
+
+  final String label;
+
+  static ErcLevel? byName(String? name) =>
+      values.where((l) => l.name == name).firstOrNull;
+}
+
+/// Which checks matter for one project, and how much.
+///
+/// A board with a deliberately floating test net does not need to hear
+/// about it every time; a design review might want every warning an error.
+/// The check itself is unchanged — this only decides what it reports.
+class ErcSettings {
+  const ErcSettings([this.levels = const {}]);
+
+  /// Rules set away from their default. A rule not here is at its default.
+  final Map<ErcRule, ErcLevel> levels;
+
+  static const defaults = ErcSettings();
+
+  ErcLevel levelOf(ErcRule rule) =>
+      levels[rule] ??
+      (rule.defaultSeverity == ErcSeverity.error
+          ? ErcLevel.error
+          : ErcLevel.warning);
+
+  ErcSettings withLevel(ErcRule rule, ErcLevel level) {
+    final next = {...levels};
+    final isDefault =
+        (rule.defaultSeverity == ErcSeverity.error) ==
+            (level == ErcLevel.error) &&
+        level != ErcLevel.ignore;
+    if (isDefault) {
+      next.remove(rule);
+    } else {
+      next[rule] = level;
+    }
+    return ErcSettings(next);
+  }
+
+  bool get isDefault => levels.isEmpty;
+
+  /// The prefix these are stored under in the project's settings.
+  static const keyPrefix = 'erc.';
+
+  Map<String, String> toSettings() => {
+    for (final rule in ErcRule.values)
+      '$keyPrefix${rule.name}': levelOf(rule).name,
+  };
+
+  static ErcSettings fromSettings(Map<String, String> settings) {
+    final levels = <ErcRule, ErcLevel>{};
+    for (final rule in ErcRule.values) {
+      final level = ErcLevel.byName(settings['$keyPrefix${rule.name}']);
+      if (level != null) levels[rule] = level;
+    }
+    // Normalise, so a stored default does not count as a change.
+    var result = const ErcSettings();
+    for (final entry in levels.entries) {
+      result = result.withLevel(entry.key, entry.value);
+    }
+    return result;
+  }
+
+  /// [violations] as this project wants them: ignored rules dropped, and
+  /// the rest at the severity it chose.
+  List<ErcViolation> apply(List<ErcViolation> violations) {
+    final result = <ErcViolation>[];
+    for (final v in violations) {
+      final level = levelOf(v.rule);
+      if (level == ErcLevel.ignore) continue;
+      final severity = level == ErcLevel.error
+          ? ErcSeverity.error
+          : ErcSeverity.warning;
+      result.add(
+        severity == v.severity
+            ? v
+            : ErcViolation(
+                rule: v.rule,
+                severity: severity,
+                message: v.message,
+                partId: v.partId,
+                netId: v.netId,
+              ),
+      );
+    }
+    result.sort((a, b) {
+      if (a.isError != b.isError) return a.isError ? -1 : 1;
+      return a.rule.index.compareTo(b.rule.index);
+    });
+    return result;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is ErcSettings &&
+      other.levels.length == levels.length &&
+      other.levels.entries.every((e) => levels[e.key] == e.value);
+
+  @override
+  int get hashCode => Object.hashAllUnordered(
+    levels.entries.map((e) => Object.hash(e.key, e.value)),
+  );
 }
 
 class ErcViolation {
@@ -47,6 +162,7 @@ List<ErcViolation> checkSchematic({
   required List<PartWithDetails> parts,
   required List<NetWithEndpoints> nets,
   Set<String>? partsWithBoardFootprint,
+  ErcSettings settings = ErcSettings.defaults,
 }) {
   final violations = <ErcViolation>[];
   final netByPin = <String, NetWithEndpoints>{
@@ -181,9 +297,5 @@ List<ErcViolation> checkSchematic({
     }
   }
 
-  violations.sort((a, b) {
-    if (a.isError != b.isError) return a.isError ? -1 : 1;
-    return a.rule.index.compareTo(b.rule.index);
-  });
-  return violations;
+  return settings.apply(violations);
 }

@@ -10,6 +10,7 @@ import '../library_editors/footprint_editor_panel.dart';
 import '../library_editors/my_library_panel.dart';
 import '../library_editors/symbol_editor_panel.dart';
 import '../pinout/pinout_panel.dart';
+import '../project/backup_actions.dart';
 import '../projects/projects_panel.dart';
 import '../settings/settings_panel.dart';
 
@@ -138,6 +139,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     HomeSection.projects => Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        IconButton(
+          tooltip: 'Restore a backup',
+          onPressed: () => restoreBackup(context, ref),
+          icon: const Icon(Icons.restore, size: 20),
+        ),
+        const SizedBox(width: 4),
         OutlinedButton.icon(
           onPressed: () => ProjectsPanel.openKicad(context, ref),
           icon: const Icon(Icons.file_open_outlined, size: 16),

@@ -10,6 +10,7 @@ import '../../core/util/formatting.dart';
 import '../../core/widgets/panel.dart';
 import '../../data/import/kicad_project_importer.dart';
 import '../../domain/models/models.dart';
+import '../project/backup_actions.dart';
 import '../project/project_screen.dart';
 import 'project_editor_dialog.dart';
 
@@ -137,6 +138,11 @@ class ProjectsPanel extends ConsumerWidget {
               onPressed: () => openKicad(context, ref),
               icon: const Icon(Icons.file_open_outlined, size: 16),
               label: const Text('OPEN KICAD'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => restoreBackup(context, ref),
+              icon: const Icon(Icons.restore, size: 16),
+              label: const Text('RESTORE BACKUP'),
             ),
           ],
         ),
@@ -365,11 +371,23 @@ class _ProjectMenu extends ConsumerWidget {
       color: KicadPalette.surfaceRaised,
       onSelected: (value) => switch (value) {
         'edit' => _edit(context, ref),
+        'backup' => backUpProject(context, ref, project),
+        'share-backup' => backUpProject(context, ref, project, share: true),
         'delete' => _confirmDelete(context, ref),
         _ => null,
       },
       itemBuilder: (context) => [
         PopupMenuItem(value: 'edit', height: 44, child: Text('Properties…')),
+        PopupMenuItem(
+          value: 'backup',
+          height: 44,
+          child: Text('Back up to a folder…'),
+        ),
+        PopupMenuItem(
+          value: 'share-backup',
+          height: 44,
+          child: Text('Share a backup…'),
+        ),
         PopupMenuItem(
           value: 'delete',
           height: 44,

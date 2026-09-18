@@ -9,12 +9,19 @@ Future<void> showErcSheet(
   required List<ErcViolation> violations,
   required void Function(ErcViolation violation) onShow,
   required VoidCallback onRenumber,
+  VoidCallback? onRules,
+  int ignoredRules = 0,
 }) => showModalBottomSheet<void>(
   context: context,
   backgroundColor: KicadPalette.surface,
   isScrollControlled: true,
-  builder: (context) =>
-      _ErcSheet(violations: violations, onShow: onShow, onRenumber: onRenumber),
+  builder: (context) => _ErcSheet(
+    violations: violations,
+    onShow: onShow,
+    onRenumber: onRenumber,
+    onRules: onRules,
+    ignoredRules: ignoredRules,
+  ),
 );
 
 class _ErcSheet extends StatelessWidget {
@@ -22,11 +29,20 @@ class _ErcSheet extends StatelessWidget {
     required this.violations,
     required this.onShow,
     required this.onRenumber,
+    this.onRules,
+    this.ignoredRules = 0,
   });
 
   final List<ErcViolation> violations;
   final void Function(ErcViolation violation) onShow;
   final VoidCallback onRenumber;
+
+  /// Opens the project's choice of which checks matter.
+  final VoidCallback? onRules;
+
+  /// How many checks the project has switched off, so a clean result
+  /// says what it did not look at.
+  final int ignoredRules;
 
   @override
   Widget build(BuildContext context) {
@@ -63,13 +79,27 @@ class _ErcSheet extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      violations.isEmpty
-                          ? 'The schematic checks out'
-                          : '$errors ${errors == 1 ? 'error' : 'errors'}, '
-                                '$warnings ${warnings == 1 ? 'warning' : 'warnings'}',
+                      (violations.isEmpty
+                              ? 'The schematic checks out'
+                              : '$errors ${errors == 1 ? 'error' : 'errors'}, '
+                                    '$warnings ${warnings == 1 ? 'warning' : 'warnings'}') +
+                          (ignoredRules == 0
+                              ? ''
+                              : ' · $ignoredRules '
+                                    '${ignoredRules == 1 ? 'check' : 'checks'} off'),
                       style: theme.textTheme.titleSmall,
                     ),
                   ),
+                  if (onRules != null)
+                    TextButton.icon(
+                      key: const ValueKey('erc-rules'),
+                      icon: const Icon(Icons.tune, size: 16),
+                      label: const Text('RULES'),
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        onRules!();
+                      },
+                    ),
                   TextButton.icon(
                     icon: const Icon(Icons.format_list_numbered, size: 16),
                     label: const Text('RENUMBER'),
@@ -126,4 +156,88 @@ class _ErcSheet extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Chooses, per check, whether it is an error, a warning or off, for one
+/// project. Returns the new settings, or null if cancelled.
+Future<ErcSettings?> showErcRulesDialog(
+  BuildContext context, {
+  required ErcSettings settings,
+}) => showDialog<ErcSettings>(
+  context: context,
+  builder: (_) => _ErcRulesDialog(settings: settings),
+);
+
+class _ErcRulesDialog extends StatefulWidget {
+  const _ErcRulesDialog({required this.settings});
+
+  final ErcSettings settings;
+
+  @override
+  State<_ErcRulesDialog> createState() => _ErcRulesDialogState();
+}
+
+class _ErcRulesDialogState extends State<_ErcRulesDialog> {
+  late ErcSettings _settings = widget.settings;
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Which checks matter'),
+    contentPadding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+    content: SizedBox(
+      width: 560,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final rule in ErcRule.values)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(rule.label)),
+                    SegmentedButton<ErcLevel>(
+                      key: ValueKey('erc-level-${rule.name}'),
+                      showSelectedIcon: false,
+                      style: const ButtonStyle(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      segments: [
+                        for (final level in ErcLevel.values)
+                          ButtonSegment(
+                            value: level,
+                            label: Text(
+                              level.label,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                      ],
+                      selected: {_settings.levelOf(rule)},
+                      onSelectionChanged: (value) => setState(
+                        () =>
+                            _settings = _settings.withLevel(rule, value.first),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => setState(() => _settings = ErcSettings.defaults),
+        child: const Text('DEFAULTS'),
+      ),
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('CANCEL'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.of(context).pop(_settings),
+        child: const Text('SAVE'),
+      ),
+    ],
+  );
 }
