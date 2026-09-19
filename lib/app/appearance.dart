@@ -58,7 +58,7 @@ enum WiringModel {
 @immutable
 class Appearance {
   const Appearance({
-    this.palette = AppPalettes.kicad,
+    this.palette = AppPalettes.hintpcb,
     this.resistorStyle = ResistorStyle.iec,
     this.boardEditor = BoardEditorStyle.precision,
     this.wiring = WiringModel.polyline,

@@ -557,10 +557,7 @@ class SchematicPainter extends CustomPainter {
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    tag.paint(
-      canvas,
-      Offset(body.left, body.bottom + 1),
-    );
+    tag.paint(canvas, Offset(body.left, body.bottom + 1));
   }
 
   /// A dashed outline standing in for a symbol whose library is gone.

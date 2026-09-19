@@ -116,8 +116,8 @@ void main() {
 
   test('an unknown palette id falls back rather than failing', () {
     // A setting written by a newer version must not stop this one opening.
-    expect(AppPalettes.byId('from-the-future'), AppPalettes.kicad);
-    expect(AppPalettes.byId(null), AppPalettes.kicad);
+    expect(AppPalettes.byId('from-the-future'), AppPalettes.hintpcb);
+    expect(AppPalettes.byId(null), AppPalettes.hintpcb);
   });
 
   test('palette ids are unique', () {

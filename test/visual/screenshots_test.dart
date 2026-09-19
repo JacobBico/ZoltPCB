@@ -22,6 +22,8 @@ import 'package:hintpcb/features/settings/settings_panel.dart';
 import 'package:hintpcb/kicad/symbol_library_reader.dart';
 
 import '../helpers/footprint_fixture.dart';
+import 'package:hintpcb/features/home/home_screen.dart';
+
 import '../helpers/library_fixture.dart';
 import '../helpers/pump_app.dart';
 
@@ -55,7 +57,7 @@ void main() {
     }
   });
 
-  tearDown(() => KicadPalette.current = AppPalettes.kicad);
+  tearDown(() => KicadPalette.current = AppPalettes.hintpcb);
 
   const key = ValueKey('shot');
 
@@ -85,7 +87,30 @@ void main() {
     await shoot(tester, 'settings');
   });
 
+  for (final palette in [AppPalettes.hintpcb, AppPalettes.paper]) {
+    testAppWithStorage('home ${palette.id}', skip: skip, (
+      tester,
+      db,
+      storage,
+    ) async {
+      KicadPalette.current = palette;
+      await pumpApp(
+        tester,
+        RepaintBoundary(key: key, child: const HomeScreen()),
+        database: db,
+        storage: storage,
+      );
+      // The logo is read from the asset bundle, which is real I/O.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 200)),
+      );
+      await settleApp(tester);
+      await shoot(tester, 'home_${palette.id}');
+    });
+  }
+
   for (final palette in [
+    AppPalettes.hintpcb,
     AppPalettes.kicad,
     AppPalettes.banana,
     AppPalettes.halloween,

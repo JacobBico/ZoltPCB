@@ -5,6 +5,7 @@ import 'package:hintpcb/features/project/schematic_panel.dart';
 import 'package:hintpcb/data/repositories/net_repository.dart';
 import 'package:hintpcb/data/repositories/part_repository.dart';
 import 'package:hintpcb/data/repositories/project_repository.dart';
+import 'package:hintpcb/core/widgets/app_logo.dart';
 import 'package:hintpcb/core/widgets/app_top_bar.dart';
 import 'package:hintpcb/features/project/project_screen.dart';
 import 'package:hintpcb/features/home/home_screen.dart';
@@ -39,7 +40,7 @@ void main() {
     expect(header.top, 0);
 
     // ...while its contents clear the status bar and the cutout.
-    final title = tester.getRect(find.text('HintPCB'));
+    final title = tester.getRect(find.byType(AppLogo));
     expect(title.top, greaterThanOrEqualTo(32));
     expect(title.left, greaterThanOrEqualTo(48));
 

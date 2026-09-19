@@ -135,6 +135,55 @@ class AppPalette {
 
 /// The palettes the app ships.
 abstract final class AppPalettes {
+  /// The default: the logo's night purple. Lavender wires, rose symbols
+  /// and a gold selection, so the roles stay apart on a purple ground.
+  static const hintpcb = AppPalette(
+    id: 'hintpcb',
+    name: 'HintPCB',
+    description: 'Deep night purple with lavender wires — the HintPCB look.',
+    brightness: Brightness.dark,
+    background: Color(0xFF0C0812),
+    surface: Color(0xFF150E20),
+    surfaceRaised: Color(0xFF1E152D),
+    border: Color(0xFF2F2346),
+    borderStrong: Color(0xFF46355F),
+    textPrimary: Color(0xFFEDE7F6),
+    textSecondary: Color(0xFFA99BC2),
+    textDisabled: Color(0xFF6B5D82),
+    canvas: Color(0xFF110B19),
+    grid: Color(0xFF1F1629),
+    gridMajor: Color(0xFF2B1F39),
+    symbolOutline: Color(0xFFE2709C),
+    symbolFill: Color(0xFF26121F),
+    pin: Color(0xFFE2709C),
+    pinName: Color(0xFF8DB6FF),
+    pinNumber: Color(0xFFC47A98),
+    wire: Color(0xFFB39BF0),
+    bus: Color(0xFF6E9CFF),
+    junction: Color(0xFFB39BF0),
+    label: Color(0xFFB39BF0),
+    globalLabel: Color(0xFFE2709C),
+    fieldText: Color(0xFFC9B8F5),
+    noConnect: Color(0xFF8DB6FF),
+    notes: Color(0xFF8DB6FF),
+    sheet: Color(0xFFD08CE8),
+    highlight: Color(0xFFF2C85B),
+    boardCanvas: Color(0xFF0E0916),
+    boardGrid: Color(0xFF1F1629),
+    frontCopper: Color(0xFFEA7A62),
+    backCopper: Color(0xFF5FC29C),
+    padThroughHole: Color(0xFFE0B24E),
+    drill: Color(0xFF0E0916),
+    silkscreen: Color(0xFFE8DFF4),
+    courtyard: Color(0xFFB07CE0),
+    fabLine: Color(0xFF6B5D82),
+    edgeCuts: Color(0xFFF0DC8A),
+    ratsnest: Color(0xFF9C8EB4),
+    warning: Color(0xFFF2B45B),
+    error: Color(0xFFFF5C6C),
+    success: Color(0xFF7FD6A0),
+  );
+
   static const kicad = AppPalette(
     id: 'kicad',
     name: 'KiCad',
@@ -419,10 +468,18 @@ abstract final class AppPalettes {
   );
 
   /// In the order the settings screen offers them.
-  static const all = [kicad, blueprint, paper, banana, halloween, christmas];
+  static const all = [
+    hintpcb,
+    kicad,
+    blueprint,
+    paper,
+    banana,
+    halloween,
+    christmas,
+  ];
 
   /// The palette with [id], or the default when it is unknown — a setting
   /// written by a newer version of the app must not stop this one opening.
   static AppPalette byId(String? id) =>
-      all.where((p) => p.id == id).firstOrNull ?? kicad;
+      all.where((p) => p.id == id).firstOrNull ?? hintpcb;
 }

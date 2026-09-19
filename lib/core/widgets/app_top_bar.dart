@@ -23,10 +23,15 @@ class AppTopBar extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.leading,
+    this.logo,
     this.actions = const [],
   });
 
   final String title;
+
+  /// Drawn in place of [title] when given — the app's own mark on the home
+  /// screen. [title] still names the bar for screen readers.
+  final Widget? logo;
   final String? subtitle;
   final Widget? leading;
   final List<Widget> actions;
@@ -62,11 +67,17 @@ class AppTopBar extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Flexible(
-                      child: Text(
-                        title,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium,
-                      ),
+                      child: logo != null
+                          ? Semantics(
+                              label: title,
+                              header: true,
+                              child: ExcludeSemantics(child: logo!),
+                            )
+                          : Text(
+                              title,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleMedium,
+                            ),
                     ),
                     if (subtitle != null) ...[
                       const SizedBox(width: 10),

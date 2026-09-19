@@ -9,7 +9,7 @@ import 'package:hintpcb/features/settings/settings_panel.dart';
 import '../helpers/pump_app.dart';
 
 void main() {
-  tearDown(() => KicadPalette.current = AppPalettes.kicad);
+  tearDown(() => KicadPalette.current = AppPalettes.hintpcb);
 
   testApp('choosing a theme applies it and remembers it', (tester, db) async {
     await pumpApp(tester, const Scaffold(body: SettingsPanel()), database: db);

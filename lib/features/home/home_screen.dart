@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../../core/widgets/app_logo.dart';
 import '../../core/widgets/app_top_bar.dart';
 import '../../core/widgets/section_rail.dart';
 import '../components/component_browser_panel.dart';
@@ -71,6 +72,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         children: [
           AppTopBar(
             title: 'HintPCB',
+            logo: const AppLogo(),
             subtitle: _section.label,
             leading: IconButton(
               icon: Icon(_railOpen ? Icons.close : Icons.menu, size: 20),
