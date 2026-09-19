@@ -707,3 +707,22 @@ class ProjectSettings extends Table {
   @override
   Set<Column<Object>> get primaryKey => {projectId, key};
 }
+
+/// A piece of circuit saved to reuse — an LDO with its capacitors, an
+/// op-amp stage — held across every project rather than in one.
+///
+/// Stored as the same snapshot copy and paste use, as JSON, so inserting
+/// one is a paste: parts, their wiring among themselves, and the wires as
+/// they were drawn.
+@DataClassName('SavedCircuitRow')
+class SavedCircuits extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+
+  /// The circuit, as JSON.
+  TextColumn get data => text()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}

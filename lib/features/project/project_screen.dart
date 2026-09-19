@@ -72,15 +72,6 @@ class _ProjectScreenState extends ConsumerState<ProjectScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // A probe from one editor opens the other; the editor picks the probe
-    // up itself once it is showing.
-    ref.listen(crossProbeProvider, (_, request) {
-      if (request == null) return;
-      final section = request.target == ProbeTarget.board
-          ? ProjectSection.board
-          : ProjectSection.schematic;
-      if (section != _section) setState(() => _section = section);
-    });
     final project = ref.watch(projectProvider(widget.projectId));
     final loaded = project.value;
     final parts = ref.watch(projectPartsProvider(widget.projectId)).value;
@@ -103,6 +94,31 @@ class _ProjectScreenState extends ConsumerState<ProjectScreen> {
             actions: [
               // Snapshots belong to the whole project, so they are on the
               // bar every section shares rather than in any one of them.
+              // Cross-probing: a live view of the other half, on the two
+              // sections that have another half to show.
+              if (loaded != null &&
+                  (_section == ProjectSection.schematic ||
+                      _section == ProjectSection.board))
+                IconButton(
+                  key: const ValueKey('cross-probe-toggle'),
+                  tooltip: ref.watch(crossProbeOnProvider)
+                      ? 'Hide the live view'
+                      : (_section == ProjectSection.schematic
+                            ? 'Show the board alongside'
+                            : 'Show the schematic alongside'),
+                  isSelected: ref.watch(crossProbeOnProvider),
+                  icon: const Icon(
+                    Icons.picture_in_picture_alt_outlined,
+                    size: 20,
+                  ),
+                  selectedIcon: Icon(
+                    Icons.picture_in_picture_alt,
+                    size: 20,
+                    color: KicadPalette.highlight,
+                  ),
+                  onPressed: () =>
+                      ref.read(crossProbeOnProvider.notifier).toggle(),
+                ),
               if (loaded != null)
                 IconButton(
                   key: const ValueKey('snapshots-button'),
@@ -207,11 +223,22 @@ class _ProjectScreenState extends ConsumerState<ProjectScreen> {
     ProjectSection.overview => _OverviewPanel(project: project),
     ProjectSection.components => ProjectComponentsPanel(project: project),
     ProjectSection.nets => NetsPanel(project: project),
-    ProjectSection.schematic => SchematicPanel(project: project),
+    ProjectSection.schematic => SchematicPanel(
+      project: project,
+      onShowBoard: () => setState(() => _section = ProjectSection.board),
+    ),
     // Two board editors, chosen in Settings. See [BoardEditorStyle].
     ProjectSection.board => switch (ref.watch(appearanceProvider).boardEditor) {
-      BoardEditorStyle.precision => PrecisionBoardPanel(project: project),
-      BoardEditorStyle.classic => BoardPanel(project: project),
+      BoardEditorStyle.precision => PrecisionBoardPanel(
+        project: project,
+        onShowSchematic: () =>
+            setState(() => _section = ProjectSection.schematic),
+      ),
+      BoardEditorStyle.classic => BoardPanel(
+        project: project,
+        onShowSchematic: () =>
+            setState(() => _section = ProjectSection.schematic),
+      ),
     },
     ProjectSection.production => ProductionPanel(project: project),
     ProjectSection.export => ExportPanel(project: project),

@@ -268,41 +268,68 @@ void _slidingJunctions() {
       (w) => w.points.first == const Offset(50, 50),
     );
 
-    final result = PolylineWiring.drag(net, between.id, 0, const Offset(0, 10));
+    // Up, away from the teeth: it keeps hold of both junctions by a corner
+    // at each.
+    final up = PolylineWiring.drag(net, between.id, 0, const Offset(0, -10));
+    expect(up.dragged.first, const Offset(50, 50));
+    expect(up.dragged.last, const Offset(70, 50));
+    expect(PolylineWiring.covers(up.dragged, const Offset(60, 40)), isTrue);
+    expect(up.followers, isEmpty, reason: 'nothing else moved');
 
-    // It moved, keeping hold of both junctions by a corner at each.
-    expect(result.dragged.first, const Offset(50, 50));
-    expect(result.dragged.last, const Offset(70, 50));
-    expect(PolylineWiring.covers(result.dragged, const Offset(60, 60)), isTrue);
-    expect(
-      result.followers,
-      isEmpty,
-      reason: 'no other wire moved, and neither junction did',
-    );
+    // Down, along the teeth: a corner there would lie on top of each tooth,
+    // so it slides down them instead — and still nothing else moves.
+    final down = PolylineWiring.drag(net, between.id, 0, const Offset(0, 10));
+    expect(down.dragged, const [Offset(50, 60), Offset(70, 60)]);
+    expect(down.followers, isEmpty, reason: 'nothing else moved');
   });
 
   test('either side of a junction moves on its own', () {
-    for (final (id, grab) in [('left', 0), ('right', 0), ('down', 0)]) {
+    for (final id in ['left', 'right', 'down']) {
       final net = [
         _w('left', const [Offset(40, 50), Offset(60, 50)]),
         _w('right', const [Offset(60, 50), Offset(80, 50)]),
         _w('down', const [Offset(60, 50), Offset(60, 70)]),
       ];
       for (final delta in _deltas) {
-        final result = PolylineWiring.drag(net, id, grab, delta);
+        final result = PolylineWiring.drag(net, id, 0, delta);
         expect(
           result.followers,
           isEmpty,
           reason: '$id by $delta moved another wire',
         );
         if (result.dragged.isEmpty) continue;
+        final after = [
+          for (final wire in net) wire.id == id ? result.dragged : wire.points,
+        ];
         expect(
-          PolylineWiring.covers(result.dragged, const Offset(60, 50)),
+          PolylineWiring.allJoined(after),
           isTrue,
-          reason: '$id by $delta let go of the junction',
+          reason: '$id by $delta came away from the others',
         );
       }
     }
+  });
+
+  // "moving the vertical wire along this horizontal wire ended up creating
+  // a new wire ... nothing should be drawn when dragging from the
+  // component"
+  test('a wire slid along another off the same pin draws nothing new', () {
+    final net = [
+      _w('across', const [Offset(50, 60), Offset(90, 60)], pinA: 'c1'),
+      _w('up', const [Offset(50, 60), Offset(50, 40)], pinA: 'c1'),
+    ];
+    final result = PolylineWiring.drag(net, 'up', 0, const Offset(10, 0));
+    expect(result.dragged, const [Offset(60, 60), Offset(60, 40)]);
+    expect(result.followers, isEmpty);
+  });
+
+  test('but not off a pin the other wire does not hold', () {
+    final net = [
+      _w('across', const [Offset(50, 60), Offset(90, 60)]),
+      _w('up', const [Offset(50, 60), Offset(50, 40)], pinA: 'c1'),
+    ];
+    final result = PolylineWiring.drag(net, 'up', 0, const Offset(10, 0));
+    expect(result.dragged.first, const Offset(50, 60), reason: 'on its pin');
   });
 
   test('a free end away from the junction goes with the drag', () {

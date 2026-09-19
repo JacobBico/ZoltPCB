@@ -1367,4 +1367,152 @@ void main() {
     final centre = scene.outline.bounds.center;
     expect((middle - centre).distance, lessThan(1e-6));
   });
+
+  // "the user is holding their phone in landscape ... both their thumbs are
+  // on either side ... when we hover over something, like a component, we
+  // can select it with our RIGHT thumb"
+  testAppWithStorage('the sight button selects what it is over, then picks '
+      'it up', (tester, db, storage) async {
+    final footprintStorage = InMemoryLibraryStorageFor();
+    final (project, _) = await _board(db, footprintStorage);
+
+    await pumpApp(
+      tester,
+      Scaffold(body: PrecisionBoardPanel(project: project)),
+      database: db,
+      footprintStorage: footprintStorage,
+    );
+    Finder sightButton() => find.descendant(
+      of: find.byKey(const ValueKey('aim-bar')),
+      matching: find.byType(FilledButton),
+    );
+
+    // Over empty board, nothing to press.
+    await _aimAt(tester, const Offset(38, 25));
+    expect(sightButton(), findsNothing);
+
+    // Over R1, the button offers it — no tap in the middle of the screen.
+    await _aimAt(tester, const Offset(30, 35));
+    expect(find.text('SELECT R1'), findsOneWidget);
+    await tester.tap(sightButton());
+    await settleApp(tester);
+
+    // Its actions are on the left, where the other thumb is.
+    expect(find.text('Properties'), findsOneWidget);
+    expect(find.text('Footprint'), findsOneWidget);
+
+    // Pressed again, over the part now selected, it picks it up.
+    expect(find.text('MOVE R1'), findsOneWidget);
+    await tester.tap(sightButton());
+    await settleApp(tester);
+    expect(find.text('DROP'), findsOneWidget);
+  });
+
+  // "we have 'sharp corners' or 1 mm by default but the user can add a
+  // specific radius if so desired, kind of how we have net classes"
+  testAppWithStorage('a corner radius of your own is kept with the project', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final footprintStorage = InMemoryLibraryStorageFor();
+    final (project, _) = await _board(db, footprintStorage);
+
+    Future<void> open() async {
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+      // Along the strip at the top, which scrolls.
+      await tester.dragUntilVisible(
+        find.byIcon(Icons.rounded_corner),
+        find.byType(ListView).first,
+        const Offset(-120, 0),
+      );
+      await tester.tap(find.byIcon(Icons.rounded_corner).first);
+      await settleApp(tester);
+    }
+
+    await open();
+    // The two every board has.
+    expect(find.text('Sharp'), findsOneWidget);
+    expect(find.text('1 mm'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('corner-radius-field')),
+      '0.75',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('corner-radius-add')));
+    await settleApp(tester);
+    // Chosen at once: the strip says so.
+    expect(find.text('r0.75'), findsOneWidget);
+
+    // Opened again, it is there to pick, and can be taken away.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await open();
+    expect(find.byKey(const ValueKey('corner-radius-0.75')), findsOneWidget);
+    await tester.tap(find.byTooltip('Remove 0.75 mm'));
+    await settleApp(tester);
+    expect(find.byKey(const ValueKey('corner-radius-0.75')), findsNothing);
+    expect(find.text('Sharp'), findsOneWidget, reason: 'built-ins stay');
+  });
+
+  // "for the grid choice, similar to what we just did for rounding corners,
+  // I think there should be a default option and then classes that the
+  // user can add"
+  testAppWithStorage('a grid of your own is kept with the project', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final footprintStorage = InMemoryLibraryStorageFor();
+    final (project, _) = await _board(db, footprintStorage);
+
+    Future<void> open() async {
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+      await tester.tap(find.text('0.5 mm').first);
+      await settleApp(tester);
+    }
+
+    await open();
+    expect(find.text('0.5 mm · default'), findsOneWidget);
+    expect(find.text('Free'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const ValueKey('grid-field')), '2.54');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('grid-add')));
+    await settleApp(tester);
+    expect(find.text('2.54 mm'), findsOneWidget, reason: 'the strip says so');
+
+    // Free turns snapping off.
+    await tester.tap(find.text('2.54 mm'));
+    await settleApp(tester);
+    await tester.tap(find.text('Free'));
+    await settleApp(tester);
+    expect(find.text('free'), findsWidgets);
+
+    // Opened again, the added grid is there to pick, and can go.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await pumpApp(
+      tester,
+      Scaffold(body: PrecisionBoardPanel(project: project)),
+      database: db,
+      footprintStorage: footprintStorage,
+    );
+    await tester.tap(find.text('0.5 mm').first);
+    await settleApp(tester);
+    expect(find.text('2.54 mm · 0.1 in'), findsOneWidget);
+    await tester.tap(find.byTooltip('Remove 2.54 mm'));
+    await settleApp(tester);
+    expect(find.text('2.54 mm · 0.1 in'), findsNothing);
+    expect(find.text('0.5 mm · default'), findsOneWidget);
+  });
 }

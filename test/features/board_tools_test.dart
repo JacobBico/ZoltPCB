@@ -212,19 +212,34 @@ void main() {
     );
 
     await _openMore(tester, 'Impedance calculator');
-    await tester.tap(find.byKey(const ValueKey('impedance-solve')));
-    await tester.pump();
-    expect(find.text('50.0 Ω'), findsOneWidget);
-    await tester.tap(find.text('USE THIS WIDTH'));
-    await settleApp(tester);
-
+    // It opens on 50 Ω and the width is already there — no button to find
+    // it with.
     final width = ImpedanceCalculator.widthFor(
       Stackup.standard(layerCount: 4),
       CopperLayer.front,
       target: 50,
     )!;
-    // The strip's width chip, to the micron the calculator gave.
     final shown = width.toStringAsFixed(3).replaceFirst(RegExp(r'\.?0+$'), '');
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('impedance-result')),
+        matching: find.text('$shown mm'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('On target'), findsOneWidget);
+
+    // A pair at 90 Ω gives a different, narrower answer.
+    await tester.tap(find.text('Pair'));
+    await tester.pump();
+    expect(find.text('90 Ω'), findsOneWidget);
+    await tester.tap(find.text('Single'));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('impedance-use')));
+    await settleApp(tester);
+
+    // The strip's width chip, to the micron the calculator gave.
     expect(find.text('$shown mm'), findsOneWidget);
   });
 
@@ -263,9 +278,11 @@ void main() {
     expect(find.byKey(const ValueKey('board-sync-chip')), findsNothing);
   });
 
-  // "Cross-probing. Tap a net or part in the schematic and have it
-  // highlight on the board, and back again"
-  testAppWithStorage('a part is shown on the board, and back on the sheet', (
+  // "if I enable the cross probing functionality in either the schematic or
+  // board sections, a second miniature live display pops up and basically
+  // highlights whatever you tap ... you see it in real time instead of it
+  // switching in and out"
+  testAppWithStorage('the live view follows what is tapped, on both sides', (
     tester,
     db,
     storage,
@@ -291,29 +308,97 @@ void main() {
       storage: storage,
       footprintStorage: footprints,
     );
+    expect(find.byKey(const ValueKey('cross-probe-board')), findsNothing);
 
+    await tester.tap(find.byKey(const ValueKey('cross-probe-toggle')));
+    await settleApp(tester);
+    expect(find.byKey(const ValueKey('cross-probe-board')), findsOneWidget);
+
+    // The sheet's own painter is the one that is not in the live view.
     SchematicPainter sheet() => tester
-        .widgetList<CustomPaint>(find.byType(CustomPaint))
+        .widgetList<CustomPaint>(
+          find.descendant(
+            of: find.byType(SchematicPanel),
+            matching: find.byType(CustomPaint),
+          ),
+        )
         .map((w) => w.painter)
         .whereType<SchematicPainter>()
+        .first;
+    BoardPainter live() => tester
+        .widgetList<CustomPaint>(
+          find.descendant(
+            of: find.byKey(const ValueKey('cross-probe-board')),
+            matching: find.byType(CustomPaint),
+          ),
+        )
+        .map((w) => w.painter)
+        .whereType<BoardPainter>()
         .single;
+
     final panel = tester.getRect(find.byType(SchematicPanel));
     await tester.tapAt(
       panel.topLeft + sheet().viewport.toScreen(const Offset(76.2, 50.8)),
     );
     await settleApp(tester);
-    await _tapText(tester, 'On board');
 
-    expect(find.byType(PrecisionBoardPanel), findsOneWidget);
-    final painter = _painter(tester);
-    final r2 = painter.scene.footprints.firstWhere(
+    // Still on the schematic, with R2 lit up on the board beside it.
+    expect(find.byType(SchematicPanel), findsOneWidget);
+    expect(find.byType(PrecisionBoardPanel), findsNothing);
+    final r2 = live().scene.footprints.firstWhere(
       (f) => f.part.reference == 'R2',
     );
-    expect(painter.selectedFootprintId, r2.ref.id);
+    expect(live().selectedFootprintId, r2.ref.id);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('cross-probe-caption')))
+          .data,
+      'R2',
+    );
 
-    // And back.
-    await _tapText(tester, 'Schematic');
-    expect(find.byType(SchematicPanel), findsOneWidget);
-    expect(sheet().selectedUnitId, isNotNull);
+    // Tapping another part follows at once.
+    await tester.tapAt(
+      panel.topLeft + sheet().viewport.toScreen(const Offset(50.8, 50.8)),
+    );
+    await settleApp(tester);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('cross-probe-caption')))
+          .data,
+      'R1',
+    );
+
+    // The other way: on the board, the schematic is the live view.
+    await tester.tap(find.byTooltip('Go to the Board'));
+    await settleApp(tester);
+    expect(find.byType(PrecisionBoardPanel), findsOneWidget);
+    expect(find.byKey(const ValueKey('cross-probe-schematic')), findsOneWidget);
+
+    final board = tester.getRect(find.byType(PrecisionBoardPanel));
+    final boardPainter = tester
+        .widgetList<CustomPaint>(
+          find.descendant(
+            of: find.byType(PrecisionBoardPanel),
+            matching: find.byType(CustomPaint),
+          ),
+        )
+        .map((w) => w.painter)
+        .whereType<BoardPainter>()
+        .first;
+    await tester.tapAt(
+      board.topLeft + boardPainter.viewport.toScreen(const Offset(45, 35)),
+    );
+    await settleApp(tester);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('cross-probe-caption')))
+          .data,
+      'R2',
+    );
+
+    // And it closes from its own corner.
+    await tester.tap(find.byTooltip('Close the live view'));
+    await settleApp(tester);
+    expect(find.byKey(const ValueKey('cross-probe-schematic')), findsNothing);
   });
 }

@@ -11,12 +11,14 @@ import '../../app/edit_history.dart';
 import '../../app/providers.dart';
 import '../../data/repositories/circuit_paster.dart';
 import '../../data/repositories/part_repository.dart';
+import '../../data/repositories/saved_circuit_repository.dart';
 import '../../domain/geometry/drawn_wire_geometry.dart';
 import '../../domain/geometry/polyline_wiring.dart';
 import '../../domain/geometry/segment_wiring.dart';
 import '../../domain/symbols/mcu_essentials.dart';
 import '../../domain/erc/erc.dart';
 import 'bulk_edit_dialog.dart';
+import 'cross_probe_view.dart';
 import 'pin_labels_dialog.dart';
 import 'note_dialog.dart';
 import 'erc_sheet.dart';
@@ -47,9 +49,12 @@ import 'canvas_action_bar.dart';
 /// pending-pin state, so switching between the two views mid-connection
 /// keeps its place.
 class SchematicPanel extends ConsumerStatefulWidget {
-  const SchematicPanel({super.key, required this.project});
+  const SchematicPanel({super.key, required this.project, this.onShowBoard});
 
   final Project project;
+
+  /// Goes to the board, from the cross-probing live view.
+  final VoidCallback? onShowBoard;
 
   @override
   ConsumerState<SchematicPanel> createState() => _SchematicPanelState();
@@ -370,6 +375,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
           ComponentSidebar(
             onAdd: _addFromLibrary,
             onStarter: _addStarter,
+            onSavedCircuit: _insertSaved,
             onClose: () =>
                 ref.read(componentPickerOpenProvider.notifier).set(false),
           ),
@@ -634,51 +640,8 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     );
   }
 
-  /// Acts on a probe sent from the board, once the sheet is laid out.
-  void _takeProbe() {
-    if (ref.read(crossProbeProvider)?.target != ProbeTarget.schematic) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _scene == null || _viewport == null) return;
-      final request = ref
-          .read(crossProbeProvider.notifier)
-          .take(ProbeTarget.schematic);
-      if (request == null) return;
-      if (request.partId != null) {
-        _showPart(request.partId, request.netId);
-        return;
-      }
-      final netId = request.netId;
-      final pins = netId == null ? null : _scene!.pinsByNet[netId];
-      if (pins == null || pins.isEmpty) {
-        _notify('That net is not on the schematic');
-        return;
-      }
-      final viewport = _viewport!;
-      final centre = pins.first.sheetPosition;
-      setState(() {
-        _selectedUnitId = null;
-        _highlightedNetId = netId;
-        _viewport = viewport.copyWith(
-          origin: Offset(
-            _canvasSize.width / 2 - centre.dx * viewport.pixelsPerMm,
-            _canvasSize.height / 2 - centre.dy * viewport.pixelsPerMm,
-          ),
-        );
-      });
-    });
-  }
-
-  /// Shows [partId] or [netId] on the board.
-  void _probeBoard({String? partId, String? netId}) => ref
-      .read(crossProbeProvider.notifier)
-      .send(
-        ProbeRequest(target: ProbeTarget.board, partId: partId, netId: netId),
-      );
-
   Widget _canvas(SchematicScene scene) {
     _scene = scene;
-    ref.watch(crossProbeProvider);
-    _takeProbe();
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
@@ -701,6 +664,8 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
                   behavior: HitTestBehavior.opaque,
                   onTapUp: (details) =>
                       _onTap(scene, viewport, details.localPosition),
+                  onLongPressStart: (details) =>
+                      _onLongPress(scene, viewport, details.localPosition),
                   onScaleStart: (details) =>
                       _onScaleStart(scene, viewport, details),
                   onScaleUpdate: (details) => _onScaleUpdate(scene, details),
@@ -747,6 +712,16 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
                 ),
               ),
             ),
+            if (ref.watch(crossProbeOnProvider))
+              Positioned(
+                top: 10,
+                right: 10,
+                child: MiniBoardView(
+                  projectId: widget.project.id,
+                  focus: _probeFocus(scene),
+                  onOpen: widget.onShowBoard,
+                ),
+              ),
             Positioned(
               right: 10,
               bottom: 10,
@@ -767,6 +742,51 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
         );
       },
     );
+  }
+
+  /// What the board live view follows: the part selected, or the net of
+  /// the wire, label or pin selected.
+  ProbeFocus _probeFocus(SchematicScene scene) {
+    final unitId =
+        _selectedUnitId ??
+        (_selectedUnitIds.length == 1 ? _selectedUnitIds.first : null);
+    final unit = scene.units.where((u) => u.unit.id == unitId).firstOrNull;
+    final pendingPin = ref.watch(pendingPinProvider);
+    final pin = scene.pins.where((p) => p.id == pendingPin).firstOrNull;
+    final wireNet = scene.wires
+        .where((w) => w.key == _selectedWireKey)
+        .firstOrNull
+        ?.netId;
+    return ProbeFocus(
+      partId: unit?.part.id ?? pin?.partId,
+      netId: wireNet ?? _selectedLabelNetId ?? pin?.netId ?? _highlightedNetId,
+    );
+  }
+
+  /// A long press on a part starts picking parts one by one: that part is
+  /// the first, and every tap after adds or takes one away. A box sweeps
+  /// up whatever is inside it; this picks just what is wanted — the three
+  /// resistors to give one value, not the ground symbol between them.
+  void _onLongPress(
+    SchematicScene scene,
+    SchematicViewport viewport,
+    Offset local,
+  ) {
+    if (_isDraggingUnit) return;
+    final sheet = viewport.toSheet(local);
+    final unit = scene.unitAt(sheet);
+    if (unit == null) return;
+    HapticFeedback.mediumImpact();
+    ref.read(pendingPinProvider.notifier).set(null);
+    setState(() {
+      _selectedUnitId = null;
+      _selectedWireKey = null;
+      _selectedWireRun = null;
+      _selectedLabelNetId = null;
+      _selectedNoteId = null;
+      _selectedUnitIds = {..._selectedUnitIds, unit.unit.id};
+    });
+    _notify('Tap more parts to add them — tap empty sheet when done');
   }
 
   /// `2 parts · 1 wire selected`, and the sensible variants of it.
@@ -834,7 +854,20 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
           CanvasAction(
             label: 'Edit',
             icon: Icons.edit_note,
-            onPressed: group.isEmpty ? null : () => _bulkEdit(group),
+            onPressed: _fittedParts(group).isEmpty
+                ? null
+                : () => _bulkEdit(group),
+          ),
+          CanvasAction(
+            label:
+                _fittedParts(group).isNotEmpty &&
+                    _fittedParts(group).every((p) => p.dnp)
+                ? 'Fit'
+                : 'DNP',
+            icon: Icons.do_not_disturb_on_outlined,
+            onPressed: _fittedParts(group).isEmpty
+                ? null
+                : () => _toggleDnp(group),
           ),
           CanvasAction(
             label: 'Copy',
@@ -842,6 +875,12 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
             // A copy is of parts and their wiring: wires on their own have
             // nothing to be wired to once they are put down.
             onPressed: group.isEmpty ? null : () => _copyGroup(scene, group),
+          ),
+          CanvasAction(
+            label: 'Save',
+            icon: Icons.bookmark_add_outlined,
+            // Saved to use again in any project, from the component list.
+            onPressed: group.isEmpty ? null : () => _saveCircuit(scene, group),
           ),
           CanvasAction(
             label: 'Delete',
@@ -1019,11 +1058,6 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       onPressed: net == null ? null : () => _labelNet(net),
     ),
     CanvasAction(
-      label: 'On board',
-      icon: Icons.developer_board,
-      onPressed: () => _probeBoard(netId: label.netId),
-    ),
-    CanvasAction(
       label: 'Snap back',
       icon: Icons.restart_alt,
       onPressed: label.pinned ? () => _resetLabel(label) : null,
@@ -1085,11 +1119,6 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       label: 'Label',
       icon: Icons.label_outline,
       onPressed: net == null ? null : () => _labelNet(net),
-    ),
-    CanvasAction(
-      label: 'On board',
-      icon: Icons.developer_board,
-      onPressed: () => _probeBoard(netId: wire.netId),
     ),
     CanvasAction(
       label: 'Cut',
@@ -1239,12 +1268,6 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       icon: Icons.copy_all_outlined,
       onPressed: () => _duplicate(unit),
     ),
-    if (unit.part.onBoard)
-      CanvasAction(
-        label: 'On board',
-        icon: Icons.developer_board,
-        onPressed: () => _probeBoard(partId: unit.part.id),
-      ),
     CanvasAction(
       label: 'Delete',
       icon: Icons.delete_outline,
@@ -1538,10 +1561,129 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
 
   /// Copies a group with its wiring, ready to paste somewhere else.
   /// One set of fields for every part in the group.
+  /// The parts of [group] that are fitted to a board — every one but the
+  /// power symbols, which have no footprint, value or place in a BOM to
+  /// change. A multi-unit part is one part, however many units are picked.
+  static List<Part> _fittedParts(List<PlacedUnit> group) => {
+    for (final unit in group)
+      if (!SchematicScene.isPowerReference(unit.part.reference))
+        unit.part.id: unit.part,
+  }.values.toList();
+
+  /// Marks every part picked do-not-populate — or, when they all already
+  /// are, fits them again.
+  Future<void> _toggleDnp(List<PlacedUnit> group) async {
+    final parts = _fittedParts(group);
+    if (parts.isEmpty) return;
+    final dnp = !parts.every((p) => p.dnp);
+    final repository = ref.read(partRepositoryProvider);
+    final after = [for (final p in parts) p.copyWith(dnp: dnp)];
+    for (final part in after) {
+      await repository.updatePart(part);
+    }
+    _record(
+      dnp ? 'Do not populate ${parts.length}' : 'Fit ${parts.length}',
+      undo: () async {
+        for (final part in parts) {
+          await repository.updatePart(part);
+        }
+      },
+      redo: () async {
+        for (final part in after) {
+          await repository.updatePart(part);
+        }
+      },
+    );
+    _notify(
+      dnp
+          ? '${parts.length} parts marked do-not-populate — still in the BOM '
+                'and on the board'
+          : '${parts.length} parts fitted again',
+    );
+  }
+
+  /// Keeps the picked parts, their wiring and their wires as a circuit to
+  /// insert again, in any project.
+  Future<void> _saveCircuit(
+    SchematicScene scene,
+    List<PlacedUnit> group,
+  ) async {
+    final parts = ref.read(projectPartsProvider(widget.project.id)).value;
+    final nets = ref.read(projectNetsProvider(widget.project.id)).value;
+    if (parts == null || nets == null) return;
+    final ids = {for (final unit in group) unit.unit.id};
+    final clip = CircuitClip.of(
+      parts: parts,
+      nets: nets,
+      wires: _selectionWiresOf(scene, ids),
+      unitIds: ids,
+      area: _areaOf(scene, ids)?.inflate(0.01),
+    );
+    if (clip == null) return;
+    final name = await _askCircuitName(clip);
+    if (name == null || !mounted) return;
+    await ref.read(savedCircuitRepositoryProvider).save(name, clip);
+    _notify('Saved "$name" — it is under Saved circuits when you add parts');
+  }
+
+  Future<String?> _askCircuitName(CircuitClip clip) {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Save this circuit'),
+        content: SizedBox(
+          width: 460,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                key: const ValueKey('save-circuit-name'),
+                controller: controller,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Name',
+                  hintText: 'e.g. 3.3 V LDO',
+                  isDense: true,
+                ),
+                onSubmitted: (text) => Navigator.of(
+                  dialog,
+                ).pop(text.trim().isEmpty ? null : text.trim()),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${clip.parts.length} parts, wired as they are here. Add it to '
+                'any project from Saved circuits in the component list.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: KicadPalette.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialog).pop(),
+            child: const Text('CANCEL'),
+          ),
+          FilledButton(
+            key: const ValueKey('save-circuit-confirm'),
+            onPressed: () {
+              final text = controller.text.trim();
+              Navigator.of(dialog).pop(text.isEmpty ? 'Circuit' : text);
+            },
+            child: const Text('SAVE'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _bulkEdit(List<PlacedUnit> group) async {
-    // A multi-unit part is one part, however many of its units are boxed.
-    final byId = {for (final unit in group) unit.part.id: unit.part};
-    final parts = byId.values.toList();
+    final parts = _fittedParts(group);
+    if (parts.isEmpty) return;
     final edit = await showBulkEditDialog(context, parts: parts);
     if (edit == null || edit.isEmpty || !mounted) return;
     final repository = ref.read(partRepositoryProvider);
@@ -1894,8 +2036,18 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   /// it was, and selects it so it can be dragged straight into place.
   Future<void> _paste() async {
     final clip = ref.read(circuitClipboardProvider);
-    final viewport = _viewport;
     if (clip == null) return;
+    await _pasteClip(clip);
+  }
+
+  /// Puts a saved circuit on the sheet, the way a paste does.
+  Future<void> _insertSaved(SavedCircuit saved) async {
+    await _pasteClip(saved.clip, label: saved.name);
+    _notify('Added ${saved.name}');
+  }
+
+  Future<void> _pasteClip(CircuitClip clip, {String? label}) async {
+    final viewport = _viewport;
     final at =
         _lastTapSheet ??
         viewport?.toSheet(
@@ -1928,7 +2080,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       }
     });
     _record(
-      'Paste ${clip.summary}',
+      label == null ? 'Paste ${clip.summary}' : 'Add $label',
       undo: () async {
         for (final wire in pasted.wires) {
           await nets.deleteWire(wire.id);
@@ -2019,7 +2171,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       final wire = unit != null
           ? null
           : scene.wireRunNear(sheet, _wireToleranceMm(viewport))?.wire.drawnId;
+      // The count says more than the how-to hint once picking is going.
+      _hintTimer?.cancel();
       setState(() {
+        _hint = null;
         if (unit != null) {
           final id = unit.unit.id;
           _selectedUnitIds = _selectedUnitIds.contains(id)
@@ -2946,8 +3101,43 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       final (joined, _) = await _mergeCollinear(netId);
       final (cut, _) = await _splitAtJunctions(netId);
       final dropped = await _dropCovered(netId);
-      if (joined.isEmpty && cut.isEmpty && dropped.isEmpty) break;
+      final trimmed = await _trimRetracedEnds(netId);
+      if (joined.isEmpty && cut.isEmpty && dropped.isEmpty && !trimmed) {
+        break;
+      }
     }
+  }
+
+  /// Cuts back wires of [netId] that leave a pin or junction along a wire
+  /// already leaving it — see [PolylineWiring.trimRetracedEnds]. Returns
+  /// whether anything changed.
+  Future<bool> _trimRetracedEnds(String netId) async {
+    final repository = ref.read(netRepositoryProvider);
+    final stored = [
+      for (final wire in await repository.getWires(widget.project.id))
+        if (wire.netId == netId) wire,
+    ];
+    final (changed, after) = PolylineWiring.trimRetracedEnds([
+      for (final wire in stored)
+        PolylineWire(
+          id: wire.id,
+          points: wire.points,
+          pinA: wire.pinAId,
+          pinB: wire.pinBId,
+        ),
+    ]);
+    if (changed.isEmpty) return false;
+    for (final wire in stored) {
+      if (!changed.contains(wire.id)) continue;
+      final now = after.where((w) => w.id == wire.id).firstOrNull;
+      if (now == null) {
+        await repository.deleteWire(wire.id);
+        continue;
+      }
+      await repository.updateWire(wire.copyWith(points: now.points));
+      await repository.setWireEnds(wire.id, pinAId: now.pinA, pinBId: now.pinB);
+    }
+    return true;
   }
 
   /// Takes away wires of [netId] lying entirely along others of the net.
@@ -3103,6 +3293,17 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
             ]).length >
             entry.value.length)
           entry.key,
+      for (final entry in byNet.entries)
+        if (PolylineWiring.trimRetracedEnds([
+          for (final wire in entry.value)
+            PolylineWire(
+              id: wire.id,
+              points: wire.points,
+              pinA: wire.pinAId,
+              pinB: wire.pinBId,
+            ),
+        ]).$1.isNotEmpty)
+          entry.key,
     };
   }
 
@@ -3123,6 +3324,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     _tidying = true;
     try {
       for (final netId in nets) {
+        await _trimRetracedEnds(netId);
         await _splitAtJunctions(netId);
       }
     } finally {

@@ -6,6 +6,7 @@
 library;
 
 export 'circuit_clip.dart';
+export 'circuit_clip_json.dart';
 export 'net.dart';
 export 'part.dart';
 export 'part_clone.dart';

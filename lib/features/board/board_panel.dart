@@ -17,6 +17,7 @@ import '../../domain/models/models.dart';
 import '../../domain/pcb/pcb.dart';
 import '../../rendering/schematic_viewport.dart';
 import '../project/canvas_action_bar.dart';
+import '../project/cross_probe_view.dart';
 import 'board_painter.dart';
 import 'board_sync_dialog.dart';
 import 'impedance_dialog.dart';
@@ -48,9 +49,12 @@ enum BoardMode {
 
 /// The board editor: place footprints, draw copper, check the rules.
 class BoardPanel extends ConsumerStatefulWidget {
-  const BoardPanel({super.key, required this.project});
+  const BoardPanel({super.key, required this.project, this.onShowSchematic});
 
   final Project project;
+
+  /// Goes to the schematic, from the cross-probing live view.
+  final VoidCallback? onShowSchematic;
 
   @override
   ConsumerState<BoardPanel> createState() => _BoardPanelState();
@@ -166,8 +170,6 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
     // still under the finger and jumps to its new place on release — which
     // reads as the canvas lagging rather than as nothing having moved.
     final scene = _withLiveDrag(committed);
-    ref.watch(crossProbeProvider);
-    _takeProbe(committed);
     _persistCopperCorrections(committed);
 
     final parts = ref.watch(projectPartsProvider(widget.project.id)).value;
@@ -409,6 +411,28 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
                 }),
               ),
             ),
+            if (ref.watch(crossProbeOnProvider) && !_fabPreview)
+              Positioned(
+                top: 52,
+                right: 10,
+                child: MiniSchematicView(
+                  project: widget.project,
+                  focus: ProbeFocus(
+                    partId: scene.footprints
+                        .where((f) => f.ref.id == _selectedFootprintId)
+                        .firstOrNull
+                        ?.part
+                        .id,
+                    netId:
+                        scene.tracks
+                            .where((t) => t.id == _selectedTrackId)
+                            .firstOrNull
+                            ?.netId ??
+                        _highlightedNetId,
+                  ),
+                  onOpen: widget.onShowSchematic,
+                ),
+              ),
           ],
         );
       },
@@ -960,37 +984,6 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
   );
 
   /// Centres the view on a point of the board, close enough to see it.
-  /// Acts on a probe sent from the schematic: selects the part, or lights
-  /// up the net, and brings it into view.
-  void _takeProbe(BoardScene scene) {
-    if (ref.read(crossProbeProvider)?.target != ProbeTarget.board) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final request = ref
-          .read(crossProbeProvider.notifier)
-          .take(ProbeTarget.board);
-      if (request == null) return;
-      final footprint = scene.footprints
-          .where((f) => f.part.id == request.partId)
-          .firstOrNull;
-      final pad = scene.pads.where((p) => p.netId == request.netId).firstOrNull;
-      if (footprint == null && pad == null) {
-        _notify('Not on the board yet');
-        return;
-      }
-      setState(() {
-        _selectedFootprintId = footprint?.ref.id;
-        _selectedTrackId = null;
-        _highlightedNetId = request.netId;
-      });
-      _focusOn(
-        footprint != null
-            ? Offset(footprint.ref.x, footprint.ref.y)
-            : pad!.position,
-      );
-    });
-  }
-
   void _focusOn(Offset board) {
     final viewport = _viewport;
     final size = _canvasSize;

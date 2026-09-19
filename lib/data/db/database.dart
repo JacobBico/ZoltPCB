@@ -36,6 +36,7 @@ part 'database.g.dart';
     ProjectSnapshots,
     SchematicNotes,
     ProjectSettings,
+    SavedCircuits,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -98,7 +99,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -233,6 +234,10 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 14) {
         await m.addColumn(netNodes, netNodes.labelled);
+      }
+      // v15 keeps saved circuits, across projects. Nothing to migrate.
+      if (from < 15) {
+        await m.createTable(savedCircuits);
       }
     },
     beforeOpen: (details) async {

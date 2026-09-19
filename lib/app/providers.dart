@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/db/database.dart';
 import '../data/repositories/net_repository.dart';
 import '../data/repositories/note_repository.dart';
+import '../data/repositories/saved_circuit_repository.dart';
 import '../data/repositories/part_repository.dart';
 import '../data/export/project_exporter.dart';
 import '../data/repositories/project_repository.dart';
@@ -62,6 +63,15 @@ final schematicNotesProvider =
       (ref, projectId) => ref.watch(noteRepositoryProvider).watch(projectId),
       isAutoDispose: true,
     );
+
+final savedCircuitRepositoryProvider = Provider<SavedCircuitRepository>(
+  (ref) => SavedCircuitRepository(ref.watch(databaseProvider)),
+);
+
+/// Circuits saved to reuse, in every project.
+final savedCircuitsProvider = StreamProvider<List<SavedCircuit>>(
+  (ref) => ref.watch(savedCircuitRepositoryProvider).watch(),
+);
 
 /// The user's own symbols and footprints.
 final ownLibraryStoreProvider = Provider<OwnLibraryStore>(
@@ -384,6 +394,14 @@ final projectSnapshotsProvider =
 final projectSettingsRepositoryProvider = Provider<ProjectSettingsRepository>(
   (ref) => ProjectSettingsRepository(ref.watch(databaseProvider)),
 );
+
+/// A project's own preferences, as stored.
+final projectSettingsProvider =
+    StreamProvider.family<Map<String, String>, String>(
+      (ref, projectId) =>
+          ref.watch(projectSettingsRepositoryProvider).watchAll(projectId),
+      isAutoDispose: true,
+    );
 
 /// Which electrical checks a project cares about, and how much.
 final ercSettingsProvider = StreamProvider.family<ErcSettings, String>(

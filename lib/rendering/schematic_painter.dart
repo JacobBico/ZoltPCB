@@ -485,6 +485,17 @@ class SchematicPainter extends CustomPainter {
           selectedUnitIds.contains(unit.unit.id);
       final symbol = unit.symbol;
 
+      // A part marked do-not-populate is drawn faded, with a cross over
+      // it: still on the sheet, in the BOM and on the board, but plainly
+      // not one that gets fitted.
+      final dnp = unit.part.dnp;
+      if (dnp) {
+        canvas.saveLayer(
+          null,
+          Paint()..color = const Color(0xFF000000).withValues(alpha: 0.38),
+        );
+      }
+
       if (symbol != null) {
         renderer.paintGraphics(
           canvas,
@@ -517,7 +528,39 @@ class SchematicPainter extends CustomPainter {
       );
 
       _paintFields(canvas, unit, selected);
+      if (dnp) {
+        canvas.restore();
+        _paintDnpMark(canvas, unit);
+      }
     }
+  }
+
+  /// A cross over a do-not-populate part's body, and a small tag saying so.
+  void _paintDnpMark(Canvas canvas, PlacedUnit unit) {
+    final body = _rectToScreen(scene.bodyBoundsOf(unit)).inflate(2);
+    final paint = Paint()
+      ..color = KicadPalette.error.withValues(alpha: 0.8)
+      ..strokeWidth = math.max(1.2, viewport.lengthToScreen(0.2))
+      ..strokeCap = StrokeCap.round;
+    canvas
+      ..drawLine(body.topLeft, body.bottomRight, paint)
+      ..drawLine(body.topRight, body.bottomLeft, paint);
+    final fontSize = math.max(8.0, viewport.lengthToScreen(1.0));
+    final tag = TextPainter(
+      text: TextSpan(
+        text: 'DNP',
+        style: TextStyle(
+          color: KicadPalette.error,
+          fontSize: fontSize,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tag.paint(
+      canvas,
+      Offset(body.left, body.bottom + 1),
+    );
   }
 
   /// A dashed outline standing in for a symbol whose library is gone.

@@ -13340,6 +13340,314 @@ class ProjectSettingsCompanion extends UpdateCompanion<ProjectSettingRow> {
   }
 }
 
+class $SavedCircuitsTable extends SavedCircuits
+    with TableInfo<$SavedCircuitsTable, SavedCircuitRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SavedCircuitsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dataMeta = const VerificationMeta('data');
+  @override
+  late final GeneratedColumn<String> data = GeneratedColumn<String>(
+    'data',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, name, data, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'saved_circuits';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SavedCircuitRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('data')) {
+      context.handle(
+        _dataMeta,
+        this.data.isAcceptableOrUnknown(data['data']!, _dataMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dataMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SavedCircuitRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SavedCircuitRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      data: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}data'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SavedCircuitsTable createAlias(String alias) {
+    return $SavedCircuitsTable(attachedDatabase, alias);
+  }
+}
+
+class SavedCircuitRow extends DataClass implements Insertable<SavedCircuitRow> {
+  final String id;
+  final String name;
+
+  /// The circuit, as JSON.
+  final String data;
+  final DateTime createdAt;
+  const SavedCircuitRow({
+    required this.id,
+    required this.name,
+    required this.data,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['data'] = Variable<String>(data);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  SavedCircuitsCompanion toCompanion(bool nullToAbsent) {
+    return SavedCircuitsCompanion(
+      id: Value(id),
+      name: Value(name),
+      data: Value(data),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory SavedCircuitRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SavedCircuitRow(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      data: serializer.fromJson<String>(json['data']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'data': serializer.toJson<String>(data),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  SavedCircuitRow copyWith({
+    String? id,
+    String? name,
+    String? data,
+    DateTime? createdAt,
+  }) => SavedCircuitRow(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    data: data ?? this.data,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  SavedCircuitRow copyWithCompanion(SavedCircuitsCompanion data) {
+    return SavedCircuitRow(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      data: data.data.present ? data.data.value : this.data,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SavedCircuitRow(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('data: $data, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, data, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SavedCircuitRow &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.data == this.data &&
+          other.createdAt == this.createdAt);
+}
+
+class SavedCircuitsCompanion extends UpdateCompanion<SavedCircuitRow> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String> data;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const SavedCircuitsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.data = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SavedCircuitsCompanion.insert({
+    required String id,
+    required String name,
+    required String data,
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       data = Value(data),
+       createdAt = Value(createdAt);
+  static Insertable<SavedCircuitRow> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? data,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (data != null) 'data': data,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SavedCircuitsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String>? data,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return SavedCircuitsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      data: data ?? this.data,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (data.present) {
+      map['data'] = Variable<String>(data.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SavedCircuitsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('data: $data, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -13378,6 +13686,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ProjectSettingsTable projectSettings = $ProjectSettingsTable(
     this,
   );
+  late final $SavedCircuitsTable savedCircuits = $SavedCircuitsTable(this);
   late final Index idxPartsProject = Index(
     'idx_parts_project',
     'CREATE INDEX idx_parts_project ON parts (project_id)',
@@ -13487,6 +13796,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     projectSnapshots,
     schematicNotes,
     projectSettings,
+    savedCircuits,
     idxPartsProject,
     idxPartUnitsPart,
     idxPartPinsPart,
@@ -26436,6 +26746,187 @@ typedef $$ProjectSettingsTableProcessedTableManager =
       ProjectSettingRow,
       PrefetchHooks Function({bool projectId})
     >;
+typedef $$SavedCircuitsTableCreateCompanionBuilder =
+    SavedCircuitsCompanion Function({
+      required String id,
+      required String name,
+      required String data,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$SavedCircuitsTableUpdateCompanionBuilder =
+    SavedCircuitsCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<String> data,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$SavedCircuitsTableFilterComposer
+    extends Composer<_$AppDatabase, $SavedCircuitsTable> {
+  $$SavedCircuitsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get data => $composableBuilder(
+    column: $table.data,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SavedCircuitsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SavedCircuitsTable> {
+  $$SavedCircuitsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get data => $composableBuilder(
+    column: $table.data,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SavedCircuitsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SavedCircuitsTable> {
+  $$SavedCircuitsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get data =>
+      $composableBuilder(column: $table.data, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$SavedCircuitsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SavedCircuitsTable,
+          SavedCircuitRow,
+          $$SavedCircuitsTableFilterComposer,
+          $$SavedCircuitsTableOrderingComposer,
+          $$SavedCircuitsTableAnnotationComposer,
+          $$SavedCircuitsTableCreateCompanionBuilder,
+          $$SavedCircuitsTableUpdateCompanionBuilder,
+          (
+            SavedCircuitRow,
+            BaseReferences<_$AppDatabase, $SavedCircuitsTable, SavedCircuitRow>,
+          ),
+          SavedCircuitRow,
+          PrefetchHooks Function()
+        > {
+  $$SavedCircuitsTableTableManager(_$AppDatabase db, $SavedCircuitsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SavedCircuitsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SavedCircuitsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SavedCircuitsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> data = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SavedCircuitsCompanion(
+                id: id,
+                name: name,
+                data: data,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required String data,
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => SavedCircuitsCompanion.insert(
+                id: id,
+                name: name,
+                data: data,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SavedCircuitsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SavedCircuitsTable,
+      SavedCircuitRow,
+      $$SavedCircuitsTableFilterComposer,
+      $$SavedCircuitsTableOrderingComposer,
+      $$SavedCircuitsTableAnnotationComposer,
+      $$SavedCircuitsTableCreateCompanionBuilder,
+      $$SavedCircuitsTableUpdateCompanionBuilder,
+      (
+        SavedCircuitRow,
+        BaseReferences<_$AppDatabase, $SavedCircuitsTable, SavedCircuitRow>,
+      ),
+      SavedCircuitRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -26487,4 +26978,6 @@ class $AppDatabaseManager {
       $$SchematicNotesTableTableManager(_db, _db.schematicNotes);
   $$ProjectSettingsTableTableManager get projectSettings =>
       $$ProjectSettingsTableTableManager(_db, _db.projectSettings);
+  $$SavedCircuitsTableTableManager get savedCircuits =>
+      $$SavedCircuitsTableTableManager(_db, _db.savedCircuits);
 }

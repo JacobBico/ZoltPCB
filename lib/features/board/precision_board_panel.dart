@@ -13,9 +13,11 @@ import '../../core/widgets/panel.dart';
 import '../../domain/models/models.dart';
 import '../../domain/pcb/pcb.dart';
 import '../../rendering/schematic_viewport.dart';
+import '../project/cross_probe_view.dart';
 import 'board_painter.dart';
 import 'layer_picker.dart';
 import 'board_sync_dialog.dart';
+import 'preset_value_sheet.dart';
 import 'impedance_dialog.dart';
 import 'meander_dialog.dart';
 import 'net_lengths_dialog.dart';
@@ -69,9 +71,16 @@ enum AimTool {
 /// it. Everything that needs a precise position is placed this way: track
 /// corners, pour outlines, edge cuts, vias, and parts.
 class PrecisionBoardPanel extends ConsumerStatefulWidget {
-  const PrecisionBoardPanel({super.key, required this.project});
+  const PrecisionBoardPanel({
+    super.key,
+    required this.project,
+    this.onShowSchematic,
+  });
 
   final Project project;
+
+  /// Goes to the schematic, from the cross-probing live view.
+  final VoidCallback? onShowSchematic;
 
   @override
   ConsumerState<PrecisionBoardPanel> createState() =>
@@ -89,9 +98,10 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   double? _trackWidth;
   ViaSize? _viaSize;
 
-  /// What angles copper may leave a corner at, and how far its corners are
-  /// rounded. Both belong to the person routing, not to the app.
-  TrackAngleLock _angleLock = TrackAngleLock.deg45;
+  /// Copper turns in 45° steps, always — the way it is routed in KiCad, and
+  /// one less choice on a strip with little room. How far corners are
+  /// rounded stays the router's call.
+  static const _angleLock = TrackAngleLock.deg45;
   double _curveRadius = 0;
 
   /// The two corners of the area being swept, and what fell inside it.
@@ -179,8 +189,6 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     final scene = sceneAsync.value;
     final parts = partsAsync.value;
     if (scene == null || parts == null) return const SizedBox.shrink();
-    ref.watch(crossProbeProvider);
-    _takeProbe(scene);
 
     if (parts.isEmpty) {
       return const EmptyState(
@@ -314,10 +322,38 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
               bottom: 10,
               child: _bottomBar(scene, committed, parts, snap),
             ),
+            if (ref.watch(crossProbeOnProvider) && !_fabPreview)
+              Positioned(
+                top: 52,
+                right: 10,
+                child: MiniSchematicView(
+                  project: widget.project,
+                  focus: _probeFocus(scene),
+                  onOpen: widget.onShowSchematic,
+                ),
+              ),
           ],
         );
       },
     );
+  }
+
+  /// What the schematic live view follows: the part picked up or selected,
+  /// or the net of the copper selected.
+  ProbeFocus _probeFocus(BoardScene scene) {
+    final footprintId = _carryingId ?? _selectedFootprintId;
+    final footprint = scene.footprints
+        .where((f) => f.ref.id == footprintId)
+        .firstOrNull;
+    final netId =
+        scene.tracks
+            .where((t) => t.id == _selectedTrackId)
+            .firstOrNull
+            ?.netId ??
+        scene.vias.where((v) => v.id == _selectedViaId).firstOrNull?.netId ??
+        _routeNetId ??
+        _highlightedNetId;
+    return ProbeFocus(partId: footprint?.part.id, netId: netId);
   }
 
   /// The board with whatever is being carried following the crosshair.
@@ -699,17 +735,6 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                       colour: KicadPalette.textSecondary,
                       onTap: () => _chooseVia(scene),
                     ),
-                    // What angles copper may turn at. A board routed at 3°
-                    // is legal and unreadable; KiCad defaults to 45 and so
-                    // does this.
-                    _StripChip(
-                      label: _angleLock.label,
-                      icon: Icons.turn_sharp_right_outlined,
-                      colour: _angleLock == TrackAngleLock.any
-                          ? KicadPalette.warning
-                          : KicadPalette.textSecondary,
-                      onTap: () => setState(() => _angleLock = _angleLock.next),
-                    ),
                     _StripChip(
                       label: _curveRadius > 0
                           ? 'r${_mm(_curveRadius)}'
@@ -770,19 +795,31 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           // scrolling it off the left of the screen to keep the last one
           // in view had it exactly backwards.
           child: SingleChildScrollView(
+            // A new set of buttons starts from the left. Scrolled along to
+            // reach one selection's last button, the row stayed scrolled
+            // when that selection went, and Undo sat off the edge.
+            key: ValueKey(
+              '${_selectedPickId ?? ''}|${_tool.name}|${_points.isEmpty}|'
+              '$_isCarrying|${_region != null}',
+            ),
             scrollDirection: Axis.horizontal,
             child: Row(children: _contextButtons(scene, parts)),
           ),
         ),
         const SizedBox(width: 8),
         AimBar(
+          key: const ValueKey('aim-bar'),
           snap: snap,
-          placeLabel: _placeLabel,
+          placeLabel: _canPlace
+              ? _placeLabel
+              : _sightAction(committed)?.label ?? '',
           // The committed scene, never the preview. The preview already has
           // the carried thing moved; handing it to DROP applied the move a
           // second time, so a slid track's neighbours were written from
           // geometry that did not exist and snapped back to where they were.
-          onPlace: _canPlace ? () => _place(committed, snap) : null,
+          onPlace: _canPlace
+              ? () => _place(committed, snap)
+              : _sightAction(committed)?.onPressed,
         ),
       ],
     );
@@ -999,11 +1036,6 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           label: 'Footprint',
           onPressed: () => setState(() => _assigningPartId = footprint.part.id),
         ),
-        _Chip(
-          icon: Icons.schema_outlined,
-          label: 'Schematic',
-          onPressed: () => _probeSchematic(partId: footprint.part.id),
-        ),
       ];
     }
 
@@ -1025,12 +1057,6 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           label: 'Tune',
           onPressed: () => _tune(scene, track),
         ),
-        if (track.netId != null)
-          _Chip(
-            icon: Icons.schema_outlined,
-            label: 'Schematic',
-            onPressed: () => _probeSchematic(netId: track.netId),
-          ),
         _Chip(
           icon: Icons.tune,
           label: 'Properties',
@@ -2481,55 +2507,6 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     );
   }
 
-  /// Acts on a probe sent from the schematic, once the board is showing.
-  void _takeProbe(BoardScene scene) {
-    if (ref.read(crossProbeProvider)?.target != ProbeTarget.board) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final request = ref
-          .read(crossProbeProvider.notifier)
-          .take(ProbeTarget.board);
-      if (request == null) return;
-      final partId = request.partId;
-      if (partId != null) {
-        final placed = scene.footprints.any((f) => f.part.id == partId);
-        if (!placed) {
-          _notify('That part is not placed on the board yet');
-          return;
-        }
-        _selectPlaced(partId);
-        return;
-      }
-      final netId = request.netId;
-      final pad = scene.pads.where((p) => p.netId == netId).firstOrNull;
-      if (netId == null || pad == null) {
-        _notify('That net has no pads on the board yet');
-        return;
-      }
-      setState(() {
-        _clearSelection();
-        _highlightedNetId = netId;
-      });
-      _centreOn(pad.position);
-      final length = NetLength.of(scene, netId);
-      _notify(
-        '${pad.netName ?? 'Net'}: ${scene.pads.where((p) => p.netId == netId).length} pads'
-        '${length.trackCount == 0 ? '' : ' · ${_mm(length.length)} mm routed'}',
-      );
-    });
-  }
-
-  /// Shows [partId] or [netId] on the schematic.
-  void _probeSchematic({String? partId, String? netId}) => ref
-      .read(crossProbeProvider.notifier)
-      .send(
-        ProbeRequest(
-          target: ProbeTarget.schematic,
-          partId: partId,
-          netId: netId,
-        ),
-      );
-
   void _selectPlaced(String partId) {
     final scene = ref.read(boardSceneProvider(widget.project.id)).value;
     final footprint = scene?.footprints
@@ -2580,84 +2557,156 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     // way of the thing being drawn.
     if (_points.isNotEmpty) return;
 
-    // Silkscreen first. Text is small and sits on top of everything, so it
-    // has first claim on a tap that lands on both it and what is beneath.
+    final pick = _pickAt(scene, board, tolerance);
+    setState(() {
+      _clearSelection();
+      pick?.select();
+    });
+  }
+
+  /// What is at [board], within [tolerance], and how to select it — shared
+  /// by a tap on the board and by the sight's own button, so the two can
+  /// never disagree about what is there.
+  ///
+  /// Silkscreen first: text is small and sits on top of everything, so it
+  /// has first claim on a point that is over both it and what is beneath.
+  ({String label, String id, VoidCallback select})? _pickAt(
+    BoardScene scene,
+    Offset board,
+    double tolerance,
+  ) {
     final text = _nearestText(scene, board, tolerance);
     if (text != null) {
-      setState(() {
-        _clearSelection();
-        _selectedTextId = text.id;
-      });
-      return;
+      return (
+        label: 'TEXT',
+        id: 'text:${text.id}',
+        select: () => _selectedTextId = text.id,
+      );
     }
     final labelled = _nearestLabel(scene, board, tolerance);
     if (labelled != null) {
-      setState(() {
-        _clearSelection();
-        _selectedLabelId = labelled.ref.id;
-      });
-      return;
+      return (
+        label: '${labelled.part.reference} LABEL',
+        id: 'label:${labelled.ref.id}',
+        select: () => _selectedLabelId = labelled.ref.id,
+      );
     }
-
     final via = _nearestVia(scene, board, tolerance);
     if (via != null) {
-      setState(() {
-        _clearSelection();
-        _selectedViaId = via.id;
-        _highlightedNetId = via.netId;
-      });
-      return;
+      return (
+        label: 'VIA',
+        id: 'via:${via.id}',
+        select: () {
+          _selectedViaId = via.id;
+          _highlightedNetId = via.netId;
+        },
+      );
     }
-
     final edge = _nearestEdge(scene, board, tolerance);
     if (edge != null) {
-      setState(() {
-        _clearSelection();
-        _selectedEdgeId = edge.id;
-      });
-      return;
+      return (
+        label: 'CUT',
+        id: 'edge:${edge.id}',
+        select: () => _selectedEdgeId = edge.id,
+      );
     }
-
     final track = scene.trackNear(board, tolerance);
     if (track != null) {
-      setState(() {
-        _clearSelection();
-        _selectedTrackId = track.id;
-        _highlightedNetId = track.netId;
-      });
-      return;
+      return (
+        label: 'TRACK',
+        id: 'track:${track.id}',
+        select: () {
+          _selectedTrackId = track.id;
+          _highlightedNetId = track.netId;
+        },
+      );
     }
-
     final footprint = scene.footprintAt(board);
     if (footprint != null) {
-      setState(() {
-        _clearSelection();
-        _selectedFootprintId = footprint.ref.id;
-      });
-      return;
+      return (
+        label: footprint.part.reference,
+        id: 'footprint:${footprint.ref.id}',
+        select: () => _selectedFootprintId = footprint.ref.id,
+      );
     }
-
     final zone = _zoneAt(scene, board);
     if (zone != null) {
-      setState(() {
-        _clearSelection();
-        _selectedZoneId = zone.id;
-        _highlightedNetId = zone.netId;
-      });
-      return;
+      return (
+        label: 'POUR',
+        id: 'zone:${zone.id}',
+        select: () {
+          _selectedZoneId = zone.id;
+          _highlightedNetId = zone.netId;
+        },
+      );
     }
-
     // The board edge itself, which is as much a drawn thing as the cuts
     // added to it and was the one object that could not be picked up.
     if (_onOutline(scene, board, tolerance)) {
-      setState(() {
-        _clearSelection();
-        _outlineSelected = true;
-      });
-      return;
+      return (
+        label: 'OUTLINE',
+        id: 'outline',
+        select: () => _outlineSelected = true,
+      );
     }
+    return null;
+  }
 
-    setState(_clearSelection);
+  /// What is selected, in the same terms as [_pickAt].
+  String? get _selectedPickId => switch (null) {
+    _ when _selectedTextId != null => 'text:$_selectedTextId',
+    _ when _selectedLabelId != null => 'label:$_selectedLabelId',
+    _ when _selectedViaId != null => 'via:$_selectedViaId',
+    _ when _selectedEdgeId != null => 'edge:$_selectedEdgeId',
+    _ when _selectedTrackId != null => 'track:$_selectedTrackId',
+    _ when _selectedFootprintId != null => 'footprint:$_selectedFootprintId',
+    _ when _selectedZoneId != null => 'zone:$_selectedZoneId',
+    _ when _outlineSelected => 'outline',
+    _ => null,
+  };
+
+  /// What the sight's button does in Select, where there is nothing to
+  /// place: select what the sight is over, so the right thumb can do what
+  /// a tap in the middle of the screen does — and, over the thing already
+  /// selected, pick it up.
+  ({String label, VoidCallback onPressed})? _sightAction(BoardScene scene) {
+    if (_tool != AimTool.select || _points.isNotEmpty || _fabPreview) {
+      return null;
+    }
+    final viewport = _viewport;
+    if (viewport == null) return null;
+    final tolerance = math.max(0.3, 16 / viewport.pixelsPerMm);
+    final pick = _pickAt(scene, _lastSnap, tolerance);
+    if (pick == null) return null;
+
+    if (pick.id == _selectedPickId) {
+      final footprint = scene.footprints
+          .where((f) => f.ref.id == _selectedFootprintId)
+          .firstOrNull;
+      if (footprint != null) {
+        return (
+          label: 'MOVE ${footprint.part.reference}',
+          onPressed: () => _carry(footprint),
+        );
+      }
+      final track = scene.tracks
+          .where((t) => t.id == _selectedTrackId)
+          .firstOrNull;
+      if (track != null) {
+        return (label: 'SLIDE', onPressed: () => _slide(track));
+      }
+      return (label: 'DESELECT', onPressed: () => setState(_clearSelection));
+    }
+    return (
+      label: 'SELECT ${pick.label}',
+      onPressed: () {
+        HapticFeedback.selectionClick();
+        setState(() {
+          _clearSelection();
+          pick.select();
+        });
+      },
+    );
   }
 
   /// Whether [board] is on the board edge, within [tolerance].
@@ -2786,106 +2835,29 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   /// short chain of them following the bend — so a curved track can still
   /// be selected, nudged and ripped up a piece at a time.
   Future<void> _chooseCurve(BoardScene scene) async {
-    final width = _widthFor(scene);
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: KicadPalette.surface,
-      builder: (sheet) => SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-                child: Text(
-                  'Corner rounding',
-                  style: Theme.of(sheet).textTheme.titleSmall,
-                ),
-              ),
-              for (final radius in [0.0, width, width * 2, width * 4, 2.0])
-                ListTile(
-                  dense: true,
-                  leading: Icon(
-                    radius == _curveRadius
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked,
-                    size: 18,
-                    color: radius == _curveRadius
-                        ? KicadPalette.highlight
-                        : KicadPalette.textSecondary,
-                  ),
-                  title: Text(
-                    radius == 0 ? 'Sharp corners' : '${_mm(radius)} mm radius',
-                  ),
-                  subtitle: radius == 0
-                      ? const Text('Straight segments meeting at a point')
-                      : null,
-                  onTap: () {
-                    setState(() => _curveRadius = radius);
-                    Navigator.of(sheet).pop();
-                  },
-                ),
-            ],
-          ),
-        ),
-      ),
+    final radius = await showPresetValueSheet(
+      context,
+      kind: cornerRadii,
+      projectId: widget.project.id,
+      current: _curveRadius,
     );
+    if (radius == null || !mounted) return;
+    setState(() => _curveRadius = radius);
   }
 
   Future<void> _chooseGrid() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: KicadPalette.surface,
-      builder: (sheet) => SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SwitchListTile(
-                value: _snap,
-                onChanged: (value) {
-                  setState(() => _snap = value);
-                  Navigator.of(sheet).pop();
-                },
-                title: const Text('Snap to the grid'),
-                subtitle: const Text(
-                  'Off puts points exactly where the crosshair is',
-                ),
-              ),
-              Divider(height: 1, color: KicadPalette.border),
-              for (final grid in const [0.05, 0.1, 0.25, 0.5, 1.0, 1.27, 2.54])
-                ListTile(
-                  dense: true,
-                  leading: Icon(
-                    grid == _grid
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked,
-                    size: 18,
-                    color: grid == _grid
-                        ? KicadPalette.highlight
-                        : KicadPalette.textSecondary,
-                  ),
-                  title: Text('${_mm(grid)} mm'),
-                  subtitle: switch (grid) {
-                    1.27 => const Text('0.05 inch'),
-                    2.54 => const Text('0.1 inch — headers and DIP'),
-                    _ => null,
-                  },
-                  onTap: () {
-                    setState(() {
-                      _grid = grid;
-                      _snap = true;
-                    });
-                    Navigator.of(sheet).pop();
-                  },
-                ),
-            ],
-          ),
-        ),
-      ),
+    final grid = await showPresetValueSheet(
+      context,
+      kind: boardGrids,
+      projectId: widget.project.id,
+      // Zero is free placement, which is what the sheet shows it as.
+      current: _snap ? _grid : 0,
     );
+    if (grid == null || !mounted) return;
+    setState(() {
+      _snap = grid > 0;
+      if (grid > 0) _grid = grid;
+    });
   }
 
   CopperLayer _layerFor(PlacedPad pad) {

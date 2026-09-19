@@ -74,6 +74,12 @@ class _BulkEditDialogState extends State<_BulkEditDialog> {
   late bool? _hidden;
   late bool? _inBom;
 
+  /// Whether the parts are all one kind — all resistors, all capacitors.
+  /// Only then does one value or one footprint make sense for them all;
+  /// an op-amp and its resistors share a DNP mark, not a footprint.
+  late final bool _oneKind =
+      widget.parts.map((p) => p.referencePrefix).toSet().length == 1;
+
   @override
   void initState() {
     super.initState();
@@ -166,43 +172,54 @@ class _BulkEditDialogState extends State<_BulkEditDialog> {
                 ),
               ),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      key: const ValueKey('bulk-value'),
-                      controller: _value,
-                      decoration: InputDecoration(
-                        labelText: 'Value',
-                        hintText: _originalValue == null ? 'Mixed' : null,
-                        isDense: true,
+              if (!_oneKind)
+                Text(
+                  'Value and footprint can be set together only on parts '
+                  'of one kind — pick just the resistors, say.',
+                  key: const ValueKey('bulk-mixed-kinds'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: KicadPalette.textDisabled,
+                  ),
+                )
+              else
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        key: const ValueKey('bulk-value'),
+                        controller: _value,
+                        decoration: InputDecoration(
+                          labelText: 'Value',
+                          hintText: _originalValue == null ? 'Mixed' : null,
+                          isDense: true,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: TextField(
-                      key: const ValueKey('bulk-footprint'),
-                      controller: _footprint,
-                      decoration: InputDecoration(
-                        labelText: 'Footprint',
-                        hintText: _originalFootprint == null
-                            ? 'Mixed'
-                            : 'Library:Footprint_Name',
-                        isDense: true,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        key: const ValueKey('bulk-footprint'),
+                        controller: _footprint,
+                        decoration: InputDecoration(
+                          labelText: 'Footprint',
+                          hintText: _originalFootprint == null
+                              ? 'Mixed'
+                              : 'Library:Footprint_Name',
+                          isDense: true,
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
               const SizedBox(height: 4),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _tristate(
                     'Do not populate',
-                    'Left off the board',
+                    'Placed, but not fitted',
                     _dnp,
                     (v) => setState(() => _dnp = v),
                   ),

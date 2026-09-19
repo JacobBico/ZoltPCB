@@ -118,7 +118,7 @@ class PolylineWiring {
     // stays on its pin, and one at a junction stays at the junction: the
     // wire turns a corner there rather than taking the junction, and every
     // other wire meeting at it, along.
-    final moved = DrawnWireGeometry.slideRun(
+    final slid = DrawnWireGeometry.slideRun(
       wire.points,
       run,
       delta,
@@ -129,6 +129,7 @@ class PolylineWiring {
           !wire.endPinned &&
           !isJunction(wire.points.last),
     );
+    final moved = _slideAlongInsteadOfLeg(slid, wire, net);
     final shift = DrawnWireGeometry.runShift(wire.points, run, delta);
     final from = wire.points[run];
     final to = wire.points[run + 1];
@@ -195,6 +196,10 @@ class PolylineWiring {
         (wire.points.last, moved.last),
       ]) {
         if ((was - now).distance < 1e-6) continue;
+        // An end that was at a junction was never carried: it slid along a
+        // wire already leaving that point, and every other wire there
+        // stays where it is.
+        if (isJunction(was)) continue;
         if (!covers(shape, was) || covers(shape, now)) continue;
 
         var nearest = -1;
@@ -217,6 +222,127 @@ class PolylineWiring {
     }
 
     return WiringDrag(dragged: moved, followers: followers);
+  }
+
+  /// [moved] without a corner leg that would only retrace another wire.
+  ///
+  /// A wire whose end is held — on a pin, or at a junction — turns a
+  /// corner there when dragged, and that leg is new wire. But if another
+  /// wire already leaves the same point in the same direction, the leg
+  /// would lie on top of it: dragging a wire up from a capacitor pin along
+  /// the wire that also leaves that pin drew a second wire over the first.
+  /// There the end slides along the wire that is already there instead,
+  /// and nothing new is drawn.
+  static List<Offset> _slideAlongInsteadOfLeg(
+    List<Offset> moved,
+    PolylineWire wire,
+    List<PolylineWire> net,
+  ) {
+    var result = moved;
+
+    /// Whether another wire leaves [held] along [held]–[corner]. On a pin,
+    /// only a wire on that same pin counts — the one that goes on holding
+    /// it once this wire's end has slid away.
+    bool retraces(Offset held, Offset corner, String? pin) => net.any((other) {
+      if (other.id == wire.id) return false;
+      final String? otherPin;
+      if ((other.points.first - held).distance < tolerance) {
+        otherPin = other.pinA;
+      } else if ((other.points.last - held).distance < tolerance) {
+        otherPin = other.pinB;
+      } else {
+        return false;
+      }
+      if (pin != null && pin.isNotEmpty && otherPin != pin) return false;
+      return _runCovered(held, corner, other.points);
+    });
+
+    if (result.length >= 3 &&
+        (result.first - wire.points.first).distance < tolerance &&
+        retraces(result[0], result[1], wire.pinA)) {
+      result = result.sublist(1);
+    }
+    if (result.length >= 3 &&
+        (result.last - wire.points.last).distance < tolerance &&
+        retraces(result.last, result[result.length - 2], wire.pinB)) {
+      result = result.sublist(0, result.length - 1);
+    }
+    return result;
+  }
+
+  /// [net] with every end run that only retraces another wire trimmed off.
+  ///
+  /// Where a wire leaves a point — a pin, a junction — along exactly the
+  /// path another wire leaving the same point already takes, the two lie
+  /// on top of each other: one wire drawn twice. The retracing run is cut
+  /// back to where they part, and a wire that is nothing but retracing is
+  /// dropped. The pin at the point is still held by the other wire.
+  ///
+  /// Returns the ids of the wires changed, and the new net; a changed wire
+  /// that is gone altogether is missing from the net.
+  static (Set<String>, List<PolylineWire>) trimRetracedEnds(
+    List<PolylineWire> net,
+  ) {
+    var wires = [...net];
+    final changed = <String>{};
+    var trimmed = true;
+    while (trimmed) {
+      trimmed = false;
+      for (var i = 0; i < wires.length && !trimmed; i++) {
+        final wire = wires[i];
+        final others = [
+          for (final other in wires)
+            if (other.id != wire.id) other.points,
+        ];
+        bool retraces(Offset held, Offset corner) => others.any(
+          (other) =>
+              ((other.first - held).distance < tolerance ||
+                  (other.last - held).distance < tolerance) &&
+              _runCovered(held, corner, other),
+        );
+        final points = wire.points;
+        if (points.length < 2) continue;
+        if (retraces(points[0], points[1])) {
+          changed.add(wire.id);
+          wires = [
+            ...wires.sublist(0, i),
+            if (points.length > 2)
+              PolylineWire(
+                id: wire.id,
+                points: points.sublist(1),
+                pinB: wire.pinB,
+              ),
+            ...wires.sublist(i + 1),
+          ];
+          trimmed = true;
+        } else if (retraces(points.last, points[points.length - 2])) {
+          changed.add(wire.id);
+          wires = [
+            ...wires.sublist(0, i),
+            if (points.length > 2)
+              PolylineWire(
+                id: wire.id,
+                points: points.sublist(0, points.length - 1),
+                pinA: wire.pinA,
+              ),
+            ...wires.sublist(i + 1),
+          ];
+          trimmed = true;
+        }
+      }
+    }
+    return (changed, wires);
+  }
+
+  /// Whether the straight run [a]–[b] lies entirely along [shape].
+  static bool _runCovered(Offset a, Offset b, List<Offset> shape) {
+    final length = (b - a).distance;
+    if (length < tolerance) return false;
+    final steps = (length / 0.25).ceil().clamp(2, 4000);
+    for (var k = 0; k <= steps; k++) {
+      if (!covers(shape, Offset.lerp(a, b, k / steps)!)) return false;
+    }
+    return true;
   }
 
   /// [net] with every wire that runs through a junction split there.

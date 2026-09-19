@@ -427,7 +427,7 @@ void main() {
   // behind even though that is NOT how it should be"
   // "since they are junctions, they shouldnt be moving" — the place they
   // meet slides along the branch instead, and they stay joined.
-  testAppWithStorage('a junction slides along the wire it is on', (
+  testAppWithStorage('a wire slid along a branch hangs from it', (
     tester,
     db,
     storage,
@@ -482,12 +482,28 @@ void main() {
     await settleApp(tester);
 
     final wires = await nets.getWires(project.id);
-    final after = {for (final wire in wires) wire.id: wire};
+    // The branch is all still drawn where it was — split now where the
+    // moved wire hangs from it, which draws the same thing.
+    for (final at in const [
+      Offset(51.5, 60.96),
+      Offset(55, 60.96),
+      Offset(62, 60.96),
+    ]) {
+      expect(_covers(wires, at), isTrue, reason: 'the branch moved at $at');
+    }
+    expect(branch, isNotNull);
     expect(
-      after[branch!.id]!.points,
-      [const Offset(50.8, 60.96), const Offset(63.5, 60.96)],
-      reason: 'the branch stayed put: the junction slid along it',
+      _covers(wires, const Offset(58.42, 66.04)),
+      isTrue,
+      reason: 'the wire went where it was dragged',
     );
+    expect(
+      _covers(wires, const Offset(50.8, 66.04)),
+      isFalse,
+      reason: 'and left nothing behind',
+    );
+    final shapes = [for (final w in wires) w.points.toString()];
+    expect(shapes.toSet().length, shapes.length);
     expect(
       _allJoined(wires),
       isTrue,
@@ -1332,5 +1348,100 @@ void main() {
     await drag(const Offset(76.2, 78.74), const Offset(76.2, 83.82));
     wires = await nets.getWires(project.id);
     expect(_covers(wires, const Offset(76.2, 83.82)), isTrue);
+  });
+
+  // "if I extend a wire vertically upwards from my capacitor pin ... move
+  // this wire horizontally across another long wire ... it seems to drag a
+  // new wire with it from the capacitor pin, this wire then overlaps with
+  // existing wires"
+  testAppWithStorage('a wire slid along another from the same pin draws no '
+      'second wire over it', (tester, db, storage) async {
+    final project = await ProjectRepository(db).create(name: 'Retrace');
+    final parts = PartRepository(db);
+    final nets = NetRepository(db);
+    final c1 = await parts.addPart(project.id, resistorSpec());
+    await parts.updateUnitPlacement(
+      c1.units.first.copyWith(x: 50.8, y: 62.23, placed: true),
+    );
+    final r3 = await parts.addPart(project.id, resistorSpec());
+    await parts.updateUnitPlacement(
+      r3.units.first.copyWith(x: 101.6, y: 30.48, placed: true),
+    );
+    final pin = c1.pins.firstWhere((p) => p.number == '1').id;
+    final netId = await nets.netForPin(project.id, pin);
+    await nets.addWire(
+      projectId: project.id,
+      netId: netId,
+      points: const [Offset(50.8, 58.42), Offset(88.9, 58.42)],
+      pinAId: pin,
+    );
+    final up = await nets.addWire(
+      projectId: project.id,
+      netId: netId,
+      points: const [Offset(50.8, 58.42), Offset(50.8, 40.64)],
+      pinAId: pin,
+    );
+
+    await pumpApp(
+      tester,
+      Scaffold(body: SchematicPanel(project: project)),
+      database: db,
+      storage: storage,
+    );
+    Offset screen(Offset sheet) =>
+        tester.getRect(find.byType(SchematicPanel)).topLeft +
+        _painter(tester).viewport.toScreen(sheet);
+
+    // While the finger is down, nothing is drawn along the horizontal
+    // wire but the horizontal wire itself.
+    final from = screen(const Offset(50.8, 48.26));
+    final to = screen(const Offset(63.5, 48.26));
+    final gesture = await tester.startGesture(from);
+    for (var i = 1; i <= 12; i++) {
+      await gesture.moveTo(Offset.lerp(from, to, i / 12)!);
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    int drawnOver(List<List<Offset>> shapes, Offset at) =>
+        shapes.where((s) => PolylineWiring.covers(s, at)).length;
+    final live = [for (final w in _painter(tester).scene.wires) w.points];
+    expect(
+      drawnOver(live, const Offset(57.15, 58.42)),
+      1,
+      reason: 'a second wire was drawn along the first while dragging',
+    );
+    await gesture.up();
+    await settleApp(tester);
+
+    final wires = await nets.getWires(project.id);
+    final shapes = [for (final w in wires) w.points];
+    expect(_covers(wires, const Offset(63.5, 45)), isTrue);
+    expect(_covers(wires, const Offset(50.8, 45)), isFalse);
+    for (final at in const [
+      Offset(52, 58.42),
+      Offset(57.15, 58.42),
+      Offset(62, 58.42),
+      Offset(70, 58.42),
+    ]) {
+      expect(drawnOver(shapes, at), 1, reason: 'drawn twice at $at');
+    }
+    expect(_allJoined(wires), isTrue);
+    expect(
+      (await nets.getNets(project.id)).single.endpoints.map((e) => e.pin.id),
+      contains(pin),
+      reason: 'the capacitor is still on the net',
+    );
+
+    // Taking the upright away leaves only the horizontal wire: nothing was
+    // hiding underneath it.
+    final upright = wires.firstWhere(
+      (w) => PolylineWiring.covers(w.points, const Offset(63.5, 45)),
+    );
+    await nets.deleteWire(upright.id);
+    await settleApp(tester);
+    final left = await nets.getWires(project.id);
+    for (final at in const [Offset(57.15, 58.42), Offset(70, 58.42)]) {
+      expect(drawnOver([for (final w in left) w.points], at), 1);
+    }
+    expect(up, isNotNull);
   });
 }
