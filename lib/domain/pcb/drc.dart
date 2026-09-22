@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'board_layer.dart';
 import 'board_scene.dart';
 import 'courtyard.dart';
+import 'fab_presets.dart';
 
 /// How much a rule violation matters.
 enum DrcSeverity {
@@ -27,7 +28,15 @@ enum DrcRule {
   orphanCopper('Copper on no net'),
   courtyardOverlap('Courtyards overlap'),
   courtyardOffBoard('Part off the board'),
-  missingLayer('No such layer');
+  missingLayer('No such layer'),
+  fabLimit('Below the fab\'s limit'),
+  drillSize('Hole too small'),
+  annularRing('Annular ring'),
+  holeSpacing('Holes too close'),
+  edgeClearance('Copper at the edge'),
+  silkscreen('Silkscreen'),
+  boardSize('Board size'),
+  pourConnection('Pad not joined to its pour');
 
   const DrcRule(this.label);
 
@@ -66,7 +75,10 @@ class DrcViolation {
 /// board, a connection never drawn — and leaves the rest to the desktop,
 /// which is where the board is going anyway. Being fast and honest about a
 /// small set of rules beats being slow and approximate about all of them.
-List<DrcViolation> checkBoard(BoardScene scene) {
+///
+/// With [fab], also what that board house would refuse — see
+/// [fabViolations].
+List<DrcViolation> checkBoard(BoardScene scene, {FabPreset? fab}) {
   final violations = <DrcViolation>[];
   final rules = scene.board.rules;
   final outline = scene.outline;
@@ -199,6 +211,8 @@ List<DrcViolation> checkBoard(BoardScene scene) {
 
   violations.addAll(_clearanceViolations(scene));
   violations.addAll(courtyardViolations(scene));
+  violations.addAll(pourViolations(scene));
+  if (fab != null) violations.addAll(fabViolations(scene, fab));
   return violations;
 }
 
@@ -209,7 +223,7 @@ List<DrcViolation> checkBoard(BoardScene scene) {
 /// no courtyard drawn is not checked — there is nothing to check it with —
 /// rather than guessed at from its silkscreen.
 List<DrcViolation> courtyardViolations(BoardScene scene) {
-  final courtyards = Courtyard.of(scene);
+  final courtyards = Courtyard.claims(scene);
   final violations = <DrcViolation>[];
 
   for (var i = 0; i < courtyards.length; i++) {
@@ -219,13 +233,23 @@ List<DrcViolation> courtyardViolations(BoardScene scene) {
       if (a.footprint.ref.id == b.footprint.ref.id) continue;
       if (!a.overlaps(b)) continue;
       final overlap = a.bounds.intersect(b.bounds);
+      // Two drawn courtyards on the same ground is an error: their authors
+      // said how much room the parts need and there is not that much. With
+      // no courtyard drawn it is the bodies that were compared, which is a
+      // good enough reason to look but not to be certain.
+      final drawn = a.drawn && b.drawn;
       violations.add(
         DrcViolation(
           rule: DrcRule.courtyardOverlap,
-          severity: DrcSeverity.error,
-          message:
-              '${a.reference} and ${b.reference} overlap on the '
-              '${a.back ? 'back' : 'front'} — there is not room to fit both',
+          severity: drawn ? DrcSeverity.error : DrcSeverity.warning,
+          message: drawn
+              ? '${a.reference} and ${b.reference} overlap on the '
+                    '${a.back ? 'back' : 'front'} — there is not room to '
+                    'fit both'
+              : '${a.reference} and ${b.reference} sit on top of each other '
+                    'on the ${a.back ? 'back' : 'front'} — neither '
+                    'footprint has a courtyard drawn, so this is the '
+                    'bodies overlapping',
           position: overlap.isEmpty ? a.bounds.center : overlap.center,
         ),
       );
@@ -263,7 +287,7 @@ List<DrcViolation> courtyardViolations(BoardScene scene) {
 /// by at most a fraction of the pad's own radius, and it turns four
 /// shape-versus-shape problems into one.
 List<DrcViolation> _clearanceViolations(BoardScene scene) {
-  final items = _copperItems(scene);
+  final items = copperItems(scene);
   final violations = <DrcViolation>[];
   final reported = <String>{};
 
@@ -334,16 +358,37 @@ List<RouteClash> routeClashes(
   if (route.length < 2) return const [];
   final token = layer.layer.token;
   final clashes = <RouteClash>[];
-  final items = _copperItems(scene);
+
+  // Only the copper that could possibly be in the way, and each piece's
+  // box worked out once rather than once per corner. This runs on every
+  // frame of every drag, against every piece of copper on the board, for
+  // every corner of a route that may be hundreds of points long if it is
+  // meandered — so the cheap rejections have to happen before the
+  // segment-to-segment arithmetic, not after it.
+  final items = <CopperItem>[];
+  final boxes = <Rect>[];
+  var widest = 0.0;
+  var loosest = 0.0;
+  final own = scene.clearanceFor(netId);
+  for (final item in copperItems(scene)) {
+    if (!item.layers.contains(token)) continue;
+    if (netId != null && item.netId == netId) continue;
+    items.add(item);
+    boxes.add(Rect.fromPoints(item.a, item.b).inflate(item.width / 2));
+    widest = math.max(widest, item.width);
+    loosest = math.max(loosest, scene.clearanceFor(item.netId));
+  }
+  final reach = width / 2 + widest / 2 + math.max(own, loosest);
 
   for (var i = 0; i < route.length - 1; i++) {
     final a = route[i];
     final b = route[i + 1];
     if ((b - a).distance < 1e-9) continue;
+    final near = Rect.fromPoints(a, b).inflate(reach);
 
-    for (final item in items) {
-      if (!item.layers.contains(token)) continue;
-      if (netId != null && item.netId == netId) continue;
+    for (var k = 0; k < items.length; k++) {
+      if (!boxes[k].overlaps(near)) continue;
+      final item = items[k];
       // A route not yet on a net starts on copper that is not on one
       // either; that copper is where it came from, not an obstacle.
       if (netId == null &&
@@ -381,12 +426,14 @@ Offset _nearestOn(Offset a, Offset b, Offset p) {
 /// A pad is treated as the segment down its long axis, as wide as its short
 /// side, which is exact for an oval pad, and close enough for a rectangle
 /// that it overstates the pad by at most a fraction of its own radius.
-List<_CopperItem> _copperItems(BoardScene scene) {
-  final items = <_CopperItem>[];
+/// Every piece of copper on the board as a segment with a width: what the
+/// clearance check measures, and what a route has to keep clear of.
+List<CopperItem> copperItems(BoardScene scene) {
+  final items = <CopperItem>[];
 
   for (final track in scene.tracks) {
     items.add(
-      _CopperItem(
+      CopperItem(
         netId: track.netId,
         layers: {track.layer.layer.token},
         a: Offset(track.startX, track.startY),
@@ -399,7 +446,7 @@ List<_CopperItem> _copperItems(BoardScene scene) {
 
   for (final via in scene.vias) {
     items.add(
-      _CopperItem(
+      CopperItem(
         netId: via.netId,
         // Through every layer the board has, inner ones included.
         layers: {
@@ -424,7 +471,7 @@ List<_CopperItem> _copperItems(BoardScene scene) {
         : Offset(math.sin(radians), math.cos(radians));
 
     items.add(
-      _CopperItem(
+      CopperItem(
         netId: pad.netId,
         layers: {for (final layer in pad.layers) layer.token},
         a: pad.position - direction * reach,
@@ -437,8 +484,9 @@ List<_CopperItem> _copperItems(BoardScene scene) {
   return items;
 }
 
-class _CopperItem {
-  const _CopperItem({
+/// One piece of copper, reduced to a segment with a width.
+class CopperItem {
+  const CopperItem({
     required this.netId,
     required this.layers,
     required this.a,

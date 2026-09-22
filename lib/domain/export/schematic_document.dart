@@ -15,9 +15,47 @@ class SchematicDocument {
     this.routeHints = const {},
     this.drawnWires = const [],
     this.notes = const [],
+    this.sheets = const [],
     this.generator = 'hintpcb',
     this.generatorVersion = '1.0',
   });
+
+  /// The sub-sheets, for a hierarchical schematic; empty for one sheet.
+  final List<SchematicSheet> sheets;
+
+  /// This document as one sheet of it sees it: the units, wires and notes
+  /// drawn on [sheetId] (null: the top sheet), and every net, since a net
+  /// is the whole project's.
+  SchematicDocument onSheet(String? sheetId) => SchematicDocument(
+    project: project,
+    parts: [
+      for (final part in parts)
+        PartWithDetails(
+          part: part.part,
+          units: [
+            for (final unit in part.units)
+              unit.placed && unit.sheetId != sheetId
+                  ? unit.copyWith(placed: false)
+                  : unit,
+          ],
+          pins: part.pins,
+        ),
+    ],
+    nets: nets,
+    symbols: symbols,
+    routeHints: routeHints,
+    drawnWires: [
+      for (final wire in drawnWires)
+        if (wire.sheetId == sheetId) wire,
+    ],
+    notes: [
+      for (final note in notes)
+        if (note.sheetId == sheetId) note,
+    ],
+    sheets: sheets,
+    generator: generator,
+    generatorVersion: generatorVersion,
+  );
 
   final Project project;
   final List<PartWithDetails> parts;

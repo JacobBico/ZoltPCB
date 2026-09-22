@@ -37,6 +37,9 @@ part 'database.g.dart';
     SchematicNotes,
     ProjectSettings,
     SavedCircuits,
+    BoardFeatures,
+    BoardDimensions,
+    SchematicSheets,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -99,7 +102,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -238,6 +241,45 @@ class AppDatabase extends _$AppDatabase {
       // v15 keeps saved circuits, across projects. Nothing to migrate.
       if (from < 15) {
         await m.createTable(savedCircuits);
+      }
+      // v16 gives pours a priority and a way of joining their pads. Only
+      // for a table from before: one made at step 10 above has them.
+      if (from >= 10 && from < 16) {
+        await m.addColumn(boardZones, boardZones.priority);
+        await m.addColumn(boardZones, boardZones.padConnection);
+        await m.addColumn(boardZones, boardZones.thermalGap);
+        await m.addColumn(boardZones, boardZones.thermalSpoke);
+      }
+      // v17: mounting holes, fiducials, test points and dimensions.
+      if (from < 17) {
+        await m.createTable(boardFeatures);
+        await m.createIndex(idxBoardFeaturesProject);
+        await m.createTable(boardDimensions);
+        await m.createIndex(idxBoardDimensionsProject);
+      }
+      // v18: sub-sheets. Everything already drawn is on the top sheet,
+      // which is what a missing sheet says.
+      if (from < 18) {
+        await m.createTable(schematicSheets);
+        await m.createIndex(idxSchematicSheetsProject);
+        await m.addColumn(partUnits, partUnits.sheetId);
+        if (from >= 13) {
+          await m.addColumn(schematicWires, schematicWires.sheetId);
+        }
+        // Before 14 there were no notes; step 14 made the table as it is
+        // now, sheet column and all.
+        if (from >= 14) {
+          await m.addColumn(schematicNotes, schematicNotes.sheetId);
+        }
+      }
+      // v19: how a pour joins its own net, vias included, and the defaults
+      // a new pour is made with.
+      if (from < 19) {
+        await m.addColumn(boards, boards.padConnection);
+        await m.addColumn(boards, boards.viaConnection);
+        await m.addColumn(boards, boards.thermalGap);
+        await m.addColumn(boards, boards.thermalSpoke);
+        await m.addColumn(boardZones, boardZones.viaConnection);
       }
     },
     beforeOpen: (details) async {

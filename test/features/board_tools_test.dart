@@ -134,6 +134,43 @@ void main() {
     expect(back.single.lengthMm, closeTo(25, 1e-9));
   });
 
+  // "keep the zigzag and the sine wave options"
+  testAppWithStorage('the sine style tunes to the same length', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final footprints = InMemoryLibraryStorageFor();
+    final (project, boards, _) = await _board(db, footprints);
+
+    await pumpApp(
+      tester,
+      Scaffold(body: PrecisionBoardPanel(project: project)),
+      database: db,
+      footprintStorage: footprints,
+    );
+    final rect = tester.getRect(find.byType(PrecisionBoardPanel));
+    await tester.tapAt(
+      rect.topLeft + _painter(tester).viewport.toScreen(const Offset(37.5, 45)),
+    );
+    await settleApp(tester);
+
+    await _tapText(tester, 'Tune');
+    await tester.tap(find.text('Sine'));
+    await tester.pump();
+    await tester.enterText(find.byKey(const ValueKey('meander-value')), '4');
+    await tester.pump();
+    expect(find.byKey(const ValueKey('meander-result')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('meander-apply')));
+    await settleApp(tester);
+
+    final tracks = await boards.getTracks(project.id);
+    final total = tracks.fold<double>(0, (sum, t) => sum + t.lengthMm);
+    // A sine is many short runs, and it lands on the length exactly.
+    expect(tracks.length, greaterThan(20));
+    expect(total, closeTo(29, 0.2));
+  });
+
   // "implement at least a 6 layer board stack up piece, choose the copper
   // size and length of the board"
   testAppWithStorage('the board is built to six layers and routed inside', (

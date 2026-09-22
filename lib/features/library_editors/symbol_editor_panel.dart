@@ -60,11 +60,21 @@ class _SymbolEditorPanelState extends ConsumerState<SymbolEditorPanel> {
   }
 
   Future<void> _reload() async {
-    final saved = await _store.loadSymbols();
+    final List<SymbolDefinition> saved;
+    try {
+      saved = await _store.loadSymbols();
+    } catch (error) {
+      if (mounted) _reportLoadError(error);
+      return;
+    }
     if (!mounted) return;
     setState(() => _saved = saved);
     _takeRequest();
   }
+
+  void _reportLoadError(Object error) => ScaffoldMessenger.maybeOf(
+    context,
+  )?.showSnackBar(SnackBar(content: Text('Could not read My Library: $error')));
 
   /// Opens a symbol My Library asked for.
   void _takeRequest() {

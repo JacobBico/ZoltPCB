@@ -292,6 +292,14 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
     return BoardScene.build(
       texts: committed.texts,
       netClasses: committed.netClasses,
+      features: [
+        for (final feature in committed.features)
+          if (id != null && feature.ref.id == id)
+            feature.copyWith(x: position.dx, y: position.dy, placed: true)
+          else
+            feature,
+      ],
+      dimensions: committed.dimensions,
       board: board,
       parts: parts,
       nets: nets,
@@ -769,23 +777,21 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
     switch (result) {
       case ZoneDeleted():
         if (zone != null) await _deleteZone(zone);
-      case ZoneSaved(
-        :final layer,
-        :final points,
-        :final netId,
-        :final netName,
-        :final clearance,
-        :final minThickness,
-      ):
+      case final ZoneSaved saved:
         if (zone == null) {
           final added = await repository.addZone(
             projectId: widget.project.id,
-            layer: layer,
-            points: points,
-            netId: netId,
-            netName: netName,
-            clearance: clearance,
-            minThickness: minThickness,
+            layer: saved.layer,
+            points: saved.points,
+            netId: saved.netId,
+            netName: saved.netName,
+            clearance: saved.clearance,
+            minThickness: saved.minThickness,
+            priority: saved.priority,
+            padConnection: saved.padConnection,
+            viaConnection: saved.viaConnection,
+            thermalGap: saved.thermalGap,
+            thermalSpoke: saved.thermalSpoke,
           );
           if (!mounted) return;
           setState(() => _selectedZoneId = added.id);
@@ -795,15 +801,7 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
             redo: () => repository.restoreZone(added),
           );
         } else {
-          final after = zone.copyWith(
-            layer: layer,
-            points: points,
-            netId: netId,
-            clearNet: netId == null,
-            netName: netName,
-            clearance: clearance,
-            minThickness: minThickness,
-          );
+          final after = saved.applyTo(zone);
           await repository.updateZone(after);
           _record(
             'Edit pour',
@@ -976,7 +974,7 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
 
   void _runDrc(BoardScene scene) => showDrcSheet(
     context,
-    violations: checkBoard(scene),
+    violations: checkBoard(scene, fab: _fabPreset),
     onShow: (violation) => setState(() {
       _highlightedNetId = violation.netId;
       _focusOn(violation.position);
@@ -2141,9 +2139,24 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
     );
   }
 
+  /// The board house this project is being made by, if one is chosen.
+  FabPreset? get _fabPreset => FabPresets.byId(
+    ref
+        .read(projectSettingsProvider(widget.project.id))
+        .value?[FabPresets.settingsKey],
+  );
+
   Future<void> _editSettings(BoardScene scene) async {
-    final result = await showDesignRulesDialog(context, board: scene.board);
+    final result = await showDesignRulesDialog(
+      context,
+      board: scene.board,
+      fabPreset: _fabPreset,
+    );
     if (result == null || !mounted) return;
+    await ref.read(projectSettingsRepositoryProvider).setAll(
+      widget.project.id,
+      {FabPresets.settingsKey: result.fabPreset?.id},
+    );
 
     final repository = ref.read(boardRepositoryProvider);
     final before = scene.board;

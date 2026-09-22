@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hintpcb/app/appearance.dart';
 import 'package:hintpcb/app/providers.dart';
@@ -60,6 +61,10 @@ Future<void> pumpApp(
 
   /// The wiring model the schematic uses, for tests about one or the other.
   WiringModel wiring = WiringModel.polyline,
+
+  /// Extra overrides for the whole app — dialogs included, which a nested
+  /// ProviderScope around [child] would not reach.
+  List<Override> overrides = const [],
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = devicePixelRatio;
@@ -70,6 +75,7 @@ Future<void> pumpApp(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        ...overrides,
         databaseProvider.overrideWithValue(database),
         symbolStorageProvider.overrideWithValue(libraryStorage),
         // The board's footprint libraries get their own storage, so a test

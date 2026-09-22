@@ -703,6 +703,96 @@ void main() {
       }
     });
 
+    testAppWithStorage('the Route chip can lay a meander instead', (
+      tester,
+      db,
+      storage,
+    ) async {
+      // "it should be like a drop down from the trace tool, like I can mid
+      // routing and then swap and it just continues with the meander loop"
+      final footprintStorage = InMemoryLibraryStorageFor();
+      final (project, boards) = await _board(db, footprintStorage);
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+
+      final tool = find.byKey(const ValueKey('tool-route'));
+      await tester.ensureVisible(tool);
+      await tester.pump();
+      await tester.tap(tool);
+      await settleApp(tester);
+      await tester.ensureVisible(tool);
+      await tester.pump();
+      await tester.tap(tool);
+      await settleApp(tester);
+      await tester.tap(find.byKey(const ValueKey('pick-Meander')));
+      await settleApp(tester);
+
+      final scene = _painter(tester).scene;
+      final from = scene.padNear(scene.ratsnest.first.from, 0.4)!;
+      await _aimAt(tester, from.position);
+      await tester.tap(find.text('START'));
+      await settleApp(tester);
+      await _aimAt(tester, from.position + const Offset(0, -10));
+      await tester.tap(find.text('CORNER'));
+      await settleApp(tester);
+      // The run folded on the way, so it is far longer than the 10 mm it
+      // covers — and the readout says by how much.
+      expect(find.textContaining(RegExp(r'^\+\d')), findsOneWidget);
+      await tester.ensureVisible(find.text('Finish'));
+      await tester.pump();
+      await tester.tap(find.text('Finish'));
+      await settleApp(tester);
+
+      final tracks = await boards.getTracks(project.id);
+      final length = tracks.fold<double>(0, (sum, t) => sum + t.lengthMm);
+      expect(tracks.length, greaterThan(10), reason: 'loops, not a line');
+      expect(length, greaterThan(12));
+    });
+
+    testAppWithStorage('a via mid-route keeps the run\'s net', (
+      tester,
+      db,
+      storage,
+    ) async {
+      // A via that picked its net up from the copper under it got nothing,
+      // because the copper had not been written yet. A netless via is
+      // copper in everyone\'s way: nothing can route to it and the rule
+      // check calls it a clash.
+      final footprintStorage = InMemoryLibraryStorageFor();
+      final (project, boards) = await _board(db, footprintStorage);
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+      await tester.tap(find.byIcon(Icons.timeline).first);
+      await settleApp(tester);
+
+      final scene = _painter(tester).scene;
+      final line = scene.ratsnest.first;
+      final from = scene.padNear(line.from, 0.4)!;
+
+      await _aimAt(tester, from.position);
+      await tester.tap(find.text('START'));
+      await settleApp(tester);
+      await _aimAt(tester, from.position + const Offset(0, -6));
+      await tester.tap(find.text('CORNER'));
+      await settleApp(tester);
+
+      // On a two-layer board the layer button just turns it over.
+      await tester.tap(find.text('Via + flip'));
+      await settleApp(tester);
+
+      final vias = await boards.getVias(project.id);
+      expect(vias.single.netId, from.netId);
+      expect(from.netId, isNotNull);
+    });
+
     testAppWithStorage('a route can begin on an existing track', (
       tester,
       db,
@@ -1324,6 +1414,55 @@ void main() {
     expect(resized.outlineHeight, closeTo(board.outlineHeight + 5, 0.51));
   });
 
+  // "I wish VIAs AND traces to have properties where we can choose what net
+  // they belong to ... when you have an exposed pad and you want to put
+  // vias down for better temperature control, you ideally want to see these
+  // vias to ground as well"
+  testAppWithStorage('a via can be put on a net by hand', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final footprintStorage = InMemoryLibraryStorageFor();
+    final (project, boards) = await _board(db, footprintStorage);
+    final nets = await NetRepository(db).getNets(project.id);
+    await boards.addVia(
+      projectId: project.id,
+      x: 36,
+      y: 40,
+      diameter: 0.8,
+      drill: 0.4,
+    );
+
+    await pumpApp(
+      tester,
+      Scaffold(body: PrecisionBoardPanel(project: project)),
+      database: db,
+      footprintStorage: footprintStorage,
+    );
+
+    final rect = tester.getRect(find.byType(PrecisionBoardPanel));
+    await tester.tapAt(
+      rect.topLeft + _painter(tester).viewport.toScreen(const Offset(36, 40)),
+    );
+    await settleApp(tester);
+    await tester.tap(find.text('Properties'));
+    await settleApp(tester);
+
+    // It arrived on no net, which is what a via dropped in an exposed pad
+    // with nothing under it gets.
+    expect(find.text('No net — unconnected copper'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('copper-net')));
+    await settleApp(tester);
+    await tester.tap(find.text(nets.first.displayName).last);
+    await settleApp(tester);
+    await tester.tap(find.text('SAVE'));
+    await settleApp(tester);
+
+    final saved = await boards.getVias(project.id);
+    expect(saved.single.netId, nets.first.net.id);
+  });
+
   // "choose the centre of the MCU, and choose the centre of the board, and
   // set the relative properties of X and Y to 0 and 0"
   testAppWithStorage('a part can be centred on the board by its middle', (
@@ -1431,6 +1570,8 @@ void main() {
         find.byType(ListView).first,
         const Offset(-120, 0),
       );
+      await tester.ensureVisible(find.byIcon(Icons.rounded_corner).first);
+      await tester.pumpAndSettle();
       await tester.tap(find.byIcon(Icons.rounded_corner).first);
       await settleApp(tester);
     }
@@ -1514,5 +1655,152 @@ void main() {
     await settleApp(tester);
     expect(find.text('2.54 mm · 0.1 in'), findsNothing);
     expect(find.text('0.5 mm · default'), findsOneWidget);
+  });
+
+  testAppWithStorage(
+    'holes, fiducials and test points go down where the crosshair is',
+    (tester, db, storage) async {
+      final footprintStorage = InMemoryLibraryStorageFor();
+      final (project, boards) = await _board(db, footprintStorage);
+
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+
+      // Holes live under the Via chip: tap it to take it up, tap it again
+      // for the menu of what else it puts down.
+      final tool = find.byKey(const ValueKey('tool-via'));
+      await tester.ensureVisible(tool);
+      await tester.pump();
+      await tester.tap(tool);
+      await settleApp(tester);
+      await tester.ensureVisible(tool);
+      await tester.pump();
+      await tester.tap(tool);
+      await settleApp(tester);
+      await tester.tap(find.byKey(const ValueKey('pick-Mounting hole')));
+      await settleApp(tester);
+      expect(find.text('HOLE'), findsOneWidget);
+
+      // And the chip beside it says which hole, and changes it.
+      await tester.tap(find.byKey(const ValueKey('feature-choose')));
+      await settleApp(tester);
+      await tester.tap(find.byKey(const ValueKey('hole-M2.5')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('feature-ok')));
+      await settleApp(tester);
+
+      for (final x in [36.0, 40.0]) {
+        await _aimAt(tester, Offset(x, 28));
+        await tester.tap(find.text('HOLE'));
+        await settleApp(tester);
+      }
+      final features = await boards.getFeatures(project.id);
+      expect([for (final f in features) f.reference], ['H1', 'H2']);
+      expect(features.first.size, 2.7);
+      expect((features.first.x - 36).abs(), lessThanOrEqualTo(0.5));
+    },
+  );
+
+  testAppWithStorage('a measurement is kept as a dimension', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final footprintStorage = InMemoryLibraryStorageFor();
+    final (project, boards) = await _board(db, footprintStorage);
+
+    await pumpApp(
+      tester,
+      Scaffold(body: PrecisionBoardPanel(project: project)),
+      database: db,
+      footprintStorage: footprintStorage,
+    );
+
+    final tool = find.byIcon(Icons.straighten).first;
+    await tester.ensureVisible(tool);
+    await tester.pump();
+    await tester.tap(tool);
+    await settleApp(tester);
+    await _aimAt(tester, const Offset(30, 30));
+    await tester.tap(find.text('FROM'));
+    await settleApp(tester);
+    await _aimAt(tester, const Offset(40, 30));
+    await tester.tap(find.text('TO'));
+    await settleApp(tester);
+
+    await tester.tap(find.byKey(const ValueKey('measure-keep')));
+    await settleApp(tester);
+    final kept = await boards.getDimensions(project.id);
+    expect(kept.single.length, closeTo(10, 1));
+    expect(_painter(tester).scene.dimensions, hasLength(1));
+  });
+
+  testAppWithStorage('a bus catches connections in a box and lays them', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final footprintStorage = InMemoryLibraryStorageFor();
+    final (project, boards) = await _board(db, footprintStorage);
+
+    await pumpApp(
+      tester,
+      Scaffold(body: PrecisionBoardPanel(project: project)),
+      database: db,
+      footprintStorage: footprintStorage,
+    );
+    final line = _painter(tester).scene.ratsnest.single;
+
+    // A bus is a way of routing, so it is picked from the Route chip.
+    final tool = find.byKey(const ValueKey('tool-route'));
+    await tester.ensureVisible(tool);
+    await tester.pump();
+    await tester.tap(tool);
+    await settleApp(tester);
+    await tester.ensureVisible(tool);
+    await tester.pump();
+    await tester.tap(tool);
+    await settleApp(tester);
+    await tester.tap(find.byKey(const ValueKey('pick-Bus')));
+    await settleApp(tester);
+
+    // A box round one end of the connection.
+    await _aimAt(tester, line.from - const Offset(3, 3));
+    await tester.tap(find.text('BOX'));
+    await settleApp(tester);
+    await _aimAt(tester, line.from + const Offset(3, 3));
+    await tester.tap(find.text('CATCH'));
+    await settleApp(tester);
+    expect(find.textContaining('1 connections'), findsOneWidget);
+
+    // The path: out and along.
+    for (final at in [
+      line.from + const Offset(0, -4),
+      line.to + const Offset(0, -4),
+    ]) {
+      await _aimAt(tester, at);
+      await tester.tap(find.text('CORNER'));
+      await settleApp(tester);
+    }
+    expect(_painter(tester).pendingBus, hasLength(1));
+    await tester.tap(find.text('Lay 1'));
+    await settleApp(tester);
+
+    final tracks = await boards.getTracks(project.id);
+    expect(tracks, isNotEmpty);
+    expect(tracks.map((t) => t.netId).toSet(), hasLength(1));
+    // Pad to pad: the copper starts on one end and finishes on the other.
+    final ends = {
+      for (final t in tracks) ...[
+        Offset(t.startX, t.startY),
+        Offset(t.endX, t.endY),
+      ],
+    };
+    expect(ends, contains(line.from));
+    expect(ends, contains(line.to));
   });
 }

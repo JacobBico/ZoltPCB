@@ -47,6 +47,127 @@ abstract final class FabricationWriter {
     FabricationFile('$baseName-NPTH.drl', _drill(scene, plated: false)),
   ];
 
+  /// The same set for a panel of copies of the board: every layer with each
+  /// copy in its place, the panel's milled edge, its unplated holes (tooling
+  /// holes and the perforation) added to the board's, fiducials on the
+  /// outer copper and mask, V-score lines in a file of their own, and a
+  /// note that says in words what the files say in coordinates.
+  static List<FabricationFile> writePanel(
+    BoardScene scene,
+    PanelLayout panel, {
+    required String baseName,
+    String title = '',
+  }) {
+    final copies = panel.copies;
+    return [
+      for (final layer in scene.board.copperLayers)
+        FabricationFile(
+          '$baseName-${layer.layer.token.replaceAll('.', '_')}.gbr',
+          _copper(scene, layer, copies: copies, panel: panel),
+        ),
+      FabricationFile(
+        '$baseName-F_Mask.gbr',
+        _mask(scene, front: true, copies: copies, panel: panel),
+      ),
+      FabricationFile(
+        '$baseName-B_Mask.gbr',
+        _mask(scene, front: false, copies: copies, panel: panel),
+      ),
+      FabricationFile(
+        '$baseName-F_Paste.gbr',
+        _paste(scene, front: true, copies: copies),
+      ),
+      FabricationFile(
+        '$baseName-B_Paste.gbr',
+        _paste(scene, front: false, copies: copies),
+      ),
+      FabricationFile(
+        '$baseName-F_Silkscreen.gbr',
+        _silk(scene, front: true, copies: copies, panel: panel, title: title),
+      ),
+      FabricationFile(
+        '$baseName-B_Silkscreen.gbr',
+        _silk(scene, front: false, copies: copies),
+      ),
+      FabricationFile('$baseName-Edge_Cuts.gbr', _panelEdges(scene, panel)),
+      FabricationFile(
+        '$baseName-PTH.drl',
+        _drill(scene, plated: true, copies: copies),
+      ),
+      FabricationFile(
+        '$baseName-NPTH.drl',
+        _drill(scene, plated: false, copies: copies, panel: panel),
+      ),
+      if (panel.vScores.isNotEmpty)
+        FabricationFile('$baseName-V_Score.gbr', _vScores(panel)),
+      FabricationFile('$baseName-panel.txt', _panelNotes(panel, title)),
+    ];
+  }
+
+  static String _vScores(PanelLayout panel) {
+    final g = _Gerber('Other,V-Score');
+    for (final (a, b) in panel.vScores) {
+      g.stroke([a, b], 0.1);
+    }
+    return g.build();
+  }
+
+  static String _panelNotes(PanelLayout panel, String title) {
+    String mm(double v) => v.toStringAsFixed(2);
+    String at(Offset p) => '(${mm(p.dx)}, ${mm(-p.dy)})';
+    final s = panel.settings;
+    final rows = panel.copies.isEmpty
+        ? 0
+        : panel.boardBounds.map((b) => b.top).toSet().length;
+    final columns = rows == 0 ? 0 : panel.copies.length ~/ rows;
+    final out = StringBuffer()
+      ..writeln('Panel${title.isEmpty ? '' : ': $title'}')
+      ..writeln('Size: ${mm(panel.panel.width)} x ${mm(panel.panel.height)} mm')
+      ..writeln(
+        'Boards: ${panel.copies.length} ($rows rows x $columns columns), '
+        'each ${mm(panel.boardBounds.first.width)} x '
+        '${mm(panel.boardBounds.first.height)} mm',
+      )
+      ..writeln('Joined by: ${panel.join.label}');
+    if (panel.join == PanelJoin.mouseBites) {
+      out
+        ..writeln(
+          'Milled gap: ${mm(math.max(s.spacing, PanelSettings.minSpacing))} mm',
+        )
+        ..writeln(
+          'Tabs: ${panel.tabs.length}, perforated with '
+          '${panel.biteHoles.length} holes of '
+          '${mm(PanelSettings.biteDiameter)} mm (in the NPTH drill file)',
+        );
+    } else {
+      out.writeln(
+        'V-score lines (in the V_Score file; cut both sides, edge to edge):',
+      );
+      for (final (a, b) in panel.vScores) {
+        out.writeln('  ${at(a)} to ${at(b)}');
+      }
+    }
+    out.writeln('Rails: ${s.rails.label}');
+    if (panel.fiducials.isNotEmpty) {
+      out.writeln(
+        'Fiducials (${mm(PanelSettings.fiducialCopper)} mm copper, '
+        '${mm(PanelSettings.fiducialMask)} mm mask opening, both sides): '
+        '${panel.fiducials.map(at).join(', ')}',
+      );
+    }
+    if (panel.toolingHoles.isNotEmpty) {
+      out.writeln(
+        'Tooling holes (${mm(panel.toolingDiameter)} mm, unplated): '
+        '${panel.toolingHoles.map(at).join(', ')}',
+      );
+    }
+    out.writeln(
+      'Coordinates in millimetres from the panel\'s top-left '
+      'corner, y up as the Gerbers have it.',
+    );
+    return out.toString();
+  }
+
   /// Where each part goes, for pick-and-place assembly: the columns an
   /// assembly service asks for, in millimetres, with y up as the Gerbers
   /// have it.
@@ -60,7 +181,8 @@ abstract final class FabricationWriter {
     final rows = [
       'Designator,Val,Package,Mid X,Mid Y,Rotation,Layer',
       for (final footprint in scene.footprints)
-        if (!footprint.part.dnp)
+        // Holes, fiducials and test points are not placed by a machine.
+        if (!footprint.part.dnp && !BoardFeature.isFeatureId(footprint.ref.id))
           [
             cell(footprint.part.reference),
             cell(footprint.part.value),
@@ -76,84 +198,67 @@ abstract final class FabricationWriter {
 
   // --- copper ----------------------------------------------------------
 
-  static String _copper(BoardScene scene, CopperLayer layer) {
+  static String _copper(
+    BoardScene scene,
+    CopperLayer layer, {
+    List<Offset> copies = const [Offset.zero],
+    PanelLayout? panel,
+  }) {
     final g = _Gerber(layer.fileFunction(scene.board.copperLayerCount));
+    // An unplated hole lists copper layers so pours keep clear of it, and
+    // has no copper of its own.
     final pads = [
       for (final footprint in scene.footprints)
         for (final pad in footprint.pads)
-          if (pad.reaches(layer)) pad,
+          if (pad.reaches(layer) && pad.pad.type != PadType.npth) pad,
     ];
     final tracks = [
       for (final track in scene.tracks)
         if (track.layer == layer) track,
     ];
-    final zones = [
-      for (final zone in scene.zones)
-        if (zone.isValid && zone.layer == layer.layer) zone,
-    ];
-
-    if (zones.isNotEmpty) {
-      for (final zone in zones) {
-        g.region(zone.points);
+    // The pours, filled round everything else exactly as the board editor
+    // shows them.
+    // In a panel, every copy's pour first and all the copper after: a
+    // clear at one copy's edge then never eats into the next copy's pads.
+    final pour = PourFill.plan(scene, layer);
+    for (final copy in copies) {
+      g.shift = copy;
+      for (final step in pour.steps) {
+        step.clear ? g.clear() : g.dark();
+        switch (step.shape) {
+          case PourRegion(:final points, :final hole):
+            hole == null ? g.region(points) : g.regionWithHole(points, hole);
+          case PourStroke(:final points, :final width, :final closed):
+            g.stroke(points, width, close: closed);
+          case PourPad(:final pad, :final grow):
+            _pad(g, pad, grow);
+          case PourDisc(:final centre, :final diameter):
+            g.flashCircle(centre, diameter);
+        }
       }
+    }
+    if (!pour.isEmpty) g.dark();
 
-      g.clear();
-      // The zones an item sits in, and whether any of them is another net.
-      (bool, double) clearFor(String? netId, Rect box) {
-        final over = [
-          for (final zone in zones)
-            if (zone.bounds.overlaps(box)) zone,
-        ];
-        if (over.isEmpty) return (false, 0);
-        final foreign = netId == null || over.any((z) => z.netId != netId);
-        final gap = [
-          scene.clearanceFor(netId),
-          for (final zone in over) zone.clearance,
-        ].reduce(math.max);
-        return (foreign, gap);
+    for (final copy in copies) {
+      g.shift = copy;
+      for (final pad in pads) {
+        _pad(g, pad, 0);
       }
-
       for (final track in tracks) {
-        final a = Offset(track.startX, track.startY);
-        final b = Offset(track.endX, track.endY);
-        final (foreign, gap) = clearFor(
-          track.netId,
-          Rect.fromPoints(a, b).inflate(track.width),
-        );
-        if (foreign) g.stroke([a, b], track.width + gap * 2);
+        g.stroke([
+          Offset(track.startX, track.startY),
+          Offset(track.endX, track.endY),
+        ], track.width);
       }
       for (final via in scene.vias) {
-        final at = Offset(via.x, via.y);
-        final (foreign, gap) = clearFor(
-          via.netId,
-          Rect.fromCircle(center: at, radius: via.diameter),
-        );
-        if (foreign) g.flashCircle(at, via.diameter + gap * 2);
+        g.flashCircle(Offset(via.x, via.y), via.diameter);
       }
-      for (final pad in pads) {
-        final (foreign, gap) = clearFor(
-          pad.netId,
-          Rect.fromCircle(
-            center: pad.position,
-            radius: math.max(pad.pad.sizeX, pad.pad.sizeY),
-          ),
-        );
-        if (foreign) _pad(g, pad, gap);
+    }
+    g.shift = Offset.zero;
+    if (panel != null && !layer.isInner) {
+      for (final at in panel.fiducials) {
+        g.flashCircle(at, PanelSettings.fiducialCopper);
       }
-      g.dark();
-    }
-
-    for (final pad in pads) {
-      _pad(g, pad, 0);
-    }
-    for (final track in tracks) {
-      g.stroke([
-        Offset(track.startX, track.startY),
-        Offset(track.endX, track.endY),
-      ], track.width);
-    }
-    for (final via in scene.vias) {
-      g.flashCircle(Offset(via.x, via.y), via.diameter);
     }
     return g.build();
   }
@@ -230,36 +335,55 @@ abstract final class FabricationWriter {
 
   // --- mask and paste --------------------------------------------------
 
-  static String _mask(BoardScene scene, {required bool front}) {
+  static String _mask(
+    BoardScene scene, {
+    required bool front,
+    List<Offset> copies = const [Offset.zero],
+    PanelLayout? panel,
+  }) {
     final g = _Gerber(front ? 'Soldermask,Top' : 'Soldermask,Bot');
     final side = front ? CopperLayer.front : CopperLayer.back;
     final mask = front ? BoardLayer.frontMask : BoardLayer.backMask;
-    for (final footprint in scene.footprints) {
-      for (final pad in footprint.pads) {
-        final layers = [
-          for (final layer in pad.pad.layers)
-            footprint.placement.layerOf(layer),
-        ];
-        final opens =
-            layers.contains(mask) ||
-            (pad.pad.type.spansLayers && pad.reaches(side));
-        if (opens) _pad(g, pad, 0);
+    for (final copy in copies) {
+      g.shift = copy;
+      for (final footprint in scene.footprints) {
+        for (final pad in footprint.pads) {
+          final layers = [
+            for (final layer in pad.pad.layers)
+              footprint.placement.layerOf(layer),
+          ];
+          final opens =
+              layers.contains(mask) ||
+              (pad.pad.type.spansLayers && pad.reaches(side));
+          if (opens) _pad(g, pad, pad.pad.maskMargin);
+        }
       }
+    }
+    g.shift = Offset.zero;
+    for (final at in panel?.fiducials ?? const <Offset>[]) {
+      g.flashCircle(at, PanelSettings.fiducialMask);
     }
     return g.build();
   }
 
-  static String _paste(BoardScene scene, {required bool front}) {
+  static String _paste(
+    BoardScene scene, {
+    required bool front,
+    List<Offset> copies = const [Offset.zero],
+  }) {
     final g = _Gerber(front ? 'Paste,Top' : 'Paste,Bot');
     final paste = front ? BoardLayer.frontPaste : BoardLayer.backPaste;
-    for (final footprint in scene.footprints) {
-      for (final pad in footprint.pads) {
-        if (pad.pad.type != PadType.smd) continue;
-        final layers = [
-          for (final layer in pad.pad.layers)
-            footprint.placement.layerOf(layer),
-        ];
-        if (layers.contains(paste)) _pad(g, pad, 0);
+    for (final copy in copies) {
+      g.shift = copy;
+      for (final footprint in scene.footprints) {
+        for (final pad in footprint.pads) {
+          if (pad.pad.type != PadType.smd) continue;
+          final layers = [
+            for (final layer in pad.pad.layers)
+              footprint.placement.layerOf(layer),
+          ];
+          if (layers.contains(paste)) _pad(g, pad, 0);
+        }
       }
     }
     return g.build();
@@ -267,8 +391,40 @@ abstract final class FabricationWriter {
 
   // --- silkscreen ------------------------------------------------------
 
-  static String _silk(BoardScene scene, {required bool front}) {
+  static String _silk(
+    BoardScene scene, {
+    required bool front,
+    List<Offset> copies = const [Offset.zero],
+    PanelLayout? panel,
+    String? title,
+  }) {
     final g = _Gerber(front ? 'Legend,Top' : 'Legend,Bot');
+    for (final copy in copies) {
+      g.shift = copy;
+      _silkOf(g, scene, front: front);
+    }
+    g.shift = Offset.zero;
+    final labelAt = panel?.labelAt;
+    if (front && labelAt != null && title != null && title.isNotEmpty) {
+      // Smaller for a long name, down to what a fab still prints legibly.
+      final height = math.min(
+        panel!.labelHeight,
+        panel.labelRoom / StrokeFont.widthOf(title, 1),
+      );
+      if (height >= 1.0) {
+        for (final stroke in StrokeFont.strokes(
+          title,
+          centre: labelAt,
+          height: height,
+        )) {
+          g.stroke(stroke, StrokeFont.strokeWidth(height));
+        }
+      }
+    }
+    return g.build();
+  }
+
+  static void _silkOf(_Gerber g, BoardScene scene, {required bool front}) {
     final silk = front ? BoardLayer.frontSilk : BoardLayer.backSilk;
 
     for (final footprint in scene.footprints) {
@@ -339,7 +495,6 @@ abstract final class FabricationWriter {
         g.stroke(stroke, StrokeFont.strokeWidth(text.size));
       }
     }
-    return g.build();
   }
 
   /// Corners along the arc from [a] through [m] to [b].
@@ -381,38 +536,116 @@ abstract final class FabricationWriter {
 
   // --- board edge ------------------------------------------------------
 
+  /// The board's profile. Curves go out as real arcs (G02/G03), so a
+  /// round board or a rounded corner is milled round, not as the flats
+  /// the screen approximates it with.
   static String _edges(BoardScene scene) {
     final g = _Gerber('Profile,NP');
-    const width = 0.05;
-    g.stroke(scene.outline.path, width, close: true);
-    for (final edge in scene.edges) {
-      if (!edge.isValid) continue;
-      for (final metric in edge.path.computeMetrics()) {
-        final steps = math.max(1, (metric.length / 0.2).ceil());
-        final points = [
-          for (var i = 0; i <= steps; i++)
-            metric.getTangentForOffset(metric.length * i / steps)!.position,
-        ];
-        g.stroke(points, width, close: metric.isClosed);
-      }
+    final outline = scene.outline;
+    if (outline.kind == BoardOutlineKind.circle) {
+      g.circle(outline.center, outline.radius, _edgeWidth);
+    } else {
+      g.stroke(outline.path, _edgeWidth, close: true);
+    }
+    _cutouts(g, scene);
+    return g.build();
+  }
+
+  static const _edgeWidth = 0.05;
+
+  /// A panel's edge: what the layout mills round and between the copies,
+  /// and each copy's own cutouts.
+  static String _panelEdges(BoardScene scene, PanelLayout panel) {
+    final g = _Gerber('Profile,NP');
+    for (final run in panel.edgeCuts) {
+      g.stroke(run, _edgeWidth);
+    }
+    for (final copy in panel.copies) {
+      g.shift = copy;
+      _cutouts(g, scene);
     }
     return g.build();
   }
 
+  static void _cutouts(_Gerber g, BoardScene scene) {
+    const width = _edgeWidth;
+    for (final edge in scene.edges) {
+      if (!edge.isValid) continue;
+      switch (edge.kind) {
+        case BoardEdgeKind.line:
+          g.stroke([edge.start, edge.end], width);
+        case BoardEdgeKind.rectangle:
+          final r = Rect.fromPoints(edge.points[0], edge.points[1]);
+          g.stroke(
+            [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft],
+            width,
+            close: true,
+          );
+        case BoardEdgeKind.polygon:
+          g.stroke(edge.points, width, close: true);
+        case BoardEdgeKind.circle:
+          g.circle(edge.center, edge.radius, width);
+        case BoardEdgeKind.arc:
+          final centre = BoardEdge.circumcentre(edge.start, edge.mid, edge.end);
+          if (centre == null) {
+            // Three points in a line: the arc is its chord.
+            g.stroke([edge.start, edge.end], width);
+          } else {
+            g.arc(
+              edge.start,
+              edge.end,
+              centre,
+              width,
+              clockwise:
+                  _sweepThrough(edge.start, edge.mid, edge.end, centre) > 0,
+            );
+          }
+      }
+    }
+  }
+
+  /// The signed angle from [a] to [b] around [centre], going the way that
+  /// passes [m]. Positive is clockwise as the board is seen (y down).
+  static double _sweepThrough(Offset a, Offset m, Offset b, Offset centre) {
+    double angle(Offset p) => math.atan2(p.dy - centre.dy, p.dx - centre.dx);
+    final a0 = angle(a);
+    var sweep = angle(b) - a0;
+    var toMid = angle(m) - a0;
+    while (sweep < 0) {
+      sweep += math.pi * 2;
+    }
+    while (toMid < 0) {
+      toMid += math.pi * 2;
+    }
+    if (toMid > sweep) sweep -= math.pi * 2;
+    return sweep;
+  }
+
   // --- drill -----------------------------------------------------------
 
-  static String _drill(BoardScene scene, {required bool plated}) {
+  static String _drill(
+    BoardScene scene, {
+    required bool plated,
+    List<Offset> copies = const [Offset.zero],
+    PanelLayout? panel,
+  }) {
     final holes = <(Offset, double)>[
-      if (plated)
-        for (final via in scene.vias)
-          if (via.drill > 0) (Offset(via.x, via.y), via.drill),
-      for (final footprint in scene.footprints)
-        for (final pad in footprint.pads)
-          if (pad.pad.drill > 0 &&
-              (plated
-                  ? pad.pad.type == PadType.thruHole
-                  : pad.pad.type == PadType.npth))
-            (pad.position, pad.pad.drill),
+      for (final copy in copies) ...[
+        if (plated)
+          for (final via in scene.vias)
+            if (via.drill > 0) (Offset(via.x, via.y) + copy, via.drill),
+        for (final footprint in scene.footprints)
+          for (final pad in footprint.pads)
+            if (pad.pad.drill > 0 &&
+                (plated
+                    ? pad.pad.type == PadType.thruHole
+                    : pad.pad.type == PadType.npth))
+              (pad.position + copy, pad.pad.drill),
+      ],
+      if (!plated && panel != null) ...[
+        for (final at in panel.toolingHoles) (at, panel.toolingDiameter),
+        for (final at in panel.biteHoles) (at, PanelSettings.biteDiameter),
+      ],
     ];
 
     double tool(double d) => (d * 1000).round() / 1000;
@@ -463,11 +696,15 @@ class _Gerber {
   final _body = StringBuffer();
   int? _selected;
 
+  /// Added to everything drawn: where the copy being written sits in a
+  /// panel.
+  Offset shift = Offset.zero;
+
   static String _mm(double value) => value.toStringAsFixed(6);
 
   /// Board millimetres, y down, to Gerber's micrometre integers, y up.
-  static String _xy(Offset p) =>
-      'X${(p.dx * 1e6).round()}Y${(-p.dy * 1e6).round()}';
+  String _xy(Offset p) =>
+      'X${((p.dx + shift.dx) * 1e6).round()}Y${(-(p.dy + shift.dy) * 1e6).round()}';
 
   void _use(String definition) {
     final code = _apertures.putIfAbsent(
@@ -499,6 +736,55 @@ class _Gerber {
     if (close) _body.writeln('${_xy(points.first)}D01*');
   }
 
+  /// An arc from [start] to [end] around [centre]. [clockwise] as the
+  /// board is seen; Gerber's y runs up, which keeps what looks clockwise
+  /// clockwise (G02).
+  void arc(
+    Offset start,
+    Offset end,
+    Offset centre,
+    double width, {
+    required bool clockwise,
+  }) {
+    _use('C,${_mm(math.max(width, 0.01))}');
+    final i = ((centre.dx - start.dx) * 1e6).round();
+    final j = (-(centre.dy - start.dy) * 1e6).round();
+    _body
+      ..writeln('${_xy(start)}D02*')
+      ..writeln('${clockwise ? 'G02' : 'G03'}*')
+      ..writeln('${_xy(end)}I${i}J${j}D01*')
+      ..writeln('G01*');
+  }
+
+  /// A whole circle: an arc that ends where it starts.
+  void circle(Offset centre, double radius, double width) {
+    if (radius <= 0) return;
+    final start = centre + Offset(radius, 0);
+    arc(start, start, centre, width, clockwise: true);
+  }
+
+  /// A region with a hole in it, joined by a cut-in: round the outside,
+  /// in to the hole, round the hole the other way, and back out along the
+  /// same line. Gerber's own way of saying "this, but not that".
+  void regionWithHole(List<Offset> outer, List<Offset> hole) {
+    if (outer.length < 3 || hole.length < 3) return region(outer);
+    double area(List<Offset> p) {
+      var sum = 0.0;
+      for (var i = 0; i < p.length; i++) {
+        final a = p[i];
+        final b = p[(i + 1) % p.length];
+        sum += a.dx * b.dy - b.dx * a.dy;
+      }
+      return sum;
+    }
+
+    // The hole turns the other way round from the outside.
+    final inner = (area(outer) > 0) == (area(hole) > 0)
+        ? hole.reversed.toList()
+        : hole;
+    region([...outer, outer.first, ...inner, inner.first]);
+  }
+
   void region(List<Offset> points) {
     if (points.length < 3) return;
     _body
@@ -519,6 +805,9 @@ class _Gerber {
       ..writeln('%FSLAX46Y46*%')
       ..writeln('%MOMM*%')
       ..writeln('%LPD*%')
+      // Multi-quadrant arcs: an arc may sweep any angle, a whole circle
+      // included.
+      ..writeln('G75*')
       ..writeln('G01*');
     for (final entry in _apertures.entries) {
       out.writeln('%ADD${entry.value}${entry.key}*%');

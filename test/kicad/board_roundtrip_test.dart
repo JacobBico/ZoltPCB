@@ -19,6 +19,7 @@ import 'package:hintpcb/domain/models/models.dart';
 import 'package:hintpcb/domain/pcb/pcb.dart';
 import 'package:hintpcb/kicad/board_project_writer.dart';
 import 'package:hintpcb/kicad/board_writer.dart';
+import 'package:hintpcb/kicad/footprint_writer.dart';
 import 'package:hintpcb/kicad/sexpr/sexpr_parser.dart';
 
 import '../helpers/fixtures.dart';
@@ -234,6 +235,60 @@ void main() {
           Offset(26, 50),
         ],
       );
+      // And a front pour with the settings KiCad writes differently: a
+      // priority, pads joined solid, and its own thermal gap.
+      await boards.addZone(
+        projectId: project.id,
+        layer: BoardLayer.frontCopper,
+        netId: rail.id,
+        netName: 'VCC',
+        priority: 2,
+        padConnection: PadConnection.solid,
+        thermalGap: 0.3,
+        points: const [
+          Offset(28, 28),
+          Offset(40, 28),
+          Offset(40, 40),
+          Offset(28, 40),
+        ],
+      );
+
+      // The board-only essentials: a bare hole, a plated one on the rail,
+      // a fiducial, a test point, and a dimension along the top edge.
+      await boards.addFeature(
+        projectId: project.id,
+        kind: BoardFeatureKind.mountingHole,
+        x: 54,
+        y: 30,
+      );
+      await boards.addFeature(
+        projectId: project.id,
+        kind: BoardFeatureKind.mountingHole,
+        x: 54,
+        y: 45,
+        plated: true,
+        netId: rail.id,
+        netName: 'VCC',
+      );
+      await boards.addFeature(
+        projectId: project.id,
+        kind: BoardFeatureKind.fiducial,
+        x: 45,
+        y: 47,
+      );
+      await boards.addFeature(
+        projectId: project.id,
+        kind: BoardFeatureKind.testPoint,
+        x: 48,
+        y: 30,
+        netId: rail.id,
+        netName: 'VCC',
+      );
+      await boards.addDimension(
+        projectId: project.id,
+        start: const Offset(26, 26),
+        end: const Offset(58, 26),
+      );
 
       final definitions = <String, FootprintDefinition>{};
       final sources = <String, Object>{};
@@ -253,6 +308,19 @@ void main() {
         edges: await boards.getEdges(project.id),
         zones: await boards.getZones(project.id),
         texts: await boards.getTexts(project.id),
+        features: await boards.getFeatures(project.id),
+        dimensions: await boards.getDimensions(project.id),
+      );
+      for (final feature in scene.features) {
+        sources[feature.libId] = FootprintWriter.node(feature.definition);
+      }
+      expect(
+        scene.footprints.map((f) => f.part.reference),
+        containsAll(['H1', 'H2', 'FID1', 'TP1']),
+      );
+      expect(
+        scene.pads.where((p) => p.reference == 'TP1').single.netName,
+        'VCC',
       );
 
       // The pads found their nets through the schematic before anything was
@@ -310,7 +378,15 @@ void main() {
       expect(text, contains('(size 1.2 1.2)'));
 
       // And the pour, as an outline on a real net.
-      expect(RegExp(r'\(zone\b').allMatches(text).length, 1);
+      expect(RegExp(r'\(zone\b').allMatches(text).length, 2);
+      expect(text, contains('(priority 2)'));
+      expect(text, contains('(connect_pads yes'));
+      expect(text, contains('(thermal_gap 0.3)'));
+      expect(text, contains('"HintPCB:MountingHole_3.2mm"'));
+      expect(text, contains('"HintPCB:MountingHole_3.2mm_Pad"'));
+      expect(text, contains('np_thru_hole'));
+      expect(text, contains('(solder_mask_margin 0.5)'));
+      expect(RegExp(r'\(dimension\b').allMatches(text).length, 1);
       expect(text, contains('(net_name "VCC")'));
       for (final corner in ['25 25', '59 25', '59 51', '25 51']) {
         expect(

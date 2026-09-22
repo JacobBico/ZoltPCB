@@ -24,6 +24,7 @@ import 'note_dialog.dart';
 import 'erc_sheet.dart';
 import 'power_symbol_sidebar.dart';
 import 'starter_circuit.dart';
+import 'swap_dialog.dart';
 import 'starter_circuit_dialog.dart';
 import '../../core/theme/kicad_palette.dart';
 import '../../core/widgets/panel.dart';
@@ -35,6 +36,7 @@ import '../../rendering/schematic_scene.dart';
 import '../../domain/geometry/placement.dart';
 import '../../domain/geometry/placement_finder.dart';
 import '../../rendering/schematic_viewport.dart';
+import '../../rendering/sheet_overlays.dart';
 import '../pinout/pinout_explorer.dart';
 import 'nets_panel.dart';
 import '../../domain/symbols/symbols.dart';
@@ -204,6 +206,13 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   String? _selectedNoteId;
   SchematicNote? _candidateNote;
   Offset? _draggingNoteAt;
+
+  /// Sub-sheets on the open sheet, and the one picked or being dragged.
+  List<SheetBoxView> _sheetBoxes = const [];
+  List<OffSheetLabel> _offSheetLabels = const [];
+  String? _selectedSheetId;
+  SchematicSheet? _candidateSheet;
+  Offset? _draggingSheetAt;
   Offset _gestureStartLocal = Offset.zero;
   Offset _dragStartSheet = Offset.zero;
   Offset _dragOriginalPosition = Offset.zero;
@@ -229,7 +238,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final partsAsync = ref.watch(projectPartsProvider(widget.project.id));
+    final partsAsync = ref.watch(sheetPartsProvider(widget.project.id));
     final netsAsync = ref.watch(projectNetsProvider(widget.project.id));
     final symbolsAsync = ref.watch(projectSymbolsProvider(widget.project.id));
 
@@ -251,7 +260,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
 
     final hints = _routeHints();
     final drawn =
-        ref.watch(schematicWiresProvider(widget.project.id)).value ??
+        ref.watch(sheetWiresProvider(widget.project.id)).value ??
         const <SchematicWire>[];
     var scene = _sceneFor(parts, nets, symbols, hints, drawn);
 
@@ -339,7 +348,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     }
 
     final notes =
-        ref.watch(schematicNotesProvider(widget.project.id)).value ??
+        ref.watch(sheetNotesProvider(widget.project.id)).value ??
         const <SchematicNote>[];
     final movingNote = _candidateNote;
     final noteAt = _draggingNoteAt;
@@ -350,6 +359,8 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
         else
           note,
     ];
+
+    _sheetViews(scene, nets);
 
     final pickerOpen = ref.watch(componentPickerOpenProvider);
 
@@ -689,6 +700,9 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
                         highlightedNetId: _highlightedNetId,
                         notes: _notes,
                         selectedNoteId: _selectedNoteId,
+                        sheetBoxes: _sheetBoxes,
+                        selectedSheetId: _selectedSheetId,
+                        offSheetLabels: _offSheetLabels,
                         zigzagResistors:
                             ref.watch(appearanceProvider).resistorStyle ==
                             ResistorStyle.ansi,
@@ -712,6 +726,8 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
                 ),
               ),
             ),
+            if (_sheetPath() case final path?)
+              Positioned(top: 8, left: 8, right: 200, child: path),
             if (ref.watch(crossProbeOnProvider))
               Positioned(
                 top: 10,
@@ -877,6 +893,12 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
             onPressed: group.isEmpty ? null : () => _copyGroup(scene, group),
           ),
           CanvasAction(
+            label: 'Sheet',
+            icon: Icons.layers_outlined,
+            // To another page of the schematic, or a new one.
+            onPressed: group.isEmpty ? null : () => _moveToSheet(group),
+          ),
+          CanvasAction(
             label: 'Save',
             icon: Icons.bookmark_add_outlined,
             // Saved to use again in any project, from the component list.
@@ -940,6 +962,29 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
         final net = scene.nets.where((n) => n.net.id == wire.netId).firstOrNull;
         title = net?.displayName ?? 'Wire';
         actions.addAll(_wireActions(wire, net, _selectedWireRun));
+      } else if (_sheetBoxes
+              .where((b) => b.sheet.id == _selectedSheetId)
+              .firstOrNull
+          case final view?) {
+        title = '${view.sheet.name} — drag to move';
+        actions.addAll([
+          CanvasAction(
+            label: 'Open',
+            icon: Icons.open_in_new,
+            onPressed: () => _openSheet(view.sheet.id),
+          ),
+          CanvasAction(
+            label: 'Rename',
+            icon: Icons.drive_file_rename_outline,
+            onPressed: () => _renameSheet(view.sheet),
+          ),
+          CanvasAction(
+            label: 'Delete',
+            icon: Icons.delete_outline,
+            danger: true,
+            onPressed: () => _deleteSheet(view.sheet),
+          ),
+        ]);
       } else if (_notes.where((n) => n.id == _selectedNoteId).firstOrNull
           case final note?) {
         title = note.kind == NoteKind.box
@@ -1143,7 +1188,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     final drawnId = wire.drawnId;
     if (drawnId != null) {
       final before =
-          (ref.read(schematicWiresProvider(widget.project.id)).value ??
+          (ref.read(sheetWiresProvider(widget.project.id)).value ??
                   const <SchematicWire>[])
               .where((w) => w.id == drawnId)
               .firstOrNull;
@@ -1253,6 +1298,14 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
         icon: Icons.label_outline,
         onPressed: () => _labelPins(unit),
       ),
+    // Only on a part picked on its own, and one with pins to trade.
+    if (unit.pins.length >= 2 &&
+        !SchematicScene.isPowerReference(unit.part.reference))
+      CanvasAction(
+        label: 'Swap',
+        icon: Icons.swap_horiz,
+        onPressed: () => _swap(unit.part.id),
+      ),
     CanvasAction(
       label: 'Rotate',
       icon: Icons.rotate_90_degrees_ccw_outlined,
@@ -1276,10 +1329,22 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     ),
   ];
 
+  /// Swaps two pins, or two gates, of a part.
+  Future<void> _swap(String partId) async {
+    await runPartSwap(
+      context,
+      ref,
+      projectId: widget.project.id,
+      partId: partId,
+      record: _record,
+      notify: _notify,
+    );
+  }
+
   /// Labels many of a part's pins at once. A label is a connection, so
   /// the same names on another part wire the two together.
   Future<void> _labelPins(PlacedUnit unit) async {
-    final parts = ref.read(projectPartsProvider(widget.project.id)).value;
+    final parts = ref.read(sheetPartsProvider(widget.project.id)).value;
     final nets = ref.read(projectNetsProvider(widget.project.id)).value;
     final part = parts?.where((p) => p.part.id == unit.part.id).firstOrNull;
     if (part == null || nets == null) return;
@@ -1324,7 +1389,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
 
   /// Runs the schematic check and shows what it found.
   Future<void> _check(SchematicScene scene) async {
-    final parts = ref.read(projectPartsProvider(widget.project.id)).value;
+    final parts = ref.read(sheetPartsProvider(widget.project.id)).value;
     final nets = ref.read(projectNetsProvider(widget.project.id)).value;
     if (parts == null || nets == null) return;
     final placements = await ref
@@ -1447,7 +1512,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     Set<String> unitIds,
   ) {
     final drawn =
-        ref.read(schematicWiresProvider(widget.project.id)).value ??
+        ref.read(sheetWiresProvider(widget.project.id)).value ??
         const <SchematicWire>[];
     final pins = {
       for (final pin in scene.pins)
@@ -1489,7 +1554,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     Set<String> unitIds,
   ) {
     final drawn =
-        ref.read(schematicWiresProvider(widget.project.id)).value ??
+        ref.read(sheetWiresProvider(widget.project.id)).value ??
         const <SchematicWire>[];
     final carried = _wiresCarriedBy(scene, unitIds);
     final ids = {for (final wire in carried) wire.id};
@@ -1608,7 +1673,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     SchematicScene scene,
     List<PlacedUnit> group,
   ) async {
-    final parts = ref.read(projectPartsProvider(widget.project.id)).value;
+    final parts = ref.read(sheetPartsProvider(widget.project.id)).value;
     final nets = ref.read(projectNetsProvider(widget.project.id)).value;
     if (parts == null || nets == null) return;
     final ids = {for (final unit in group) unit.unit.id};
@@ -1708,7 +1773,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   }
 
   void _copyGroup(SchematicScene scene, List<PlacedUnit> group) {
-    final parts = ref.read(projectPartsProvider(widget.project.id)).value;
+    final parts = ref.read(sheetPartsProvider(widget.project.id)).value;
     final nets = ref.read(projectNetsProvider(widget.project.id)).value;
     if (parts == null || nets == null) return;
     final ids = {for (final unit in group) unit.unit.id};
@@ -2269,6 +2334,21 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       // Notes lie under the circuit, so they are what a tap means only when
       // it means nothing else.
       if (unit == null && wire == null) {
+        // A sheet's box: picked, to open, move or rename.
+        final box = _sheetBoxes.where((b) => b.box.contains(sheet)).firstOrNull;
+        if (box != null) {
+          setState(() {
+            _selectedSheetId = box.sheet.id == _selectedSheetId
+                ? null
+                : box.sheet.id;
+            _selectedNoteId = null;
+            _selectedUnitId = null;
+            _selectedWireKey = null;
+            _selectedWireRun = null;
+            _highlightedNetId = null;
+          });
+          return;
+        }
         final note = _noteAt(sheet, viewport);
         setState(() {
           _selectedNoteId = note?.id == _selectedNoteId ? null : note?.id;
@@ -2281,6 +2361,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       } else if (_selectedNoteId != null) {
         _selectedNoteId = null;
       }
+      _selectedSheetId = null;
 
       setState(() {
         // Tapping the selected symbol again lets go of it. Without a toggle
@@ -2549,6 +2630,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
 
     _candidateLabel = null;
     _candidateNote = null;
+    _candidateSheet = null;
 
     if (details.pointerCount == 1) {
       // Decided where the finger landed, not where the recogniser caught
@@ -2564,6 +2646,15 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
         _candidateLabel = label;
         _dragStartSheet = sheet;
         _dragOriginalPosition = label.position;
+        return;
+      }
+
+      // A picked sheet's box moves under the finger that lands on it.
+      if (_sheetBoxes.where((b) => b.sheet.id == _selectedSheetId).firstOrNull
+          case final view? when view.box.contains(sheet)) {
+        _candidateSheet = view.sheet;
+        _dragStartSheet = sheet;
+        _dragOriginalPosition = view.sheet.box.topLeft;
         return;
       }
 
@@ -2746,6 +2837,22 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
         _isDraggingUnit = true;
         _wireDragAt = pin?.sheetPosition ?? _snapToGrid(sheet);
       });
+      return;
+    }
+
+    if (_candidateSheet != null && details.pointerCount == 1) {
+      final travelled = (details.localFocalPoint - _gestureStartLocal).distance;
+      if (!_isDraggingUnit && travelled > _dragSlopPx) {
+        setState(() => _isDraggingUnit = true);
+      }
+      if (_isDraggingUnit) {
+        final sheet = start.toSheet(details.localFocalPoint);
+        setState(() {
+          _draggingSheetAt = _snapToGrid(
+            _dragOriginalPosition + (sheet - _dragStartSheet),
+          );
+        });
+      }
       return;
     }
 
@@ -2958,6 +3065,8 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     final movedLabel = _isDraggingUnit ? _candidateLabel : null;
     final movedNote = _isDraggingUnit ? _candidateNote : null;
     _candidateNote = null;
+    final movedSheet = _isDraggingUnit ? _candidateSheet : null;
+    _candidateSheet = null;
 
     _candidateUnitId = null;
     _candidateWire = null;
@@ -2981,6 +3090,311 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     } else if (_draggingNoteAt != null) {
       setState(() => _draggingNoteAt = null);
     }
+    if (movedSheet != null) {
+      _recordSheetMove(movedSheet);
+    } else if (_draggingSheetAt != null) {
+      setState(() => _draggingSheetAt = null);
+    }
+  }
+
+  // --- sheets ----------------------------------------------------------
+
+  /// The boxes for the sheets on this one, and a name at every pin whose
+  /// net carries on to another sheet.
+  void _sheetViews(SchematicScene scene, List<NetWithEndpoints> nets) {
+    final sheets =
+        ref.watch(projectSheetsProvider(widget.project.id)).value ??
+        const <SchematicSheet>[];
+    if (sheets.isEmpty) {
+      _sheetBoxes = const [];
+      _offSheetLabels = const [];
+      return;
+    }
+    final open = ref.watch(openSheetProvider(widget.project.id));
+    final links = SheetConnections.of(
+      parts:
+          ref.watch(projectPartsProvider(widget.project.id)).value ?? const [],
+      nets: nets,
+      sheets: sheets,
+    );
+    final (boxes, labels) = sheetOverlays(
+      links: links,
+      scene: scene,
+      sheetId: open,
+      moving: _candidateSheet,
+      movedTo: _draggingSheetAt,
+    );
+    _sheetBoxes = boxes;
+    _offSheetLabels = labels;
+  }
+
+  /// Where on the hierarchy this sheet is — Top › Power › Regulator —
+  /// each step back up a tap away. Only once there are sheets at all.
+  Widget? _sheetPath() {
+    final sheets =
+        ref.watch(projectSheetsProvider(widget.project.id)).value ??
+        const <SchematicSheet>[];
+    if (sheets.isEmpty) return null;
+    final tree = SheetTree(sheets);
+    final open = ref.watch(openSheetProvider(widget.project.id));
+    final steps = <(String?, String)>[
+      (null, 'Top'),
+      for (final sheet in tree.pathTo(open)) (sheet.id, sheet.name),
+    ];
+    return Align(
+      alignment: Alignment.topLeft,
+      child: Material(
+        key: const ValueKey('sheet-path'),
+        color: KicadPalette.surface.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(6),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(width: 6),
+              Icon(Icons.layers_outlined, size: 16, color: KicadPalette.sheet),
+              for (final (i, (id, name)) in steps.indexed) ...[
+                if (i > 0)
+                  Icon(
+                    Icons.chevron_right,
+                    size: 16,
+                    color: KicadPalette.textDisabled,
+                  ),
+                TextButton(
+                  onPressed: i == steps.length - 1
+                      ? null
+                      : () => _openSheet(id),
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(0, 34),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  child: Text(
+                    name,
+                    style: TextStyle(
+                      color: i == steps.length - 1
+                          ? KicadPalette.textPrimary
+                          : KicadPalette.wire,
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(width: 4),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openSheet(String? sheetId) {
+    ref.read(openSheetProvider(widget.project.id).notifier).open(sheetId);
+    setState(() {
+      _selectedSheetId = null;
+      _selectedUnitId = null;
+      _selectedUnitIds = const {};
+      _selectedWireIds = const {};
+      _selectedNoteId = null;
+      _selectedWireKey = null;
+      _viewport = null;
+    });
+  }
+
+  Future<String?> _askSheetName(String title, String initial) {
+    final controller = TextEditingController(text: initial);
+    return showDialog<String>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          key: const ValueKey('sheet-name'),
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Sheet name',
+            hintText: 'e.g. Power',
+            isDense: true,
+          ),
+          onSubmitted: (text) => Navigator.of(dialog).pop(text.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialog).pop(),
+            child: const Text('CANCEL'),
+          ),
+          FilledButton(
+            key: const ValueKey('sheet-name-ok'),
+            onPressed: () => Navigator.of(dialog).pop(controller.text.trim()),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _renameSheet(SchematicSheet sheet) async {
+    final name = await _askSheetName('Rename sheet', sheet.name);
+    if (name == null || name.isEmpty || !mounted) return;
+    final repository = ref.read(sheetRepositoryProvider);
+    final renamed = await repository.rename(sheet, name);
+    _record(
+      'Rename ${sheet.name}',
+      undo: () => repository.update(sheet),
+      redo: () => repository.update(renamed),
+    );
+  }
+
+  Future<void> _deleteSheet(SchematicSheet sheet) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text('Delete the ${sheet.name} sheet?'),
+        content: const Text(
+          'Nothing on it is lost: its parts, wires and sheets move up to '
+          'the sheet it is on.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialog).pop(false),
+            child: const Text('CANCEL'),
+          ),
+          FilledButton(
+            key: const ValueKey('sheet-delete-confirm'),
+            onPressed: () => Navigator.of(dialog).pop(true),
+            child: const Text('DELETE'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final repository = ref.read(sheetRepositoryProvider);
+    await repository.delete(sheet);
+    setState(() => _selectedSheetId = null);
+    _notify('${sheet.name} deleted — its contents are on this sheet now');
+  }
+
+  Future<void> _recordSheetMove(SchematicSheet sheet) async {
+    final to = _draggingSheetAt;
+    if (to == null || to == sheet.box.topLeft) {
+      setState(() => _draggingSheetAt = null);
+      return;
+    }
+    final repository = ref.read(sheetRepositoryProvider);
+    final moved = sheet.copyWith(box: to & sheet.box.size);
+    await repository.update(moved);
+    if (mounted) setState(() => _draggingSheetAt = null);
+    _record(
+      'Move ${sheet.name}',
+      undo: () => repository.update(sheet),
+      redo: () => repository.update(moved),
+    );
+  }
+
+  /// A new sheet on the open one, its box put where the view is.
+  Future<SchematicSheet?> _newSheet() async {
+    final name = await _askSheetName('New sheet', '');
+    if (name == null || name.isEmpty || !mounted) return null;
+    final viewport = _viewport;
+    final centre = viewport == null
+        ? const Offset(25.4, 25.4)
+        : viewport.toSheet(
+            Offset(_canvasSize.width / 2, _canvasSize.height / 2),
+          );
+    final repository = ref.read(sheetRepositoryProvider);
+    final added = await repository.add(
+      projectId: widget.project.id,
+      name: name,
+      parentId: ref.read(openSheetProvider(widget.project.id)),
+      at: _snapToGrid(centre),
+    );
+    _record(
+      'New sheet ${added.name}',
+      undo: () => repository.delete(added),
+      redo: () => repository.restore(added),
+    );
+    return added;
+  }
+
+  /// Puts the picked parts, and the wires between them, on another sheet.
+  Future<void> _moveToSheet(List<PlacedUnit> group) async {
+    final sheets = SheetTree(
+      ref.read(projectSheetsProvider(widget.project.id)).value ?? const [],
+    );
+    final open = ref.read(openSheetProvider(widget.project.id));
+    const newSheet = '\u0000new';
+    final target = await showDialog<String>(
+      context: context,
+      builder: (dialog) => SimpleDialog(
+        title: Text('Move ${group.length} to'),
+        children: [
+          if (open != null)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(dialog).pop(''),
+              child: const Text('Top sheet'),
+            ),
+          for (final sheet in sheets.inPageOrder())
+            if (sheet.id != open)
+              SimpleDialogOption(
+                key: ValueKey('move-to-${sheet.name}'),
+                onPressed: () => Navigator.of(dialog).pop(sheet.id),
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    left: 12.0 * (sheets.depthOf(sheet.id) - 1),
+                  ),
+                  child: Text(sheets.pathName(sheet.id)),
+                ),
+              ),
+          SimpleDialogOption(
+            key: const ValueKey('move-to-new-sheet'),
+            onPressed: () => Navigator.of(dialog).pop(newSheet),
+            child: Row(
+              children: [
+                Icon(Icons.add, size: 18, color: KicadPalette.wire),
+                const SizedBox(width: 8),
+                const Text('New sheet…'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+    if (target == null || !mounted) return;
+    String? sheetId;
+    if (target == newSheet) {
+      final added = await _newSheet();
+      if (added == null) return;
+      sheetId = added.id;
+    } else {
+      sheetId = target.isEmpty ? null : target;
+    }
+
+    final repository = ref.read(sheetRepositoryProvider);
+    final unitIds = {for (final u in group) u.unit.id};
+    final wireIds = {..._selectedWireIds};
+    var move = await repository.moveToSheet(
+      projectId: widget.project.id,
+      unitIds: unitIds,
+      wireIds: wireIds,
+      sheetId: sheetId,
+    );
+    final name =
+        sheets.byId(sheetId)?.name ??
+        (sheetId == null ? 'the top sheet' : 'the new sheet');
+    setState(() {
+      _selectedUnitIds = const {};
+      _selectedWireIds = const {};
+    });
+    _record(
+      'Move ${group.length} to $name',
+      undo: () => repository.undoMove(move),
+      redo: () async => move = await repository.moveToSheet(
+        projectId: widget.project.id,
+        unitIds: unitIds,
+        wireIds: wireIds,
+        sheetId: sheetId,
+      ),
+    );
+    _notify('Moved to $name — connections that cross now show as labels');
   }
 
   // --- notes -----------------------------------------------------------
@@ -3114,7 +3528,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   Future<bool> _trimRetracedEnds(String netId) async {
     final repository = ref.read(netRepositoryProvider);
     final stored = [
-      for (final wire in await repository.getWires(widget.project.id))
+      for (final wire in await repository.getWires(
+        widget.project.id,
+        openSheetOnly: true,
+      ))
         if (wire.netId == netId) wire,
     ];
     final (changed, after) = PolylineWiring.trimRetracedEnds([
@@ -3151,7 +3568,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     final repository = ref.read(netRepositoryProvider);
     final removed = <SchematicWire>[];
     var wires = [
-      for (final wire in await repository.getWires(widget.project.id))
+      for (final wire in await repository.getWires(
+        widget.project.id,
+        openSheetOnly: true,
+      ))
         if (wire.netId == netId) wire,
     ];
     var dropped = true;
@@ -3202,7 +3622,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   Future<List<SchematicWire>> _dropShrunkWires(String netId) async {
     final repository = ref.read(netRepositoryProvider);
     final removed = <SchematicWire>[];
-    for (final wire in await repository.getWires(widget.project.id)) {
+    for (final wire in await repository.getWires(
+      widget.project.id,
+      openSheetOnly: true,
+    )) {
       if (wire.netId != netId) continue;
       var length = 0.0;
       for (var i = 0; i < wire.points.length - 1; i++) {
@@ -3230,7 +3653,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     final added = <SchematicWire>[];
 
     final wires = [
-      for (final wire in await repository.getWires(widget.project.id))
+      for (final wire in await repository.getWires(
+        widget.project.id,
+        openSheetOnly: true,
+      ))
         if (wire.netId == netId) wire,
     ];
     // The rule itself lives with the rest of the dragging rules, so the
@@ -3346,7 +3772,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     final absorbed = <SchematicWire>[];
 
     var wires = [
-      for (final wire in await repository.getWires(widget.project.id))
+      for (final wire in await repository.getWires(
+        widget.project.id,
+        openSheetOnly: true,
+      ))
         if (wire.netId == netId) wire,
     ];
 
@@ -3540,7 +3969,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   /// Puts a net's wires back exactly as [rows] had them.
   Future<void> _restoreNetWires(String netId, List<SchematicWire> rows) async {
     final repository = ref.read(netRepositoryProvider);
-    for (final row in await repository.getWires(widget.project.id)) {
+    for (final row in await repository.getWires(
+      widget.project.id,
+      openSheetOnly: true,
+    )) {
       if (row.netId == netId) await repository.deleteWire(row.id);
     }
     for (final row in rows) {
@@ -3609,7 +4041,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     final id = wire.drawnId;
     if (id == null) return null;
     final drawn =
-        ref.read(schematicWiresProvider(widget.project.id)).value ??
+        ref.read(sheetWiresProvider(widget.project.id)).value ??
         const <SchematicWire>[];
     final rows = [
       for (final row in drawn)
@@ -3641,7 +4073,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     ]);
 
     final before = [
-      for (final row in await repository.getWires(widget.project.id))
+      for (final row in await repository.getWires(
+        widget.project.id,
+        openSheetOnly: true,
+      ))
         if (row.netId == netId) row,
     ];
 
@@ -3663,7 +4098,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     await _joinLandedPins(scene, landed, netId);
     await _writeSegments(netId, before, landed);
     final after = [
-      for (final row in await repository.getWires(widget.project.id))
+      for (final row in await repository.getWires(
+        widget.project.id,
+        openSheetOnly: true,
+      ))
         if (row.netId == netId) row,
     ];
     if (_sameWires(before, after)) return;
@@ -3743,7 +4181,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
 
     final repository = ref.read(partRepositoryProvider);
     final nets = ref.read(netRepositoryProvider);
-    final parts = ref.read(projectPartsProvider(widget.project.id)).value;
+    final parts = ref.read(sheetPartsProvider(widget.project.id)).value;
     if (parts == null) {
       setState(() => _draggingUnits = null);
       return;
@@ -3996,7 +4434,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   List<PolylineWire> _netAsPolylines(SchematicScene scene, String netId) {
     final stored = {
       for (final wire
-          in ref.read(schematicWiresProvider(widget.project.id)).value ??
+          in ref.read(sheetWiresProvider(widget.project.id)).value ??
               const <SchematicWire>[])
         wire.id: wire,
     };
@@ -4016,7 +4454,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   Future<void> _writeSlide(WireRunHit hit, List<Offset> points) async {
     final repository = ref.read(netRepositoryProvider);
     final stored =
-        ref.read(schematicWiresProvider(widget.project.id)).value ??
+        ref.read(sheetWiresProvider(widget.project.id)).value ??
         const <SchematicWire>[];
 
     // The wire itself and every wire stretched to stay joined to it, all
@@ -4053,7 +4491,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     Future<void> join() async {
       final netId = hit.wire.netId;
       untidied = [
-        for (final wire in await repository.getWires(widget.project.id))
+        for (final wire in await repository.getWires(
+          widget.project.id,
+          openSheetOnly: true,
+        ))
           if (wire.netId == netId) wire,
       ];
       await _tidyNet(netId);
@@ -4502,7 +4943,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     String? endPin,
   ) {
     final stored =
-        ref.read(schematicWiresProvider(widget.project.id)).value ??
+        ref.read(sheetWiresProvider(widget.project.id)).value ??
         const <SchematicWire>[];
     for (final wire in stored) {
       if (wire.netId != netId || wire.points.length < 2) continue;

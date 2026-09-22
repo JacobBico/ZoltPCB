@@ -20,9 +20,10 @@ desktop work.
   core workflow.
 * **Touch-first.** Fingers, not a stylus or mouse. Nothing interactive is
   smaller than 48dp.
-* **Export-only.** `.kicad_sch`, `.kicad_pcb`, `.kicad_pro` and BOM CSV go
-  out; nothing comes back in. There is no round-trip editing between phone
-  and desktop.
+* **KiCad in and out.** `.kicad_sch`, `.kicad_pcb`, `.kicad_pro`, BOM CSV,
+  Gerbers and drill files go out. A desktop KiCad project (schematic, with
+  its board and project file) can be opened too; sub-sheets of a
+  hierarchical schematic are not brought in yet.
 
 ## Decisions
 

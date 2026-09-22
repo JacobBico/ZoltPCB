@@ -10,6 +10,7 @@ import '../../core/widgets/panel.dart';
 import '../../data/repositories/symbol_library_repository.dart';
 import '../../domain/symbols/symbols.dart';
 import 'footprint_import.dart';
+import 'kicad_download_dialog.dart';
 import 'footprint_library_table.dart';
 
 /// Which kind of library is being looked at.
@@ -66,6 +67,13 @@ class _LibrariesPanelState extends ConsumerState<LibrariesPanel> {
               ),
               const Spacer(),
               OutlinedButton.icon(
+                key: const ValueKey('kicad-download-open'),
+                onPressed: () => showKicadLibraryDownload(context),
+                icon: const Icon(Icons.cloud_download_outlined, size: 16),
+                label: const Text('DOWNLOAD'),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
                 onPressed: () => _kind == LibraryKind.symbols
                     ? _importSymbolLibrary(context, ref)
                     : _importFootprintLibrary(context, ref),
@@ -89,6 +97,30 @@ class _LibrariesPanelState extends ConsumerState<LibrariesPanel> {
     );
   }
 
+  /// Downloading comes first: on a phone with nothing on it, it is the
+  /// way to get started. Importing a file stays beside it.
+  Widget _startActions(
+    BuildContext context, {
+    required String importLabel,
+    required VoidCallback onImport,
+  }) => Wrap(
+    spacing: 8,
+    runSpacing: 8,
+    alignment: WrapAlignment.center,
+    children: [
+      FilledButton.icon(
+        onPressed: () => showKicadLibraryDownload(context),
+        icon: const Icon(Icons.cloud_download_outlined, size: 18),
+        label: const Text('DOWNLOAD FROM KICAD'),
+      ),
+      OutlinedButton.icon(
+        onPressed: onImport,
+        icon: const Icon(Icons.add, size: 18),
+        label: Text(importLabel),
+      ),
+    ],
+  );
+
   Widget _footprints(BuildContext context, WidgetRef ref) {
     final libraries = ref.watch(footprintLibrariesProvider);
     return switch (libraries) {
@@ -96,13 +128,13 @@ class _LibrariesPanelState extends ConsumerState<LibrariesPanel> {
         icon: Icons.dashboard_customize_outlined,
         title: 'No footprint libraries yet',
         message:
-            'The board needs footprints. Zip a .pretty folder from your '
-            'KiCad install, copy it onto this device, and import it here — '
-            'or import individual .kicad_mod files.',
-        action: FilledButton.icon(
-          onPressed: () => _importFootprintLibrary(context, ref),
-          icon: const Icon(Icons.add, size: 18),
-          label: const Text('IMPORT FOOTPRINTS'),
+            'The board needs footprints. Download KiCad\'s own libraries, '
+            'or import a zipped .pretty folder or .kicad_mod files from '
+            'this device.',
+        action: _startActions(
+          context,
+          importLabel: 'IMPORT FOOTPRINTS',
+          onImport: () => _importFootprintLibrary(context, ref),
         ),
       ),
       AsyncData(:final value) => FootprintLibraryTable(libraries: value),
@@ -123,13 +155,13 @@ class _LibrariesPanelState extends ConsumerState<LibrariesPanel> {
         icon: Icons.folder_open_outlined,
         title: 'No symbol libraries yet',
         message:
-            'Import a .kicad_sym file to get components. KiCad keeps its '
-            'stock libraries in its install directory; copy the ones you '
-            'want onto this device and import them here.',
-        action: FilledButton.icon(
-          onPressed: () => _importSymbolLibrary(context, ref),
-          icon: const Icon(Icons.add, size: 18),
-          label: const Text('IMPORT LIBRARY'),
+            'Download KiCad\'s own libraries to get components — pick just '
+            'the ones you want — or import a .kicad_sym file from this '
+            'device.',
+        action: _startActions(
+          context,
+          importLabel: 'IMPORT LIBRARY',
+          onImport: () => _importSymbolLibrary(context, ref),
         ),
       ),
       AsyncData(:final value) => _LibraryTable(libraries: value),

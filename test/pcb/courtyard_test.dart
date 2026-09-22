@@ -98,7 +98,75 @@ List<DrcViolation> overlaps(List<PlacedFootprint> footprints) =>
       boardWith(footprints),
     ).where((v) => v.rule == DrcRule.courtyardOverlap).toList();
 
+/// The same part with no courtyard drawn on it at all — a body and pads,
+/// which is what a hand-made footprint often is.
+PlacedFootprint bare(String reference, double x, double y) {
+  final ref = PlacedFootprintRef(
+    id: 'fp-$reference',
+    projectId: 'p',
+    partId: 'part-$reference',
+    libId: 'Test:Bare',
+    x: x,
+    y: y,
+    placed: true,
+  );
+  return PlacedFootprint(
+    ref: ref,
+    part: Part(
+      id: 'part-$reference',
+      projectId: 'p',
+      libId: 'Device:R',
+      reference: reference,
+      value: '10k',
+      createdAt: DateTime(2026),
+    ),
+    placement: FootprintPlacement.of(ref),
+    pads: const [],
+    definition: const FootprintDefinition(
+      libraryNickname: 'Test',
+      name: 'Bare',
+      graphics: [
+        FootprintRect(
+          start: FootprintPoint(-1.7, -0.9),
+          end: FootprintPoint(1.7, 0.9),
+          layer: BoardLayer.frontSilk,
+          stroke: StrokeStyle(width: 0.12),
+        ),
+      ],
+    ),
+  );
+}
+
 void main() {
+  test('what the board draws in red: both parts, not one', () {
+    final found = Courtyard.collisions(
+      boardWith([
+        placed('R1', 10, 10),
+        placed('R2', 11, 10),
+        placed('R3', 30, 20),
+      ]),
+    );
+    expect([for (final c in found) c.reference], ['R1', 'R2']);
+    expect(found.every((c) => c.drawn), isTrue);
+  });
+
+  test('a part with no courtyard drawn still shows when it is sat on', () {
+    // KiCad says nothing here, because there is nothing to say it with.
+    // Plenty of hand-made footprints have no courtyard, and a part that can
+    // be dropped on another in silence is worse than an approximate answer.
+    final found = Courtyard.collisions(
+      boardWith([bare('R1', 10, 10), bare('R2', 11, 10)]),
+    );
+    expect([for (final c in found) c.reference], ['R1', 'R2']);
+    expect(found.every((c) => c.drawn), isFalse);
+
+    // And it is a warning, not an error: it is the bodies that were
+    // compared, not the room their authors asked for.
+    final said = overlaps([bare('R1', 10, 10), bare('R2', 11, 10)]).single;
+    expect(said.isError, isFalse);
+    expect(said.message, contains('has a courtyard drawn'));
+  });
+
   test('two parts on top of one another cannot both be fitted', () {
     final found = overlaps([placed('R1', 10, 10), placed('R2', 11, 10)]);
     expect(found, hasLength(1));

@@ -161,10 +161,14 @@ class PartUnit {
     this.mirrorX = false,
     this.mirrorY = false,
     this.placed = false,
+    this.sheetId,
   });
 
   final String id;
   final String partId;
+
+  /// The sub-sheet the unit is drawn on; null for the top sheet.
+  final String? sheetId;
 
   /// 1-based KiCad unit index.
   final int unitNumber;
@@ -190,10 +194,13 @@ class PartUnit {
     bool? mirrorY,
     bool? placed,
     int? bodyStyle,
+    String? sheetId,
+    bool toTopSheet = false,
   }) {
     return PartUnit(
       id: id,
       partId: partId,
+      sheetId: toTopSheet ? null : (sheetId ?? this.sheetId),
       unitNumber: unitNumber,
       bodyStyle: bodyStyle ?? this.bodyStyle,
       x: x ?? this.x,
@@ -217,7 +224,8 @@ class PartUnit {
       other.rotation == rotation &&
       other.mirrorX == mirrorX &&
       other.mirrorY == mirrorY &&
-      other.placed == placed;
+      other.placed == placed &&
+      other.sheetId == sheetId;
 
   @override
   int get hashCode => Object.hash(

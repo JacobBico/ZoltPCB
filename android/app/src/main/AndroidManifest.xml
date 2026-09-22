@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Only to download KiCad's libraries when the user asks. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="HintPCB"
         android:name="${applicationName}"

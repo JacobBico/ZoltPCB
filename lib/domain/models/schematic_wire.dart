@@ -13,11 +13,15 @@ class SchematicWire {
     required this.points,
     this.pinAId,
     this.pinBId,
+    this.sheetId,
   });
 
   final String id;
   final String projectId;
   final String netId;
+
+  /// The sub-sheet the wire is drawn on; null for the top sheet.
+  final String? sheetId;
 
   /// The pin at the first point, which the wire follows when the part moves.
   /// Null when that end was left on another wire rather than on a pin.
@@ -36,6 +40,7 @@ class SchematicWire {
         netId: netId ?? this.netId,
         pinAId: pinAId,
         pinBId: pinBId,
+        sheetId: sheetId,
         points: points ?? this.points,
       );
 

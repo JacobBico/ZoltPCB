@@ -7,6 +7,7 @@ import 'board_edge.dart';
 import 'board_layer.dart';
 import 'net_class.dart';
 import 'board_outline.dart';
+import 'board_feature.dart';
 import 'board_text.dart';
 import 'board_zone.dart';
 import 'footprint.dart';
@@ -176,7 +177,23 @@ class BoardScene {
     this.staleViaIds = const {},
     this.netClasses = const [],
     this.netClassByNet = const {},
+    this.features = const [],
+    this.dimensions = const [],
   });
+
+  /// Mounting holes, fiducials and test points, placed or not. The placed
+  /// ones are also in [footprints], as the footprints they stand for.
+  final List<BoardFeature> features;
+
+  /// Measurements drawn on the board.
+  final List<BoardDimension> dimensions;
+
+  /// The feature behind a footprint id, or null for a part's footprint.
+  BoardFeature? featureOf(String footprintId) {
+    if (!BoardFeature.isFeatureId(footprintId)) return null;
+    final id = BoardFeature.featureIdOf(footprintId);
+    return features.where((f) => f.id == id).firstOrNull;
+  }
 
   /// The project's net classes, and the class each net routes with.
   final List<NetClass> netClasses;
@@ -210,6 +227,8 @@ class BoardScene {
     List<BoardZone> zones = const [],
     List<BoardText> texts = const [],
     List<NetClass> netClasses = const [],
+    List<BoardFeature> features = const [],
+    List<BoardDimension> dimensions = const [],
   }) {
     final partsById = {for (final part in parts) part.part.id: part};
 
@@ -280,6 +299,48 @@ class BoardScene {
       allPads.addAll(pads);
     }
 
+    // Mounting holes, fiducials and test points, as footprints of their
+    // own. A feature's net is found by id, or by name when the schematic
+    // has been reshuffled underneath it since.
+    for (final feature in features) {
+      if (!feature.placed) continue;
+      final net = !feature.hasNet
+          ? null
+          : nets.where((n) => n.net.id == feature.netId).firstOrNull ??
+                (feature.netName.isEmpty
+                    ? null
+                    : nets
+                          .where((n) => n.displayName == feature.netName)
+                          .firstOrNull);
+      final ref = feature.ref;
+      final definition = feature.definition;
+      final placement = FootprintPlacement.of(ref);
+      final pads = [
+        for (final pad in definition.pads)
+          PlacedPad(
+            pad: pad,
+            partId: ref.partId,
+            reference: feature.reference,
+            footprintId: ref.id,
+            position: placement.applyPoint(pad.at),
+            angle: placement.padAngle(pad.angle),
+            layers: [for (final layer in pad.layers) placement.layerOf(layer)!],
+            netId: pad.isConnectable ? net?.net.id : null,
+            netName: pad.isConnectable ? net?.displayName : null,
+          ),
+      ];
+      placed.add(
+        PlacedFootprint(
+          ref: ref,
+          part: feature.part,
+          placement: placement,
+          pads: pads,
+          definition: definition,
+        ),
+      );
+      allPads.addAll(pads);
+    }
+
     // What net each piece of copper is really on, decided by what it
     // touches rather than by the id it was drawn with. Net ids do not
     // survive the schematic changing underneath the board: merging two nets
@@ -305,6 +366,8 @@ class BoardScene {
       texts: texts,
       netClasses: netClasses,
       netClassByNet: netClassByNet,
+      features: features,
+      dimensions: dimensions,
       staleTrackIds: resolved.staleTracks,
       staleViaIds: resolved.staleVias,
     );

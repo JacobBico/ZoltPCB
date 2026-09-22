@@ -123,5 +123,22 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('snapshots-button')));
     await settleApp(tester);
     expect(find.textContaining('Before restoring'), findsOneWidget);
+
+    // Deleting one asks first; cancelling keeps it.
+    Future<int> count() async =>
+        (await db.select(db.projectSnapshots).get()).length;
+    final kept = await count();
+    await tester.tap(find.byTooltip('Delete').first);
+    await settleApp(tester);
+    expect(find.textContaining('cannot be taken back'), findsOneWidget);
+    await tester.tap(find.text('CANCEL'));
+    await settleApp(tester);
+    expect(await count(), kept);
+
+    await tester.tap(find.byTooltip('Delete').first);
+    await settleApp(tester);
+    await tester.tap(find.byKey(const ValueKey('snapshot-delete-confirm')));
+    await settleApp(tester);
+    expect(await count(), kept - 1);
   });
 }

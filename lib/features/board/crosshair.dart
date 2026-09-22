@@ -99,6 +99,10 @@ SnapTarget resolveSnap({
   CopperLayer? endLayer;
   bestDistance = double.infinity;
   for (final track in scene.tracks) {
+    // Copper on another layer is not somewhere this route can catch on: a
+    // run on the back caught the crosshair while routing the front, and
+    // the route it started carried on over there.
+    if (layer != null && track.layer != layer) continue;
     for (final end in [
       Offset(track.startX, track.startY),
       Offset(track.endX, track.endY),
@@ -124,7 +128,7 @@ SnapTarget resolveSnap({
   if (bestEnd != null && bestDistance <= toleranceMm) {
     return SnapTarget(
       at: bestEnd,
-      label: 'corner',
+      label: endLayer == null ? 'via' : 'corner',
       strong: true,
       netId: endNet,
       layer: endLayer,
@@ -139,6 +143,7 @@ SnapTarget resolveSnap({
   CopperLayer? onLayer;
   bestDistance = double.infinity;
   for (final track in scene.tracks) {
+    if (layer != null && track.layer != layer) continue;
     final a = Offset(track.startX, track.startY);
     final b = Offset(track.endX, track.endY);
     final point = _closestOnSegment(at, a, b);

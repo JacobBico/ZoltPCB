@@ -35,6 +35,15 @@ class BoardDocument {
 
   Board get board => scene.board;
 
+  /// Parts on the board whose footprint could not be found in any
+  /// installed library, as `R3 (Lib:Name)`. The writer has nothing to
+  /// place for these, so a file written anyway would be missing them.
+  List<String> get missingFootprints => [
+    for (final footprint in scene.footprints)
+      if (footprintSources[footprint.ref.libId] == null)
+        '${footprint.part.reference} (${footprint.ref.libId})',
+  ]..sort();
+
   /// Nets that actually appear on the board, in a stable order.
   ///
   /// A schematic net with no placed pads is not written: KiCad would list it

@@ -38,6 +38,9 @@ class _MyLibraryPanelState extends ConsumerState<MyLibraryPanel> {
   List<FootprintDefinition> _footprints = const [];
   bool _loaded = false;
 
+  /// Why the library could not be read, when it could not.
+  Object? _loadError;
+
   OwnLibraryStore get _store => ref.read(ownLibraryStoreProvider);
 
   @override
@@ -47,14 +50,19 @@ class _MyLibraryPanelState extends ConsumerState<MyLibraryPanel> {
   }
 
   Future<void> _reload() async {
-    final symbols = await _store.loadSymbols();
-    final footprints = await _store.loadFootprints();
-    if (!mounted) return;
-    setState(() {
-      _symbols = symbols;
-      _footprints = footprints;
-      _loaded = true;
-    });
+    try {
+      final symbols = await _store.loadSymbols();
+      final footprints = await _store.loadFootprints();
+      if (!mounted) return;
+      setState(() {
+        _symbols = symbols;
+        _footprints = footprints;
+        _loaded = true;
+        _loadError = null;
+      });
+    } catch (error) {
+      if (mounted) setState(() => _loadError = error);
+    }
   }
 
   void _editSymbol(String? name) {
@@ -142,6 +150,20 @@ class _MyLibraryPanelState extends ConsumerState<MyLibraryPanel> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    if (_loadError != null) {
+      return EmptyState(
+        icon: Icons.error_outline,
+        title: 'My Library could not be read',
+        message: '$_loadError',
+        action: OutlinedButton(
+          onPressed: () {
+            setState(() => _loadError = null);
+            _reload();
+          },
+          child: const Text('TRY AGAIN'),
+        ),
+      );
+    }
     if (!_loaded) return const SizedBox.shrink();
 
     return Column(

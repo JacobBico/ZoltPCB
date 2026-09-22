@@ -19,6 +19,69 @@ class PropertiesDeleted<T> extends PropertiesResult<T> {
   const PropertiesDeleted();
 }
 
+/// A net a piece of copper can be put on: its id, and what to call it.
+typedef NetChoice = ({String id, String name});
+
+/// Which net this copper belongs to, chosen by hand.
+///
+/// Normally a track or a via takes its net from the copper it grew out of,
+/// which is right almost always and wrong exactly when it matters: a grid
+/// of vias dropped into the exposed pad under a regulator is there for
+/// heat, not for a signal, and it has to read as ground — otherwise the
+/// pour treats it as foreign copper and clears round every one of them.
+/// KiCad lets you set it by hand for the same reason.
+class _NetField extends StatelessWidget {
+  const _NetField({
+    required this.nets,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final List<NetChoice> nets;
+  final String? value;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    // A net that was deleted, or one this board knows nothing about, must
+    // still show rather than silently becoming "no net".
+    final known = nets.any((n) => n.id == value);
+    return DropdownButtonFormField<String?>(
+      key: const ValueKey('copper-net'),
+      initialValue: known ? value : null,
+      isExpanded: true,
+      decoration: const InputDecoration(
+        labelText: 'Net',
+        isDense: true,
+        floatingLabelBehavior: FloatingLabelBehavior.always,
+      ),
+      items: [
+        const DropdownMenuItem(child: Text('No net — unconnected copper')),
+        for (final net in nets)
+          DropdownMenuItem(
+            key: ValueKey('copper-net-${net.name}'),
+            value: net.id,
+            child: Text(net.name),
+          ),
+      ],
+      onChanged: onChanged,
+    );
+  }
+}
+
+/// Nets with the ones a stray piece of copper usually wants at the top.
+List<NetChoice> orderedNets(List<NetChoice> nets) => [...nets]..sort((a, b) {
+  int rank(NetChoice n) {
+    final name = n.name.toUpperCase();
+    if (name == 'GND') return 0;
+    if (name.startsWith('GND') || name == 'VSS') return 1;
+    return 2;
+  }
+
+  final byRank = rank(a).compareTo(rank(b));
+  return byRank != 0 ? byRank : a.name.compareTo(b.name);
+});
+
 /// A placed part's numbers, typed rather than dragged.
 ///
 /// The rotation is a free angle, not a choice of four. KiCad has allowed
@@ -336,22 +399,29 @@ Future<PropertiesResult<Track>?> showTrackProperties(
   BuildContext context, {
   required Track track,
   required String netName,
+  List<NetChoice> nets = const [],
   List<CopperLayer> layers = const [CopperLayer.front, CopperLayer.back],
 }) => showDialog<PropertiesResult<Track>>(
   context: context,
-  builder: (context) =>
-      _TrackProperties(track: track, netName: netName, layers: layers),
+  builder: (context) => _TrackProperties(
+    track: track,
+    netName: netName,
+    nets: orderedNets(nets),
+    layers: layers,
+  ),
 );
 
 class _TrackProperties extends StatefulWidget {
   const _TrackProperties({
     required this.track,
     required this.netName,
+    required this.nets,
     required this.layers,
   });
 
   final Track track;
   final String netName;
+  final List<NetChoice> nets;
 
   /// The board's copper, which is what a track can be moved to.
   final List<CopperLayer> layers;
@@ -367,10 +437,12 @@ class _TrackPropertiesState extends State<_TrackProperties> {
   late final TextEditingController _endY;
   late final TextEditingController _width;
   late CopperLayer _layer;
+  late String? _netId;
 
   @override
   void initState() {
     super.initState();
+    _netId = widget.track.netId;
     _startX = TextEditingController(text: _mm(widget.track.startX));
     _startY = TextEditingController(text: _mm(widget.track.startY));
     _endX = TextEditingController(text: _mm(widget.track.endX));
@@ -462,6 +534,12 @@ class _TrackPropertiesState extends State<_TrackProperties> {
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            _NetField(
+              nets: widget.nets,
+              value: _netId,
+              onChanged: (id) => setState(() => _netId = id),
+            ),
             const SizedBox(height: 6),
             Wrap(
               spacing: 6,
@@ -499,14 +577,16 @@ class _TrackPropertiesState extends State<_TrackProperties> {
               ? null
               : () => Navigator.of(context).pop(
                   PropertiesSaved(
-                    widget.track.copyWith(
-                      layer: _layer,
-                      startX: _parse(_startX),
-                      startY: _parse(_startY),
-                      endX: _parse(_endX),
-                      endY: _parse(_endY),
-                      width: _parse(_width),
-                    ),
+                    widget.track
+                        .copyWith(
+                          layer: _layer,
+                          startX: _parse(_startX),
+                          startY: _parse(_startY),
+                          endX: _parse(_endX),
+                          endY: _parse(_endY),
+                          width: _parse(_width),
+                        )
+                        .withNet(_netId),
                   ),
                 ),
           child: const Text('SAVE'),
@@ -521,16 +601,23 @@ Future<PropertiesResult<Via>?> showViaProperties(
   BuildContext context, {
   required Via via,
   required String netName,
+  List<NetChoice> nets = const [],
 }) => showDialog<PropertiesResult<Via>>(
   context: context,
-  builder: (context) => _ViaProperties(via: via, netName: netName),
+  builder: (context) =>
+      _ViaProperties(via: via, netName: netName, nets: orderedNets(nets)),
 );
 
 class _ViaProperties extends StatefulWidget {
-  const _ViaProperties({required this.via, required this.netName});
+  const _ViaProperties({
+    required this.via,
+    required this.netName,
+    required this.nets,
+  });
 
   final Via via;
   final String netName;
+  final List<NetChoice> nets;
 
   @override
   State<_ViaProperties> createState() => _ViaPropertiesState();
@@ -541,10 +628,12 @@ class _ViaPropertiesState extends State<_ViaProperties> {
   late final TextEditingController _y;
   late final TextEditingController _diameter;
   late final TextEditingController _drill;
+  late String? _netId;
 
   @override
   void initState() {
     super.initState();
+    _netId = widget.via.netId;
     _x = TextEditingController(text: _mm(widget.via.x));
     _y = TextEditingController(text: _mm(widget.via.y));
     _diameter = TextEditingController(text: _mm(widget.via.diameter));
@@ -608,6 +697,12 @@ class _ViaPropertiesState extends State<_ViaProperties> {
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            _NetField(
+              nets: widget.nets,
+              value: _netId,
+              onChanged: (id) => setState(() => _netId = id),
+            ),
             if (problem != null)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
@@ -634,12 +729,14 @@ class _ViaPropertiesState extends State<_ViaProperties> {
               ? null
               : () => Navigator.of(context).pop(
                   PropertiesSaved(
-                    widget.via.copyWith(
-                      x: _parse(_x),
-                      y: _parse(_y),
-                      diameter: _parse(_diameter),
-                      drill: _parse(_drill),
-                    ),
+                    widget.via
+                        .copyWith(
+                          x: _parse(_x),
+                          y: _parse(_y),
+                          diameter: _parse(_diameter),
+                          drill: _parse(_drill),
+                        )
+                        .withNet(_netId),
                   ),
                 ),
           child: const Text('SAVE'),

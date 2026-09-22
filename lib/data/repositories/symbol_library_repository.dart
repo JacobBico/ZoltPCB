@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import 'package:drift/drift.dart';
 
 import '../../core/util/ids.dart';
@@ -52,9 +54,14 @@ class SymbolLibraryRepository {
   ///
   /// Re-importing a library with a nickname that is already present replaces
   /// it, which is what updating a library from the desktop looks like.
+  ///
+  /// [inBackground] parses on another isolate, so a multi-megabyte library
+  /// does not freeze the screen; off by default, because a background
+  /// isolate never finishes under a widget test's fake clock.
   Future<SymbolLibraryInfo> import({
     required String fileName,
     required Uint8List bytes,
+    bool inBackground = false,
   }) async {
     final nickname = _nicknameFor(fileName);
     if (nickname.isEmpty) {
@@ -63,7 +70,11 @@ class SymbolLibraryRepository {
 
     final ParsedSymbolLibrary parsed;
     try {
-      parsed = SymbolLibraryReader.parseLibrary(bytes, nickname: nickname);
+      parsed = inBackground
+          ? await Isolate.run(
+              () => SymbolLibraryReader.parseLibrary(bytes, nickname: nickname),
+            )
+          : SymbolLibraryReader.parseLibrary(bytes, nickname: nickname);
     } catch (error) {
       throw LibraryImportException('Not a readable .kicad_sym file: $error');
     }

@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+import 'dart:ui' show Offset;
+
 import '../core/util/ids.dart';
 import '../domain/export/board_document.dart';
 import '../domain/pcb/pcb.dart';
@@ -56,8 +59,67 @@ class BoardWriter {
       ..._vias(document, netNumbers),
       ..._zones(document, netNumbers),
       ..._texts(document),
+      ..._dimensions(document),
     ]);
   }
+
+  /// Dimension lines, on the drawings layer where KiCad keeps its own.
+  ///
+  /// KiCad's `height` is how far the line stands off the measured points,
+  /// the opposite way round to [BoardDimension.offset].
+  List<SList> _dimensions(BoardDocument document) => [
+    for (final d in document.scene.dimensions)
+      if (d.length > 1e-6)
+        S.list('dimension', [
+          SList([SAtom('type'), SAtom('aligned')]),
+          SList([SAtom('layer'), S.text('Dwgs.User')]),
+          SList([SAtom('uuid'), S.text(derivedId('dimension:${d.id}'))]),
+          S.list('pts', [
+            S.of('xy', [d.start.dx, d.start.dy]),
+            S.of('xy', [d.end.dx, d.end.dy]),
+          ]),
+          S.of('height', [-d.offset]),
+          S.list('format', [
+            SList([SAtom('prefix'), S.text('')]),
+            SList([SAtom('suffix'), S.text('')]),
+            S.of('units', [2]),
+            S.of('units_format', [1]),
+            S.of('precision', [4]),
+          ]),
+          S.list('style', [
+            S.of('thickness', [0.15]),
+            S.of('arrow_length', [1.27]),
+            S.of('text_position_mode', [0]),
+            SList([SAtom('arrow_direction'), SAtom('outward')]),
+            S.of('extension_height', [0.58642]),
+            S.of('extension_offset', [0.5]),
+            SList([SAtom('keep_text_aligned'), SAtom('yes')]),
+          ]),
+          () {
+            final (a, b) = d.line;
+            final mid = Offset.lerp(a, b, 0.5)! + d.normal * 1.0;
+            var angle = -math.atan2(b.dy - a.dy, b.dx - a.dx) * 180 / math.pi;
+            // Kept readable: never upside down.
+            if (angle > 90) angle -= 180;
+            if (angle <= -90) angle += 180;
+            return S.list('gr_text', [
+              S.text('${d.length.toStringAsFixed(4)} mm'),
+              S.of('at', [mid.dx, mid.dy, angle]),
+              SList([SAtom('layer'), S.text('Dwgs.User')]),
+              SList([
+                SAtom('uuid'),
+                S.text(derivedId('dimension-text:${d.id}')),
+              ]),
+              S.list('effects', [
+                S.list('font', [
+                  S.of('size', [1, 1]),
+                  S.of('thickness', [0.15]),
+                ]),
+              ]),
+            ]);
+          }(),
+        ]),
+  ];
 
   /// The layer table: the board's copper, top to bottom, then the rest.
   ///
@@ -756,14 +818,19 @@ class BoardWriter {
           SList([SAtom('layer'), S.text(zone.layer.token)]),
           SList([SAtom('uuid'), S.text(derivedId('zone:${zone.id}'))]),
           S.list('hatch', [SAtom('edge'), SAtom('0.5')]),
+          if (zone.priority != 0) S.of('priority', [zone.priority]),
+          // Thermal is KiCad's default and is written bare; solid is
+          // `yes`, and a pour that avoids its own pads is `no`.
           S.list('connect_pads', [
+            if (zone.padConnection == PadConnection.solid) SAtom('yes'),
+            if (zone.padConnection == PadConnection.none) SAtom('no'),
             S.of('clearance', [zone.clearance]),
           ]),
           S.of('min_thickness', [zone.minThickness]),
           S.list('fill', [
             SAtom('yes'),
-            S.of('thermal_gap', [0.5]),
-            S.of('thermal_bridge_width', [0.5]),
+            S.of('thermal_gap', [zone.thermalGap]),
+            S.of('thermal_bridge_width', [zone.thermalSpoke]),
           ]),
           S.list('polygon', [
             S.list('pts', [

@@ -8,6 +8,7 @@ import '../core/theme/kicad_palette.dart';
 import '../data/export/pdf_writer.dart';
 import 'schematic_painter.dart';
 import '../domain/models/schematic_note.dart';
+import '../domain/models/sheet_views.dart';
 import 'schematic_scene.dart';
 import 'schematic_viewport.dart';
 
@@ -30,6 +31,21 @@ const printColors = SchematicColors(
   highlight: Color(0xFFFF7F00),
 );
 
+/// One sheet to print: the scene, and what is drawn over it.
+class SchematicPdfPage {
+  const SchematicPdfPage({
+    required this.scene,
+    this.notes = const [],
+    this.sheetBoxes = const [],
+    this.offSheetLabels = const [],
+  });
+
+  final SchematicScene scene;
+  final List<SchematicNote> notes;
+  final List<SheetBoxView> sheetBoxes;
+  final List<OffSheetLabel> offSheetLabels;
+}
+
 /// The whole sheet as a PDF, page-sized, drawn by the canvas's own painter.
 ///
 /// [dpi] is the print resolution; the longest side is capped so an A3
@@ -40,7 +56,29 @@ Future<Uint8List> renderSchematicPdf(
   List<SchematicNote> notes = const [],
   double dpi = 200,
   int maxPixels = 3600,
-}) async {
+}) => renderSchematicPdfPages(
+  [SchematicPdfPage(scene: scene, notes: notes)],
+  title: title,
+  dpi: dpi,
+  maxPixels: maxPixels,
+);
+
+/// A page per sheet, in the order given.
+Future<Uint8List> renderSchematicPdfPages(
+  List<SchematicPdfPage> pages, {
+  required String title,
+  double dpi = 200,
+  int maxPixels = 3600,
+}) async => RasterPdf.pages([
+  for (final page in pages) await _renderPage(page, dpi, maxPixels),
+], title: title);
+
+Future<RasterPage> _renderPage(
+  SchematicPdfPage sheet,
+  double dpi,
+  int maxPixels,
+) async {
+  final scene = sheet.scene;
   final page = scene.pageRect;
   var pxPerMm = dpi / 25.4;
   final longest = math.max(page.width, page.height) * pxPerMm;
@@ -60,7 +98,9 @@ Future<Uint8List> renderSchematicPdf(
     viewport: SchematicViewport(pixelsPerMm: pxPerMm, origin: Offset.zero),
     colors: printColors,
     showGrid: false,
-    notes: notes,
+    notes: sheet.notes,
+    sheetBoxes: sheet.sheetBoxes,
+    offSheetLabels: sheet.offSheetLabels,
   ).paint(canvas, Size(width.toDouble(), height.toDouble()));
 
   final image = await recorder.endRecording().toImage(width, height);
@@ -75,13 +115,11 @@ Future<Uint8List> renderSchematicPdf(
     rgb[j + 1] = rgba[i + 1];
     rgb[j + 2] = rgba[i + 2];
   }
-
-  return RasterPdf.single(
+  return RasterPage(
     pixelWidth: width,
     pixelHeight: height,
     rgb: rgb,
     widthPt: page.width / 25.4 * 72,
     heightPt: page.height / 25.4 * 72,
-    title: title,
   );
 }

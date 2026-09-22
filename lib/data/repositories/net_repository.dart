@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import '../../core/util/ids.dart';
 import '../../domain/models/models.dart';
 import '../db/database.dart';
+import 'active_sheet.dart';
 import '../db/watchers.dart';
 import '../db/mappers.dart';
 
@@ -226,6 +227,72 @@ class NetRepository {
       return node.netId;
     });
     if (netId != null) await _touchProjectForNet(netId);
+  }
+
+  /// Exchanges what each pin of each pair in [pairs] is connected to.
+  ///
+  /// With [keepWires], the drawn wires to one pin of a pair are moved to
+  /// the other — a gate swap, where the two gates also trade places on the
+  /// sheet, so every wire still ends where it did. Without, the wires to
+  /// the pins are removed and each pin carries its new net as a label —
+  /// a pin swap, where two pins cannot trade places on the symbol and a
+  /// wire left on either would now be drawing the wrong connection.
+  Future<void> swapConnections(
+    Map<String, String> pairs, {
+    required bool keepWires,
+  }) async {
+    final touched = <String>{};
+    await _db.transaction(() async {
+      Future<NetNodeRow?> nodeOf(String pinId) => (_db.select(
+        _db.netNodes,
+      )..where((t) => t.partPinId.equals(pinId))).getSingleOrNull();
+
+      for (final MapEntry(key: a, value: b) in pairs.entries) {
+        final na = await nodeOf(a);
+        final nb = await nodeOf(b);
+        await (_db.delete(
+          _db.netNodes,
+        )..where((t) => t.partPinId.isIn([a, b]))).go();
+        if (na != null) {
+          await _addNode(na.netId, b, labelled: na.labelled);
+          touched.add(na.netId);
+        }
+        if (nb != null) {
+          await _addNode(nb.netId, a, labelled: nb.labelled);
+          touched.add(nb.netId);
+        }
+
+        final wires = await (_db.select(
+          _db.schematicWires,
+        )..where((t) => t.pinAId.isIn([a, b]) | t.pinBId.isIn([a, b]))).get();
+        if (!keepWires) {
+          await (_db.delete(
+            _db.schematicWires,
+          )..where((t) => t.id.isIn([for (final w in wires) w.id]))).go();
+          continue;
+        }
+        String? other(String? pin) => pin == a ? b : (pin == b ? a : pin);
+        for (final wire in wires) {
+          await (_db.update(
+            _db.schematicWires,
+          )..where((t) => t.id.equals(wire.id))).write(
+            SchematicWiresCompanion(
+              pinAId: Value(other(wire.pinAId)),
+              pinBId: Value(other(wire.pinBId)),
+            ),
+          );
+        }
+      }
+      if (!keepWires) {
+        for (final MapEntry(key: a, value: b) in pairs.entries) {
+          await _setLabelled(a, true);
+          await _setLabelled(b, true);
+        }
+      }
+    });
+    for (final netId in touched) {
+      await _touchProjectForNet(netId);
+    }
   }
 
   /// Sets or clears a net's label. Pass null to make the net anonymous
@@ -497,13 +564,24 @@ class NetRepository {
     return query.watch().map((rows) => [for (final r in rows) _toWire(r)]);
   }
 
-  Future<List<SchematicWire>> getWires(String projectId) async {
+  /// The project's drawn wires. With [openSheetOnly], only those on the
+  /// sheet open in the schematic ([ActiveSheet]) — which is what anything
+  /// reshaping a net's drawing must work on, so it never reaches into a
+  /// sheet it is not showing.
+  Future<List<SchematicWire>> getWires(
+    String projectId, {
+    bool openSheetOnly = false,
+  }) async {
     final rows =
         await (_db.select(_db.schematicWires)
               ..where((t) => t.projectId.equals(projectId))
               ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
             .get();
-    return [for (final r in rows) _toWire(r)];
+    final sheet = ActiveSheet.of(projectId);
+    return [
+      for (final r in rows)
+        if (!openSheetOnly || r.sheetId == sheet) _toWire(r),
+    ];
   }
 
   Future<List<SchematicWire>> getWiresOfNet(String netId) async {
@@ -522,6 +600,7 @@ class NetRepository {
     String? pinAId,
     String? pinBId,
     String? netId,
+    String? sheetId,
   }) async {
     final net =
         netId ??
@@ -534,6 +613,7 @@ class NetRepository {
       netId: net,
       pinAId: pinAId,
       pinBId: pinBId,
+      sheetId: sheetId ?? ActiveSheet.of(projectId),
       points: points,
     );
     await _db.into(_db.schematicWires).insert(_wireCompanion(wire));
@@ -588,6 +668,7 @@ class NetRepository {
         netId: wire.netId,
         pinAId: Value(wire.pinAId),
         pinBId: Value(wire.pinBId),
+        sheetId: Value(wire.sheetId),
         points: SchematicWire.encode(wire.points),
         createdAt: DateTime.now(),
       );
@@ -598,6 +679,7 @@ class NetRepository {
     netId: row.netId,
     pinAId: row.pinAId,
     pinBId: row.pinBId,
+    sheetId: row.sheetId,
     points: SchematicWire.decode(row.points),
   );
 
@@ -765,6 +847,9 @@ class NetRepository {
         .write(BoardViasCompanion(netId: Value(winner.id)));
     await (_db.update(_db.boardZones)..where((t) => t.netId.equals(loser.id)))
         .write(BoardZonesCompanion(netId: Value(winner.id)));
+    await (_db.update(_db.boardFeatures)
+          ..where((t) => t.netId.equals(loser.id)))
+        .write(BoardFeaturesCompanion(netId: Value(winner.id)));
     await (_db.update(_db.schematicWires)
           ..where((t) => t.netId.equals(loser.id)))
         .write(SchematicWiresCompanion(netId: Value(winner.id)));

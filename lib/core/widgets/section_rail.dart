@@ -9,7 +9,12 @@ class RailEntry {
     required this.icon,
     this.enabled = true,
     this.badge,
+    this.children = const [],
   });
+
+  /// Places within the section — the sheets of a schematic — listed
+  /// beneath it, folded away behind a chevron.
+  final List<RailSubEntry> children;
 
   final String label;
   final IconData icon;
@@ -20,12 +25,31 @@ class RailEntry {
   final String? badge;
 }
 
+/// A place within a section, listed under its [RailEntry].
+class RailSubEntry {
+  const RailSubEntry({
+    required this.label,
+    required this.onTap,
+    this.depth = 0,
+    this.selected = false,
+    this.icon,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+
+  /// How far it is nested, for a tree of sheets.
+  final int depth;
+  final bool selected;
+  final IconData? icon;
+}
+
 /// The vertical navigation strip used by every workspace screen.
 ///
 /// A rail rather than tabs or a drawer: on a landscape phone the horizontal
 /// axis is the plentiful one, and a persistent rail keeps the section you
 /// are in visible without spending vertical space.
-class SectionRail extends StatelessWidget {
+class SectionRail extends StatefulWidget {
   const SectionRail({
     super.key,
     required this.entries,
@@ -45,24 +69,82 @@ class SectionRail extends StatelessWidget {
   final double width;
 
   @override
+  State<SectionRail> createState() => _SectionRailState();
+}
+
+class _SectionRailState extends State<SectionRail> {
+  /// Entries whose places are folded away. The section in use starts
+  /// open, so its places are there without a tap.
+  final _folded = <int>{};
+
+  @override
   Widget build(BuildContext context) {
+    final widget = this.widget;
     return Container(
-      width: width,
+      width: widget.width,
       color: KicadPalette.surface,
       child: ListView(
         padding: const EdgeInsets.symmetric(vertical: 6),
         children: [
-          if (header != null) ...[
-            header!,
+          if (widget.header != null) ...[
+            widget.header!,
             Divider(height: 9, color: KicadPalette.border),
           ],
-          for (var i = 0; i < entries.length; i++)
+          for (var i = 0; i < widget.entries.length; i++) ...[
             _RailItem(
-              entry: entries[i],
-              selected: i == selectedIndex,
-              onTap: () => onSelect(i),
+              entry: widget.entries[i],
+              selected: i == widget.selectedIndex,
+              onTap: () => widget.onSelect(i),
+              expanded: widget.entries[i].children.isEmpty
+                  ? null
+                  : !_folded.contains(i),
+              onToggle: () => setState(
+                () => _folded.contains(i) ? _folded.remove(i) : _folded.add(i),
+              ),
             ),
+            if (!_folded.contains(i))
+              for (final sub in widget.entries[i].children) _RailSubItem(sub),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+class _RailSubItem extends StatelessWidget {
+  const _RailSubItem(this.entry);
+
+  final RailSubEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = entry.selected
+        ? KicadPalette.wire
+        : KicadPalette.textSecondary;
+    return InkWell(
+      onTap: entry.onTap,
+      child: Container(
+        height: 36,
+        padding: EdgeInsets.only(left: 28.0 + 12 * entry.depth, right: 8),
+        child: Row(
+          children: [
+            Icon(
+              entry.icon ?? Icons.subdirectory_arrow_right,
+              size: 14,
+              color: color,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                entry.label,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: color),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -73,11 +155,17 @@ class _RailItem extends StatelessWidget {
     required this.entry,
     required this.selected,
     required this.onTap,
+    this.expanded,
+    this.onToggle,
   });
 
   final RailEntry entry;
   final bool selected;
   final VoidCallback onTap;
+
+  /// Open or folded, for an entry with places under it; null otherwise.
+  final bool? expanded;
+  final VoidCallback? onToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -91,6 +179,8 @@ class _RailItem extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
+        // 44 rather than 48: the rows are full width, so easy to hit, and at
+        // 48 the last section falls below a landscape phone's 360dp.
         height: 44,
         padding: const EdgeInsets.only(left: 10, right: 8),
         decoration: BoxDecoration(
@@ -116,6 +206,16 @@ class _RailItem extends StatelessWidget {
               Text(
                 entry.badge!,
                 style: theme.textTheme.bodySmall?.copyWith(
+                  color: KicadPalette.textSecondary,
+                ),
+              ),
+            if (expanded case final open?)
+              InkResponse(
+                onTap: onToggle,
+                radius: 18,
+                child: Icon(
+                  open ? Icons.expand_less : Icons.expand_more,
+                  size: 18,
                   color: KicadPalette.textSecondary,
                 ),
               ),

@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'board_layer.dart';
 import 'board_outline.dart';
+import 'board_zone.dart';
 import 'stackup.dart';
 
 /// The manufacturing constraints a board is drawn against.
@@ -16,6 +17,10 @@ class DesignRules {
     this.clearance = 0.2,
     this.viaDiameter = 0.8,
     this.viaDrill = 0.4,
+    this.padConnection = PadConnection.thermal,
+    this.viaConnection = PadConnection.solid,
+    this.thermalGap = 0.5,
+    this.thermalSpoke = 0.5,
   });
 
   /// Width of a newly drawn track, in millimetres.
@@ -26,6 +31,21 @@ class DesignRules {
 
   final double viaDiameter;
   final double viaDrill;
+
+  /// How a new pour joins the pads, and the vias and plated holes, of its
+  /// own net.
+  ///
+  /// A pad is soldered by hand, so it gets a thermal relief by default: a
+  /// plane behind it drinks the iron's heat and the joint never wets. A
+  /// via is not soldered by anything, so it is poured solid — which is
+  /// also what makes a stitching via worth placing.
+  final PadConnection padConnection;
+  final PadConnection viaConnection;
+
+  /// The gap a thermal relief leaves, and the width of each of the four
+  /// spokes that bridge it.
+  final double thermalGap;
+  final double thermalSpoke;
 
   /// The default rules: 0.25 mm track and 0.2 mm space, which every board
   /// house on earth will make, and an 0.8/0.4 via to match.
@@ -42,6 +62,10 @@ class DesignRules {
     if (viaDiameter <= viaDrill) {
       return 'Via diameter must be larger than its drill';
     }
+    if (thermalGap <= 0) return 'The thermal gap must be greater than zero';
+    if (thermalSpoke <= 0) {
+      return 'The thermal spoke must be greater than zero';
+    }
     return null;
   }
 
@@ -50,11 +74,19 @@ class DesignRules {
     double? clearance,
     double? viaDiameter,
     double? viaDrill,
+    PadConnection? padConnection,
+    PadConnection? viaConnection,
+    double? thermalGap,
+    double? thermalSpoke,
   }) => DesignRules(
     trackWidth: trackWidth ?? this.trackWidth,
     clearance: clearance ?? this.clearance,
     viaDiameter: viaDiameter ?? this.viaDiameter,
     viaDrill: viaDrill ?? this.viaDrill,
+    padConnection: padConnection ?? this.padConnection,
+    viaConnection: viaConnection ?? this.viaConnection,
+    thermalGap: thermalGap ?? this.thermalGap,
+    thermalSpoke: thermalSpoke ?? this.thermalSpoke,
   );
 
   @override
@@ -63,10 +95,23 @@ class DesignRules {
       other.trackWidth == trackWidth &&
       other.clearance == clearance &&
       other.viaDiameter == viaDiameter &&
-      other.viaDrill == viaDrill;
+      other.viaDrill == viaDrill &&
+      other.padConnection == padConnection &&
+      other.viaConnection == viaConnection &&
+      other.thermalGap == thermalGap &&
+      other.thermalSpoke == thermalSpoke;
 
   @override
-  int get hashCode => Object.hash(trackWidth, clearance, viaDiameter, viaDrill);
+  int get hashCode => Object.hash(
+    trackWidth,
+    clearance,
+    viaDiameter,
+    viaDrill,
+    padConnection,
+    viaConnection,
+    thermalGap,
+    thermalSpoke,
+  );
 }
 
 /// A project's board: where its edges are and what rules it is drawn to.

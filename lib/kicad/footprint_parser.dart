@@ -86,6 +86,7 @@ abstract final class FootprintParser {
       drill: _drillDiameter(drill),
       drillY: _drillSecondary(drill),
       roundrectRatio: node.childNumber('roundrect_rratio') ?? 0,
+      maskMargin: node.childNumber('solder_mask_margin') ?? 0,
       layers: _resolveLayers(rawLayers),
       rawLayers: rawLayers,
     );

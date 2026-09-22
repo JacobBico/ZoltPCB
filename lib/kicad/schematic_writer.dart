@@ -47,9 +47,33 @@ class SchematicWriter {
 
   String write(SchematicDocument document) => writer.write(build(document));
 
-  SList build(SchematicDocument document) {
+  /// Every file of the schematic, by name: the top sheet as [topFile], and
+  /// each sub-sheet as its own file beside it, as KiCad keeps them.
+  Map<String, String> writeFiles(
+    SchematicDocument document, {
+    required String topFile,
+  }) {
+    if (document.sheets.isEmpty) return {topFile: write(document)};
+    final hierarchy = _Hierarchy.of(document);
+    return {
+      topFile: writer.write(
+        _build(document.onSheet(null), hierarchy.forSheet(null)),
+      ),
+      for (final sheet in hierarchy.tree.inPageOrder())
+        sheet.fileName: writer.write(
+          _build(document.onSheet(sheet.id), hierarchy.forSheet(sheet.id)),
+        ),
+    };
+  }
+
+  /// One file. With [sheet], one sheet of a hierarchy: its own uuid, its
+  /// symbols' instance paths through the sheets above it, the boxes of
+  /// the sheets on it, and labels wherever a net crosses between sheets.
+  SList build(SchematicDocument document) => _build(document, null);
+
+  SList _build(SchematicDocument document, _SheetFile? sheet) {
     final project = document.project;
-    final sheetUuid = project.id;
+    final fileUuid = sheet?.fileUuid ?? project.id;
     final connectivity = _Connectivity.of(document);
 
     return SList([
@@ -57,25 +81,127 @@ class SchematicWriter {
       S.of('version', [formatVersion]),
       SList([SAtom('generator'), S.text(document.generator)]),
       SList([SAtom('generator_version'), S.text(document.generatorVersion)]),
-      SList([SAtom('uuid'), S.text(sheetUuid)]),
+      SList([SAtom('uuid'), S.text(fileUuid)]),
       SList([SAtom('paper'), S.text(project.paper.kicadName)]),
       _titleBlock(project),
       _libSymbols(document),
       ..._noConnects(document, connectivity),
       ..._wires(connectivity),
-      ..._labels(document, connectivity),
+      ..._labels(document, connectivity, sheet),
+      if (sheet != null) ..._sheetLinks(document, sheet),
       ..._notes(document),
-      ..._symbols(document, sheetUuid),
-      S.list('sheet_instances', [
-        SList([
-          SAtom('path'),
-          S.text('/'),
-          SList([SAtom('page'), S.text('1')]),
+      ..._symbols(document, sheet?.instancePath ?? '/$fileUuid'),
+      if (sheet != null) ..._sheetBoxes(document, sheet),
+      // Pages are listed once, in the top file.
+      if (sheet == null || sheet.sheetId == null)
+        S.list('sheet_instances', [
+          SList([
+            SAtom('path'),
+            S.text('/'),
+            SList([SAtom('page'), S.text('1')]),
+          ]),
         ]),
-      ]),
       S.flag('embedded_fonts', false),
     ]);
   }
+
+  // --- hierarchy -------------------------------------------------------
+
+  /// The boxes of the sheets on this one: a pin for every net that crosses
+  /// into each, named as the hierarchical label inside it is.
+  List<SList> _sheetBoxes(SchematicDocument document, _SheetFile file) => [
+    for (final box in file.boxes)
+      SList([
+        SAtom('sheet'),
+        S.of('at', [box.box.left, box.box.top]),
+        S.of('size', [box.box.width, box.box.height]),
+        S.flag('exclude_from_sim', false),
+        S.flag('in_bom', true),
+        S.flag('on_board', true),
+        S.flag('dnp', false),
+        S.list('stroke', [
+          S.of('width', [0.1524]),
+          SList([SAtom('type'), SAtom('solid')]),
+        ]),
+        S.list('fill', [
+          S.of('color', [0, 0, 0, 0.0]),
+        ]),
+        SList([SAtom('uuid'), S.text(box.sheet.id)]),
+        SList([
+          SAtom('property'),
+          S.text('Sheetname'),
+          S.text(box.sheet.name),
+          S.of('at', [box.box.left, box.box.top - 0.7112, 0]),
+          SymbolWriter.effects(justify: 'left bottom'),
+        ]),
+        SList([
+          SAtom('property'),
+          S.text('Sheetfile'),
+          S.text(box.sheet.fileName),
+          S.of('at', [box.box.left, box.box.bottom + 0.5842, 0]),
+          SymbolWriter.effects(justify: 'left top'),
+        ]),
+        for (var i = 0; i < box.pins.length; i++)
+          SList([
+            SAtom('pin'),
+            S.text(box.pins[i]),
+            SAtom('bidirectional'),
+            S.of('at', [box.pinAt(i).dx, box.pinAt(i).dy, 180]),
+            SList([
+              SAtom('uuid'),
+              S.text(derivedId('sheetpin:${box.sheet.id}:${box.pins[i]}')),
+            ]),
+            SymbolWriter.effects(justify: 'left'),
+          ]),
+        S.list('instances', [
+          SList([
+            SAtom('project'),
+            S.text(_projectToken(document.project.name)),
+            SList([
+              SAtom('path'),
+              S.text(file.instancePath),
+              SList([SAtom('page'), S.text('${file.pageOf(box.sheet.id)}')]),
+            ]),
+          ]),
+        ]),
+      ]),
+  ];
+
+  /// Where a net meets a box on this sheet: a label at the box's pin with
+  /// the net's name, which joins it to the rest of the net here. When the
+  /// net also leaves this sheet upwards, that label is the hierarchical
+  /// one carrying it up.
+  List<SList> _sheetLinks(SchematicDocument document, _SheetFile file) {
+    final out = <SList>[];
+    for (final box in file.boxes) {
+      for (var i = 0; i < box.pins.length; i++) {
+        final name = box.pins[i];
+        final net = file.netNamed[name];
+        if (net == null) continue;
+        out.add(
+          _label(
+            file.leavesUpwards(net) ? 'hierarchical_label' : 'label',
+            name,
+            box.pinAt(i),
+            derivedId('sheetlink:${box.sheet.id}:$name'),
+          ),
+        );
+      }
+    }
+    return out;
+  }
+
+  static SList _label(String kind, String name, Offset at, String uuid) =>
+      SList([
+        SAtom(kind),
+        S.text(name),
+        if (kind == 'hierarchical_label' || kind == 'global_label')
+          SList([SAtom('shape'), SAtom('bidirectional')]),
+        S.of('at', [at.dx, at.dy, 0]),
+        if (kind == 'global_label') S.flag('fields_autoplaced', true),
+        SymbolWriter.effects(justify: 'left bottom'),
+        SList([SAtom('uuid'), S.text(uuid)]),
+      ]);
 
   SList _titleBlock(Project project) => S.list('title_block', [
     SList([SAtom('title'), S.text(project.name)]),
@@ -189,7 +315,7 @@ class SchematicWriter {
           S.text(_projectToken(document.project.name)),
           SList([
             SAtom('path'),
-            S.text('/$sheetUuid'),
+            S.text(sheetUuid),
             SList([SAtom('reference'), S.text(part.part.reference)]),
             S.of('unit', [unit.unitNumber]),
           ]),
@@ -249,7 +375,11 @@ class SchematicWriter {
 
   // --- connectivity ----------------------------------------------------
 
-  List<SList> _labels(SchematicDocument document, _Connectivity connectivity) {
+  List<SList> _labels(
+    SchematicDocument document,
+    _Connectivity connectivity, [
+    _SheetFile? file,
+  ]) {
     final labels = <SList>[];
 
     for (final net in document.nets) {
@@ -260,6 +390,44 @@ class SchematicWriter {
       // says the same thing twice, and a label on a power net is not
       // something a schematic is ever drawn with.
       if (net.endpoints.any((e) => e.part.reference.startsWith('#PWR'))) {
+        // On a sheet with no symbol of its own for it, a global label
+        // stands in: KiCad joins it to the supply's symbols everywhere.
+        if (file != null &&
+            !net.endpoints.any(
+              (e) =>
+                  e.part.reference.startsWith('#PWR') &&
+                  connectivity.pinPositions.containsKey(e.pin.id),
+            )) {
+          for (final endpoint in connectivity.onePerPiece(net)) {
+            final at = connectivity.pinPositions[endpoint.pin.id];
+            if (at == null) continue;
+            labels.add(
+              _label(
+                'global_label',
+                _powerName(net),
+                at,
+                derivedId('power:${endpoint.node.id}'),
+              ),
+            );
+          }
+        }
+        continue;
+      }
+
+      // A net that goes on to another sheet is named on every piece of it
+      // here, so the name — a hierarchical label where it leaves for the
+      // sheet above, a plain one where it only goes into a box on this
+      // sheet — is what joins it across.
+      if (file != null && file.leaves(net)) {
+        final kind = file.leavesUpwards(net) ? 'hierarchical_label' : 'label';
+        final pieces = drawn
+            ? connectivity.onePerPiece(net).take(1)
+            : connectivity.onePerPiece(net);
+        for (final endpoint in pieces) {
+          final at = connectivity.pinPositions[endpoint.pin.id];
+          if (at == null) continue;
+          labels.add(_label(kind, name, at, endpoint.node.id));
+        }
         continue;
       }
 
@@ -386,6 +554,16 @@ class SchematicWriter {
   /// KiCad stores the project name in instance paths; it must match the
   /// `.kicad_pro` file's base name, so it gets the same treatment a file
   /// name would.
+  /// The name a supply goes by: its symbol's value, which is what KiCad
+  /// names the net after.
+  static String _powerName(NetWithEndpoints net) =>
+      net.endpoints
+          .where((e) => e.part.reference.startsWith('#PWR'))
+          .firstOrNull
+          ?.part
+          .value ??
+      net.displayName;
+
   static String _projectToken(String name) {
     final cleaned = name.trim().replaceAll(RegExp(r'[^A-Za-z0-9_\-. ]'), '');
     final collapsed = cleaned.replaceAll(RegExp(r'\s+'), '_');
@@ -679,4 +857,86 @@ class _Connectivity {
     }
     return spanned;
   }
+}
+
+/// The sheets of a hierarchical schematic, worked out once for every file.
+class _Hierarchy {
+  _Hierarchy(this.tree, this.links, this.rootUuid, this.pages);
+
+  factory _Hierarchy.of(SchematicDocument document) {
+    final links = SheetConnections.of(
+      parts: document.parts,
+      nets: document.nets,
+      sheets: document.sheets,
+    );
+    final pages = <String?, int>{null: 1};
+    for (final (i, sheet) in links.tree.inPageOrder().indexed) {
+      pages[sheet.id] = i + 2;
+    }
+    return _Hierarchy(links.tree, links, document.project.id, pages);
+  }
+
+  final SheetTree tree;
+  final SheetConnections links;
+  final String rootUuid;
+  final Map<String?, int> pages;
+
+  _SheetFile forSheet(String? sheetId) => _SheetFile(this, sheetId);
+}
+
+/// One sheet's file: where it sits in the hierarchy, and how its nets
+/// cross to the others.
+class _SheetFile {
+  _SheetFile(this.hierarchy, this.sheetId)
+    : inside = hierarchy.tree.subtree(sheetId),
+      boxes = [
+        for (final child in hierarchy.tree.childrenOf(sheetId))
+          SheetBoxView(
+            sheet: child,
+            pins: [
+              for (final net in hierarchy.links.crossing(child.id))
+                net.displayName,
+            ],
+          ),
+      ],
+      netNamed = {
+        for (final net in hierarchy.links.leaving(sheetId))
+          net.displayName: net,
+        for (final child in hierarchy.tree.childrenOf(sheetId))
+          for (final net in hierarchy.links.crossing(child.id))
+            net.displayName: net,
+      };
+
+  final _Hierarchy hierarchy;
+  final String? sheetId;
+  final Set<String?> inside;
+  final List<SheetBoxView> boxes;
+
+  /// Every net this sheet names, by its name.
+  final Map<String, NetWithEndpoints> netNamed;
+
+  /// The top sheet keeps the project's uuid; each other file its own.
+  String get fileUuid =>
+      sheetId == null ? hierarchy.rootUuid : derivedId('sheetfile:$sheetId');
+
+  /// The instance path of what is drawn on this sheet: the top sheet's
+  /// uuid, then the box of each sheet on the way down.
+  String get instancePath => [
+    '/${hierarchy.rootUuid}',
+    for (final sheet in hierarchy.tree.pathTo(sheetId)) '/${sheet.id}',
+  ].join();
+
+  int pageOf(String sheetId) => hierarchy.pages[sheetId] ?? 1;
+
+  /// Whether [net] has pins here and somewhere else too.
+  bool leaves(NetWithEndpoints net) {
+    final on = hierarchy.links.sheetsOf(net);
+    return on.contains(sheetId) && on.length > 1;
+  }
+
+  /// Whether [net] goes on beyond this sheet and the ones beneath it, so
+  /// it has to leave by this sheet's box on the sheet above.
+  bool leavesUpwards(NetWithEndpoints net) =>
+      sheetId != null &&
+      hierarchy.links.sheetsOf(net).any((s) => !inside.contains(s));
 }

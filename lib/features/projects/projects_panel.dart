@@ -24,6 +24,26 @@ class ProjectsPanel extends ConsumerWidget {
   static Future<void> create(BuildContext context, WidgetRef ref) =>
       _createProject(context, ref);
 
+  /// Which of several schematics is the top sheet: the one named like the
+  /// project file, or else the one no other names as its sub-sheet.
+  static String _topSheet(Map<String, String> schematics, {String? project}) {
+    if (project != null) {
+      final named = '${project.substring(0, project.length - 10)}.kicad_sch';
+      if (schematics.containsKey(named)) return named;
+    }
+    final referenced = <String>{
+      for (final text in schematics.values)
+        for (final m in RegExp(
+          r'\(property\s+"Sheetfile"\s+"([^"]+)"',
+        ).allMatches(text))
+          m.group(1)!,
+    };
+    return schematics.keys.firstWhere(
+      (name) => !referenced.contains(name),
+      orElse: () => schematics.keys.first,
+    );
+  }
+
   /// Opens a project made in desktop KiCad: its schematic, and its board
   /// and project file when they are picked with it.
   static Future<void> openKicad(BuildContext context, WidgetRef ref) async {
@@ -34,10 +54,13 @@ class ProjectsPanel extends ConsumerWidget {
     final List<PlatformFile> picked;
     try {
       picked = await FilePicker.pickFiles(
-        dialogTitle: 'Pick the .kicad_sch, with the .kicad_pcb and .kicad_pro',
+        dialogTitle:
+            'Pick the .kicad_sch files, with the .kicad_pcb and .kicad_pro',
         // No MIME type exists for KiCad files, so filtering by extension
         // would hide them on most phones.
         type: FileType.any,
+        // pickFiles takes several files (file_picker 12); the board and
+        // project file are picked alongside the schematic.
       );
     } catch (error) {
       if (context.mounted) report('Could not open the picker: $error');
@@ -48,14 +71,25 @@ class ProjectsPanel extends ConsumerWidget {
     PlatformFile? withExtension(String extension) => picked
         .where((f) => f.name.toLowerCase().endsWith(extension))
         .firstOrNull;
-    final schematic = withExtension('.kicad_sch');
-    if (schematic == null) {
-      report('Pick the .kicad_sch — the board and project files come with it');
-      return;
-    }
     Future<String?> read(PlatformFile? file) async => file == null
         ? null
         : utf8.decode(await file.readAsBytes(), allowMalformed: true);
+
+    // Every schematic picked: the top one and its sub-sheets.
+    final schematics = <String, String>{
+      for (final file in picked)
+        if (file.name.toLowerCase().endsWith('.kicad_sch'))
+          file.name: (await read(file))!,
+    };
+    if (schematics.isEmpty) {
+      report('Pick the .kicad_sch — the board and project files come with it');
+      return;
+    }
+    final topName = _topSheet(
+      schematics,
+      project: withExtension('.kicad_pro')?.name,
+    );
+    final schematic = picked.firstWhere((f) => f.name == topName);
 
     report('Opening ${schematic.name}…');
     final KicadImportResult result;
@@ -67,9 +101,13 @@ class ProjectsPanel extends ConsumerWidget {
               RegExp(r'\.kicad_sch$', caseSensitive: false),
               '',
             ),
-            schematic: (await read(schematic))!,
+            schematic: schematics[topName]!,
             board: await read(withExtension('.kicad_pcb')),
             projectFile: await read(withExtension('.kicad_pro')),
+            sheetFiles: {
+              for (final entry in schematics.entries)
+                if (entry.key != topName) entry.key: entry.value,
+            },
           );
     } on KicadImportException catch (error) {
       if (context.mounted) report(error.message);

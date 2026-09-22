@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../../core/theme/kicad_palette.dart';
 import '../../domain/models/models.dart';
 import '../../domain/pcb/pcb.dart';
+import 'rule_diagrams.dart';
 
 /// What the zone editor came back with.
 sealed class ZoneResult {
@@ -21,6 +22,11 @@ class ZoneSaved extends ZoneResult {
     required this.netName,
     required this.clearance,
     required this.minThickness,
+    this.priority = 0,
+    this.padConnection = PadConnection.thermal,
+    this.viaConnection = PadConnection.solid,
+    this.thermalGap = 0.5,
+    this.thermalSpoke = 0.5,
   });
 
   final BoardLayer layer;
@@ -29,6 +35,27 @@ class ZoneSaved extends ZoneResult {
   final String netName;
   final double clearance;
   final double minThickness;
+  final int priority;
+  final PadConnection padConnection;
+  final PadConnection viaConnection;
+  final double thermalGap;
+  final double thermalSpoke;
+
+  /// [zone] with everything the editor sets.
+  BoardZone applyTo(BoardZone zone) => zone.copyWith(
+    layer: layer,
+    points: points,
+    netId: netId,
+    clearNet: netId == null,
+    netName: netName,
+    clearance: clearance,
+    minThickness: minThickness,
+    priority: priority,
+    padConnection: padConnection,
+    viaConnection: viaConnection,
+    thermalGap: thermalGap,
+    thermalSpoke: thermalSpoke,
+  );
 }
 
 class ZoneDeleted extends ZoneResult {
@@ -80,6 +107,11 @@ class _ZoneEditorState extends State<_ZoneEditor> {
   late List<ui.Offset> _points;
   late final TextEditingController _clearance;
   late final TextEditingController _minThickness;
+  late final TextEditingController _thermalGap;
+  late final TextEditingController _thermalSpoke;
+  late PadConnection _padConnection;
+  late PadConnection _viaConnection;
+  late int _priority;
 
   /// Whether the pour follows the board edge. Kept as a mode rather than as
   /// a one-off action: a board that is resized afterwards should take its
@@ -98,6 +130,11 @@ class _ZoneEditorState extends State<_ZoneEditor> {
     _minThickness = TextEditingController(
       text: _mm(zone?.minThickness ?? 0.25),
     );
+    _thermalGap = TextEditingController(text: _mm(zone?.thermalGap ?? 0.5));
+    _thermalSpoke = TextEditingController(text: _mm(zone?.thermalSpoke ?? 0.5));
+    _padConnection = zone?.padConnection ?? PadConnection.thermal;
+    _viaConnection = zone?.viaConnection ?? PadConnection.solid;
+    _priority = zone?.priority ?? 0;
     _points = zone?.points ?? _boardShaped();
     _followsBoard = zone == null;
   }
@@ -106,6 +143,8 @@ class _ZoneEditorState extends State<_ZoneEditor> {
   void dispose() {
     _clearance.dispose();
     _minThickness.dispose();
+    _thermalGap.dispose();
+    _thermalSpoke.dispose();
     super.dispose();
   }
 
@@ -172,11 +211,19 @@ class _ZoneEditorState extends State<_ZoneEditor> {
   double get _minThicknessValue =>
       double.tryParse(_minThickness.text.trim().replaceAll(',', '.')) ?? 0.25;
 
+  double _value(TextEditingController c, double fallback) =>
+      double.tryParse(c.text.trim().replaceAll(',', '.')) ?? fallback;
+
   String? get _problem {
     if (_points.length < 3) return 'A pour needs at least three corners';
     if (_clearanceValue <= 0) return 'Clearance has to be greater than zero';
     if (_minThicknessValue <= 0) {
       return 'Minimum width has to be greater than zero';
+    }
+    if ((_padConnection == PadConnection.thermal ||
+            _viaConnection == PadConnection.thermal) &&
+        (_value(_thermalGap, 0) <= 0 || _value(_thermalSpoke, 0) <= 0)) {
+      return 'Thermal gap and spoke have to be greater than zero';
     }
     return null;
   }
@@ -194,6 +241,11 @@ class _ZoneEditorState extends State<_ZoneEditor> {
         netName: _net?.displayName ?? '',
         clearance: _clearanceValue,
         minThickness: _minThicknessValue,
+        priority: _priority,
+        padConnection: _padConnection,
+        viaConnection: _viaConnection,
+        thermalGap: _value(_thermalGap, 0.5),
+        thermalSpoke: _value(_thermalSpoke, 0.5),
       ),
     );
   }
@@ -286,6 +338,83 @@ class _ZoneEditorState extends State<_ZoneEditor> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 14),
+                    Text(
+                      'PADS ON THIS NET',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: KicadPalette.textSecondary,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    ConnectionPicker(
+                      key: const ValueKey('zone-pad-connection'),
+                      value: _padConnection,
+                      onChanged: (value) =>
+                          setState(() => _padConnection = value),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'VIAS AND PLATED HOLES ON THIS NET',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: KicadPalette.textSecondary,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    ConnectionPicker(
+                      key: const ValueKey('zone-via-connection'),
+                      via: true,
+                      value: _viaConnection,
+                      onChanged: (value) =>
+                          setState(() => _viaConnection = value),
+                    ),
+                    if (_padConnection == PadConnection.thermal ||
+                        _viaConnection == PadConnection.thermal) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _number(
+                              _thermalGap,
+                              'Thermal gap mm',
+                              () {},
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _number(_thermalSpoke, 'Spoke mm', () {}),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Priority $_priority — where pours overlap, the '
+                            'higher one is filled',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: KicadPalette.textSecondary,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Lower priority',
+                          icon: const Icon(Icons.remove, size: 18),
+                          onPressed: _priority == 0
+                              ? null
+                              : () => setState(() => _priority--),
+                        ),
+                        IconButton(
+                          key: const ValueKey('zone-priority-up'),
+                          tooltip: 'Higher priority',
+                          icon: const Icon(Icons.add, size: 18),
+                          onPressed: () => setState(() => _priority++),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 6),
                     CheckboxListTile(
                       value: _followsBoard,
@@ -318,9 +447,9 @@ class _ZoneEditorState extends State<_ZoneEditor> {
                     Padding(
                       padding: const EdgeInsets.only(top: 8, bottom: 8),
                       child: Text(
-                        'KiCad works out the actual copper when it opens '
-                        'the board — this is the region to pour into, not '
-                        'the fill itself.',
+                        'The board shows the pour filled round everything '
+                        'else, exactly as it goes into the Gerbers; KiCad '
+                        'refills it the same way when it opens the board.',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: KicadPalette.textSecondary,
                         ),

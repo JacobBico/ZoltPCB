@@ -91,6 +91,7 @@ class Pad {
     this.drill = 0,
     this.drillY = 0,
     this.roundrectRatio = 0,
+    this.maskMargin = 0,
     this.layers = const [],
     this.rawLayers = const [],
   });
@@ -115,6 +116,10 @@ class Pad {
   final double drillY;
 
   final double roundrectRatio;
+
+  /// How much wider than the copper the solder-mask opening is, each side.
+  /// Zero leaves the board's own setting; a fiducial asks for a lot.
+  final double maskMargin;
 
   /// The layers this pad occupies, resolved to the ones we draw.
   final List<BoardLayer> layers;

@@ -76,7 +76,7 @@ abstract final class FootprintImport {
 
       if (file.name.toLowerCase().endsWith('.zip')) {
         try {
-          final result = await _importZip(repository, file.name, bytes);
+          final result = await importZip(repository, file.name, bytes);
           imported.add(result);
         } on LibraryImportException catch (e) {
           failed.add('${file.name}: ${e.message}');
@@ -115,8 +115,9 @@ abstract final class FootprintImport {
     return FootprintImportResult(imported: imported, failed: failed);
   }
 
-  /// Unpacks a zipped `.pretty` directory.
-  static Future<FootprintLibraryInfo> _importZip(
+  /// Unpacks a zipped `.pretty` directory into a library. Also used for the
+  /// libraries downloaded from KiCad, which arrive the same way.
+  static Future<FootprintLibraryInfo> importZip(
     FootprintLibraryRepository repository,
     String fileName,
     Uint8List bytes,

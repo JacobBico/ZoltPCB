@@ -74,6 +74,10 @@ abstract final class StrokeFont {
   /// A comfortable stroke for text [height] millimetres tall.
   static double strokeWidth(double height) => math.max(0.1, height * 0.15);
 
+  /// How long [text] runs at [height].
+  static double widthOf(String text, double height) =>
+      (text.runes.length * _advance - 1) * height / 6;
+
   /// The strokes of [text], centred on [centre], in board millimetres with
   /// y pointing down.
   ///

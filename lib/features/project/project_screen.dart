@@ -12,6 +12,7 @@ import '../../core/widgets/section_rail.dart';
 import '../../domain/models/models.dart';
 import '../board/board_panel.dart';
 import '../board/precision_board_panel.dart';
+import '../panelize/panelize_panel.dart';
 import '../production/production_panel.dart';
 import '../projects/project_editor_dialog.dart';
 import 'backup_actions.dart';
@@ -27,6 +28,7 @@ enum ProjectSection {
   nets('Nets', Icons.account_tree_outlined),
   schematic('Schematic', Icons.grid_on_outlined),
   board('Board', Icons.developer_board_outlined),
+  panel('Panelization', Icons.grid_view_outlined),
   production('Production', Icons.precision_manufacturing_outlined),
   export('Export', Icons.ios_share_outlined);
 
@@ -161,6 +163,9 @@ class _ProjectScreenState extends ConsumerState<ProjectScreen> {
                             nets == null ? null : '${nets.length}',
                           _ => null,
                         },
+                        children: section == ProjectSection.schematic
+                            ? _sheetEntries(value)
+                            : const [],
                       ),
                   ],
                   child: _panel(value),
@@ -181,6 +186,99 @@ class _ProjectScreenState extends ConsumerState<ProjectScreen> {
         ],
       ),
     );
+  }
+
+  /// The schematic's sheets, for the side menu: once there are any, the
+  /// Schematic entry drops down to show them all.
+  List<RailSubEntry> _sheetEntries(Project project) {
+    final sheets =
+        ref.watch(projectSheetsProvider(project.id)).value ??
+        const <SchematicSheet>[];
+    final open = ref.watch(openSheetProvider(project.id));
+    final tree = SheetTree(sheets);
+    void go(String? sheetId) {
+      ref.read(openSheetProvider(project.id).notifier).open(sheetId);
+      setState(() {
+        _section = ProjectSection.schematic;
+        _railOpen = false;
+      });
+    }
+
+    return [
+      if (sheets.isNotEmpty) ...[
+        RailSubEntry(
+          label: 'Top sheet',
+          icon: Icons.description_outlined,
+          selected: open == null && _section == ProjectSection.schematic,
+          onTap: () => go(null),
+        ),
+        for (final sheet in tree.inPageOrder())
+          RailSubEntry(
+            label: sheet.name,
+            depth: tree.depthOf(sheet.id),
+            selected: open == sheet.id && _section == ProjectSection.schematic,
+            onTap: () => go(sheet.id),
+          ),
+      ],
+      RailSubEntry(
+        label: 'New sheet…',
+        icon: Icons.add,
+        onTap: () => _addSheet(project),
+      ),
+    ];
+  }
+
+  Future<void> _addSheet(Project project) async {
+    setState(() => _railOpen = false);
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('New sheet'),
+        content: TextField(
+          key: const ValueKey('rail-sheet-name'),
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Sheet name',
+            hintText: 'e.g. Power',
+            isDense: true,
+          ),
+          onSubmitted: (text) => Navigator.of(dialog).pop(text.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialog).pop(),
+            child: const Text('CANCEL'),
+          ),
+          FilledButton(
+            key: const ValueKey('rail-sheet-ok'),
+            onPressed: () => Navigator.of(dialog).pop(controller.text.trim()),
+            child: const Text('CREATE'),
+          ),
+        ],
+      ),
+    );
+    if (name == null || name.isEmpty || !mounted) return;
+    // On whichever sheet is open, so a sheet made while looking at one
+    // goes inside it.
+    final parent = ref.read(openSheetProvider(project.id));
+    final siblings = SheetTree(
+      ref.read(projectSheetsProvider(project.id)).value ?? const [],
+    ).childrenOf(parent).length;
+    await ref
+        .read(sheetRepositoryProvider)
+        .add(
+          projectId: project.id,
+          name: name,
+          parentId: parent,
+          at: Offset(
+            25.4 + 38.1 * (siblings % 5),
+            25.4 + 30.48 * (siblings ~/ 5),
+          ),
+        );
+    if (!mounted) return;
+    setState(() => _section = ProjectSection.schematic);
   }
 
   Widget _action(Project project) => switch (_section) {
@@ -206,6 +304,7 @@ class _ProjectScreenState extends ConsumerState<ProjectScreen> {
     // The board has no add button: everything on it comes from the
     // schematic, and its own verbs live on the canvas action bar.
     ProjectSection.board ||
+    ProjectSection.panel ||
     ProjectSection.production => const SizedBox.shrink(),
     ProjectSection.components || ProjectSection.nets => FilledButton.icon(
       onPressed: () => ProjectComponentsPanel.add(context, project),
@@ -240,6 +339,7 @@ class _ProjectScreenState extends ConsumerState<ProjectScreen> {
             setState(() => _section = ProjectSection.schematic),
       ),
     },
+    ProjectSection.panel => PanelizePanel(project: project),
     ProjectSection.production => ProductionPanel(project: project),
     ProjectSection.export => ExportPanel(project: project),
   };

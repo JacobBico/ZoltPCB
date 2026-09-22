@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import '../../core/util/ids.dart';
 import '../../domain/models/models.dart';
 import '../db/database.dart';
+import 'active_sheet.dart';
 import '../db/watchers.dart';
 import '../db/mappers.dart';
 
@@ -330,6 +331,19 @@ class PartRepository {
   }
 
   Future<void> updateUnitPlacement(PartUnit unit) async {
+    var sheetId = unit.sheetId;
+    if (unit.placed && sheetId == null) {
+      // Put down for the first time: on the sheet open in the schematic.
+      final row = await (_db.select(
+        _db.partUnits,
+      )..where((t) => t.id.equals(unit.id))).getSingleOrNull();
+      if (row != null && !row.placed) {
+        final part = await (_db.select(
+          _db.parts,
+        )..where((t) => t.id.equals(unit.partId))).getSingleOrNull();
+        if (part != null) sheetId = ActiveSheet.of(part.projectId);
+      }
+    }
     await (_db.update(_db.partUnits)..where((t) => t.id.equals(unit.id))).write(
       PartUnitsCompanion(
         x: Value(unit.x),
@@ -339,6 +353,7 @@ class PartRepository {
         mirrorY: Value(unit.mirrorY),
         placed: Value(unit.placed),
         bodyStyle: Value(unit.bodyStyle),
+        sheetId: Value(sheetId),
       ),
     );
   }
@@ -421,6 +436,7 @@ class PartRepository {
               mirrorX: Value(unit.mirrorX),
               mirrorY: Value(unit.mirrorY),
               placed: Value(unit.placed),
+              sheetId: Value(unit.sheetId),
             ),
         ], mode: InsertMode.insertOrReplace);
         batch.insertAll(_db.partPins, [

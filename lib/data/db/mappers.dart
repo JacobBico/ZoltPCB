@@ -51,6 +51,7 @@ extension PartUnitRowMapper on PartUnitRow {
     mirrorX: mirrorX,
     mirrorY: mirrorY,
     placed: placed,
+    sheetId: sheetId,
   );
 }
 

@@ -147,9 +147,45 @@ class _SnapshotsDialogState extends ConsumerState<_SnapshotsDialog> {
     final name = _name.text.trim().isEmpty
         ? 'Snapshot ${formatTimestamp(DateTime.now())}'
         : _name.text.trim();
-    await ref.read(snapshotRepositoryProvider).take(widget.project.id, name);
-    _name.clear();
-    if (mounted) setState(() => _busy = false);
+    try {
+      await ref.read(snapshotRepositoryProvider).take(widget.project.id, name);
+      _name.clear();
+    } catch (error) {
+      if (mounted) _say(context, 'Could not take the snapshot: $error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// A snapshot is the only way back to that version, so it goes only
+  /// when the user says so.
+  Future<void> _delete(ProjectSnapshot snapshot) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text('Delete "${snapshot.name}"?'),
+        content: const Text(
+          'The project cannot be taken back to this version afterwards.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialog).pop(false),
+            child: const Text('CANCEL'),
+          ),
+          FilledButton(
+            key: const ValueKey('snapshot-delete-confirm'),
+            style: FilledButton.styleFrom(
+              backgroundColor: KicadPalette.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(dialog).pop(true),
+            child: const Text('DELETE'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref.read(snapshotRepositoryProvider).delete(snapshot.id);
   }
 
   Future<void> _restore(ProjectSnapshot snapshot) async {
@@ -269,9 +305,9 @@ class _SnapshotsDialogState extends ConsumerState<_SnapshotsDialog> {
                                     size: 18,
                                     color: KicadPalette.error,
                                   ),
-                                  onPressed: () => ref
-                                      .read(snapshotRepositoryProvider)
-                                      .delete(snapshot.id),
+                                  onPressed: _busy
+                                      ? null
+                                      : () => _delete(snapshot),
                                 ),
                               ],
                             ),

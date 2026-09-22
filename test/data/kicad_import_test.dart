@@ -9,6 +9,7 @@ import 'package:hintpcb/data/repositories/footprint_library_repository.dart';
 import 'package:hintpcb/data/repositories/net_repository.dart';
 import 'package:hintpcb/data/repositories/part_repository.dart';
 import 'package:hintpcb/data/repositories/project_repository.dart';
+import 'package:hintpcb/data/repositories/sheet_repository.dart';
 import 'package:hintpcb/data/repositories/symbol_library_repository.dart';
 import 'package:hintpcb/domain/export/board_document.dart';
 import 'package:hintpcb/domain/export/schematic_document.dart';
@@ -21,6 +22,15 @@ import '../helpers/fixtures.dart';
 import '../helpers/footprint_fixture.dart';
 import '../helpers/library_fixture.dart';
 
+/// A net repository that fails the first time it is asked to join pins.
+class _FailingNets extends NetRepository {
+  _FailingNets(super.db);
+
+  @override
+  Future<NetWithEndpoints> connectPins(String pinA, String pinB) =>
+      throw StateError('disk full');
+}
+
 /// Everything one in-memory app needs.
 class _App {
   _App() : db = AppDatabase.memory() {
@@ -30,6 +40,7 @@ class _App {
     boards = BoardRepository(db);
     symbols = SymbolLibraryRepository(db, InMemoryLibraryStorage());
     footprints = FootprintLibraryRepository(db, InMemoryLibraryStorage());
+    sheets = SheetRepository(db);
     importer = KicadProjectImporter(
       projects: projects,
       parts: parts,
@@ -37,8 +48,11 @@ class _App {
       boards: boards,
       symbols: symbols,
       footprints: footprints,
+      sheets: sheets,
     );
   }
+
+  late final SheetRepository sheets;
 
   final AppDatabase db;
   late final ProjectRepository projects;
@@ -145,6 +159,89 @@ void main() {
       expect(await target.symbols.loadSymbol('Device:R'), isNotNull);
     },
   );
+
+  test('sub-sheets come back as sheets, joined as they were', () async {
+    // Top: R1. Power: R2. Regulator, inside Power: GND-side R3.
+    final project = await source.projects.create(name: 'Nested');
+    final power = await source.sheets.add(
+      projectId: project.id,
+      name: 'Power',
+      at: const Offset(101.6, 50.8),
+    );
+    final regulator = await source.sheets.add(
+      projectId: project.id,
+      name: 'Regulator',
+      parentId: power.id,
+      at: const Offset(101.6, 50.8),
+    );
+    Future<PartWithDetails> place(String value, String? sheetId) async {
+      final part = await source.parts.addPart(
+        project.id,
+        resistorSpec(value: value),
+      );
+      await source.parts.updateUnitPlacement(
+        part.units.first.copyWith(
+          x: 50.8,
+          y: 50.8,
+          placed: true,
+          sheetId: sheetId,
+        ),
+      );
+      return (await source.parts.getPartWithDetails(part.part.id))!;
+    }
+
+    final r1 = await place('1k', null);
+    final r2 = await place('2k', power.id);
+    final r3 = await place('3k', regulator.id);
+    final vmid = await source.nets.connectPins(r1.pins[1].id, r2.pins[0].id);
+    await source.nets.connectPins(r1.pins[1].id, r3.pins[0].id);
+    await source.nets.renameNet(vmid.net.id, 'VMID');
+    // Unnamed, between Power and Regulator only.
+    await source.nets.connectPins(r2.pins[1].id, r3.pins[1].id);
+
+    final partList = await source.parts.getPartsWithDetails(project.id);
+    final files = const SchematicWriter().writeFiles(
+      SchematicDocument(
+        project: project,
+        parts: partList,
+        nets: await source.nets.getNets(project.id),
+        symbols: {'Device:R': (await source.symbols.loadSymbol('Device:R'))!},
+        sheets: await source.sheets.getAll(project.id),
+      ),
+      topFile: 'Nested.kicad_sch',
+    );
+
+    final target = _App();
+    addTearDown(() => target.db.close());
+    final result = await target.importer.import(
+      name: 'Nested',
+      schematic: files['Nested.kicad_sch']!,
+      sheetFiles: {
+        for (final e in files.entries)
+          if (e.key != 'Nested.kicad_sch') e.key: e.value,
+      },
+    );
+    expect(result.warnings, isEmpty);
+    expect(result.partCount, 3);
+
+    final sheets = SheetTree(await target.sheets.getAll(result.project.id));
+    expect(
+      [for (final s in sheets.inPageOrder()) sheets.pathName(s.id)],
+      ['/Power/', '/Power/Regulator/'],
+    );
+    // Each part on the sheet it was drawn on.
+    final sheetOf = {
+      for (final p in await target.parts.getPartsWithDetails(result.project.id))
+        p.part.value: sheets.byId(p.units.single.sheetId)?.name ?? 'Top',
+    };
+    expect(sheetOf, {'1k': 'Top', '2k': 'Power', '3k': 'Regulator'});
+
+    // The same connections, and the name the user gave kept.
+    expect(
+      await target.netlist(result.project.id),
+      await source.netlist(project.id),
+    );
+  });
 
   test('its placement comes back exactly', () async {
     final project = await design();
@@ -257,6 +354,48 @@ void main() {
       result.project.id,
     )).firstWhere((n) => n.net.id == track.netId);
     expect(named.net.name, 'VMID');
+
+    // A damaged project file costs its rules, with a warning, not the
+    // whole import.
+    final damaged = await target.importer.import(
+      name: 'Damaged pro',
+      schematic: await schematicOf(source, project),
+      board: boardText,
+      projectFile: '{"net_settings": {"classes": [',
+    );
+    expect(damaged.footprintCount, 2);
+    expect(
+      damaged.warnings,
+      contains(contains('.kicad_pro could not be read')),
+    );
+  });
+
+  test('an import that fails part way leaves no half-made project', () async {
+    final project = await design();
+    final target = _App();
+    addTearDown(() => target.db.close());
+    // Parts go in, then wiring them up fails.
+    final importer = KicadProjectImporter(
+      projects: target.projects,
+      parts: target.parts,
+      nets: _FailingNets(target.db),
+      boards: target.boards,
+      symbols: target.symbols,
+      footprints: target.footprints,
+    );
+    await expectLater(
+      importer.import(
+        name: 'Divider',
+        schematic: await schematicOf(source, project),
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect(await target.projects.getAll(), isEmpty);
+    expect(
+      await target.db.select(target.db.parts).get(),
+      isEmpty,
+      reason: 'the parts placed before the failure went with the project',
+    );
   });
 
   group('a project made in KiCad', () {

@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import '../../core/util/ids.dart';
 import '../../domain/models/models.dart';
 import '../db/database.dart';
+import 'active_sheet.dart';
 
 /// Text and boxes on the schematic sheet.
 class NoteRepository {
@@ -33,10 +34,12 @@ class NoteRepository {
     required Offset position,
     Size size = Size.zero,
     double textSize = SchematicNote.defaultTextSize,
+    String? sheetId,
   }) async {
     final note = SchematicNote(
       id: newId(),
       projectId: projectId,
+      sheetId: sheetId ?? ActiveSheet.of(projectId),
       kind: kind,
       content: content,
       position: position,
@@ -63,6 +66,7 @@ class NoteRepository {
             width: Value(note.size.width),
             height: Value(note.size.height),
             size: Value(note.textSize),
+            sheetId: Value(note.sheetId),
             createdAt: DateTime.now(),
           ),
           mode: InsertMode.insertOrReplace,
@@ -97,5 +101,6 @@ class NoteRepository {
     position: Offset(row.x, row.y),
     size: Size(row.width, row.height),
     textSize: row.size,
+    sheetId: row.sheetId,
   );
 }

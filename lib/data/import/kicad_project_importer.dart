@@ -17,6 +17,7 @@ import '../repositories/footprint_library_repository.dart';
 import '../repositories/net_repository.dart';
 import '../repositories/part_repository.dart';
 import '../repositories/project_repository.dart';
+import '../repositories/sheet_repository.dart';
 import '../repositories/symbol_library_repository.dart';
 
 class KicadImportException implements Exception {
@@ -65,7 +66,11 @@ class KicadProjectImporter {
     required this.boards,
     required this.symbols,
     required this.footprints,
+    this.sheets,
   });
+
+  /// Where sub-sheets go. Without it, only the top sheet is brought in.
+  final SheetRepository? sheets;
 
   final ProjectRepository projects;
   final PartRepository parts;
@@ -82,6 +87,10 @@ class KicadProjectImporter {
     required String schematic,
     String? board,
     String? projectFile,
+
+    /// The project's other `.kicad_sch` files, by file name: the sheets
+    /// the top one refers to.
+    Map<String, String> sheetFiles = const {},
   }) async {
     final SList root;
     try {
@@ -93,7 +102,6 @@ class KicadProjectImporter {
       throw const KicadImportException('That is not a KiCad schematic');
     }
 
-    final warnings = <String>[];
     final titleBlock = root.child('title_block');
     final project = await projects.create(
       name: name,
@@ -102,15 +110,44 @@ class KicadProjectImporter {
       revision: titleBlock?.childAtom('rev') ?? '',
     );
 
-    if (root.children('sheet').isNotEmpty) {
+    // From here on the project exists. Anything that goes wrong takes it
+    // away again, so a failed import never leaves half a design behind.
+    try {
+      return await _importInto(project, root, board, projectFile, sheetFiles);
+    } catch (_) {
+      await projects.delete(project.id);
+      rethrow;
+    }
+  }
+
+  Future<KicadImportResult> _importInto(
+    Project project,
+    SList root,
+    String? board,
+    String? projectFile,
+    Map<String, String> sheetFiles,
+  ) async {
+    final warnings = <String>[];
+    if (sheets == null && root.children('sheet').isNotEmpty) {
       warnings.add(
         'This schematic has sub-sheets; only the top sheet was brought in',
       );
     }
 
-    final definitions = await _installSymbols(root, warnings);
-    final partCount = await _placeParts(project, root, definitions, warnings);
-    final netCount = await _connect(project, root);
+    final links = _SheetLinks();
+    final partCount = await _importSheet(
+      project,
+      root,
+      sheetId: null,
+      instancePath: '/${root.childAtom('uuid') ?? ''}',
+      pathName: '/',
+      files: sheetFiles,
+      opened: const {},
+      links: links,
+      warnings: warnings,
+    );
+    await _nameLinkedNets(project, links);
+    final netCount = (await nets.getNets(project.id)).length;
 
     var footprintCount = 0;
     var trackCount = 0;
@@ -131,6 +168,157 @@ class KicadProjectImporter {
       footprintCount: footprintCount,
       trackCount: trackCount,
     );
+  }
+
+  // --- sheets ----------------------------------------------------------
+
+  /// One sheet's file: its symbols, its parts, the boxes of the sheets on
+  /// it, what it connects, and then each of those sheets in turn.
+  Future<int> _importSheet(
+    Project project,
+    SList file, {
+    required String? sheetId,
+    required String instancePath,
+    required String pathName,
+    required Map<String, String> files,
+    required Set<String> opened,
+    required _SheetLinks links,
+    required List<String> warnings,
+  }) async {
+    final definitions = await _installSymbols(file, warnings);
+    var count = await _placeParts(
+      project,
+      file,
+      definitions,
+      warnings,
+      sheetId: sheetId,
+      instancePath: instancePath,
+    );
+
+    final children = <(String, SList, String, String)>[];
+    final pinPoints = <(String, Offset)>[];
+    final repository = sheets;
+    if (repository != null) {
+      for (final node in file.children('sheet')) {
+        String property(String key) =>
+            node
+                .children('property')
+                .where((p) => p.atom(1) == key)
+                .firstOrNull
+                ?.atom(2) ??
+            '';
+        final name = property('Sheetname').isEmpty
+            ? 'Sheet'
+            : property('Sheetname');
+        final fileName = property('Sheetfile');
+        final at = node.child('at');
+        final size = node.child('size');
+        final added = await repository.add(
+          projectId: project.id,
+          name: name,
+          parentId: sheetId,
+          at: Offset(at?.number(1) ?? 0, at?.number(2) ?? 0),
+        );
+        await repository.update(
+          added.copyWith(
+            fileName: fileName.isEmpty ? added.fileName : fileName,
+            box: Rect.fromLTWH(
+              at?.number(1) ?? 0,
+              at?.number(2) ?? 0,
+              size?.number(1) ?? 30.48,
+              size?.number(2) ?? 20.32,
+            ),
+          ),
+        );
+        links.pathOf[added.id] = '$pathName$name/';
+        // Each pin of the box is joined, by a name only the import uses,
+        // to the hierarchical label of the same name inside the sheet.
+        for (final pin in node.children('pin')) {
+          final pinName = pin.atom(1);
+          if (pinName == null) continue;
+          pinPoints.add((links.key(added.id, pinName), _at(pin)));
+        }
+        children.add((
+          added.id,
+          node,
+          fileName,
+          '$instancePath/${node.childAtom('uuid') ?? ''}',
+        ));
+      }
+    }
+
+    await _connect(
+      project,
+      file,
+      sheetId: sheetId,
+      pathName: pathName,
+      extraLabels: pinPoints,
+      links: links,
+    );
+
+    for (final (childId, _, fileName, childPath) in children) {
+      final text = files[fileName];
+      if (text == null) {
+        warnings.add(
+          '$fileName was not picked, so the sheet ${links.pathOf[childId]} '
+          'is empty — pick it with the other files to bring it in',
+        );
+        continue;
+      }
+      if (opened.contains(fileName)) {
+        warnings.add('$fileName contains itself; the loop was not followed');
+        continue;
+      }
+      if (links.used.contains(fileName)) {
+        warnings.add(
+          '$fileName is used more than once; each use came in as its own '
+          'copy of the sheet',
+        );
+      }
+      links.used.add(fileName);
+      final SList child;
+      try {
+        child = SExprParser.parseDocument(text);
+      } catch (error) {
+        warnings.add('$fileName could not be read: $error');
+        continue;
+      }
+      count += await _importSheet(
+        project,
+        child,
+        sheetId: childId,
+        instancePath: childPath,
+        pathName: links.pathOf[childId]!,
+        files: files,
+        opened: {...opened, fileName},
+        links: links,
+        warnings: warnings,
+      );
+    }
+    return count;
+  }
+
+  /// The names the import joined sheets by, replaced by real ones: the
+  /// name a label gave the net where it had one, or KiCad's own, the
+  /// sheet's path and the pin — `/Power/VIN`.
+  Future<void> _nameLinkedNets(Project project, _SheetLinks links) async {
+    // KiCad's own name for a net nobody named — `Net-(R2-Pad2)` — is a
+    // placeholder, and a net that had one comes in unnamed, as it began.
+    final placeholder = RegExp(r'(^|/)Net-\(');
+    for (final net in await nets.getNets(project.id)) {
+      final name = net.net.name;
+      if (name == null) continue;
+      var wanted = name;
+      if (name.startsWith(_SheetLinks.marker)) {
+        final (sheetId, pin) = links.parse(name);
+        wanted = links.preferred[name] ?? '${links.pathOf[sheetId] ?? '/'}$pin';
+      }
+      if (placeholder.hasMatch(wanted)) {
+        await nets.renameNet(net.net.id, null);
+      } else if (wanted != name) {
+        await nets.renameNet(net.net.id, wanted);
+      }
+    }
   }
 
   // --- symbols ---------------------------------------------------------
@@ -195,8 +383,10 @@ class KicadProjectImporter {
     Project project,
     SList root,
     Map<String, SymbolDefinition> definitions,
-    List<String> warnings,
-  ) async {
+    List<String> warnings, {
+    String? sheetId,
+    String? instancePath,
+  }) async {
     final groups = <String, List<_Instance>>{};
     var unnumbered = 0;
     for (final node in root.children('symbol')) {
@@ -208,11 +398,15 @@ class KicadProjectImporter {
           if (property.atom(1) != null)
             property.atom(1)!: property.atom(2) ?? '',
       };
-      final instanceReference = node
-          .child('instances')
-          ?.child('project')
-          ?.child('path')
-          ?.childAtom('reference');
+      // A sheet used twice gives its parts a reference per use; the one
+      // for this use is the path through the boxes to it.
+      final paths =
+          node.child('instances')?.child('project')?.children('path') ??
+          const <SList>[];
+      final instanceReference =
+          (paths.where((p) => p.atom(1) == instancePath).firstOrNull ??
+                  paths.firstOrNull)
+              ?.childAtom('reference');
       final reference = instanceReference ?? properties['Reference'] ?? '?';
       final instance = _Instance(
         libId: libId,
@@ -276,6 +470,7 @@ class KicadProjectImporter {
             mirrorX: instance.mirror == 'x',
             mirrorY: instance.mirror == 'y',
             placed: true,
+            sheetId: sheetId,
           ),
         );
       }
@@ -299,13 +494,20 @@ class KicadProjectImporter {
 
   /// Works out what is connected the way KiCad does, from geometry, and
   /// stores it as nets and drawn wires.
-  Future<int> _connect(Project project, SList root) async {
+  Future<int> _connect(
+    Project project,
+    SList root, {
+    String? sheetId,
+    String pathName = '/',
+    List<(String, Offset)> extraLabels = const [],
+    _SheetLinks? links,
+  }) async {
     final all = await parts.getPartsWithDetails(project.id);
 
     final pins = <(Offset, String)>[];
     for (final part in all) {
       for (final unit in part.units) {
-        if (!unit.placed) continue;
+        if (!unit.placed || unit.sheetId != sheetId) continue;
         final placement = Placement.ofUnit(unit);
         for (final pin in part.pins) {
           if (pin.unit != unit.unitNumber && pin.unit != 0) continue;
@@ -321,11 +523,40 @@ class KicadProjectImporter {
       wires.add((_xy(points[0]), _xy(points[1])));
     }
 
+    // Names as the whole project will know them. A global label is the
+    // same everywhere. A local label on a sub-sheet is its sheet's own, so
+    // it carries the sheet's path the way KiCad names it — two sheets'
+    // SDA are two nets. A hierarchical label is joined to the pin of its
+    // box on the sheet above.
+    String nameOf(String kind, String text) => switch (kind) {
+      'hierarchical_label' when sheetId != null && links != null =>
+        links.resolve(links.key(sheetId, text)),
+      'label' when sheetId != null => '$pathName$text',
+      _ => text,
+    };
     final labels = <(String, Offset)>[
       for (final kind in const ['label', 'global_label', 'hierarchical_label'])
         for (final label in root.children(kind))
-          if (label.atom(1) != null) (label.atom(1)!, _at(label)),
+          if (label.atom(1) != null) (nameOf(kind, label.atom(1)!), _at(label)),
+      for (final (key, at) in extraLabels) (links?.resolve(key) ?? key, at),
     ];
+    // An older symbol's hidden power pins join the net of their name, on
+    // every sheet, as if each carried a global label: a hidden VCC pin is
+    // on VCC. KiCad still reads them that way, so the import does too.
+    for (final part in all) {
+      for (final unit in part.units) {
+        if (!unit.placed || unit.sheetId != sheetId) continue;
+        final placement = Placement.ofUnit(unit);
+        for (final pin in part.pins) {
+          if (pin.unit != unit.unitNumber && pin.unit != 0) continue;
+          if (!pin.hidden || pin.electricalType != PinElectricalType.powerIn) {
+            continue;
+          }
+          if (pin.name.isEmpty || pin.name == '~') continue;
+          labels.add((pin.name, placement.apply(pin.x, pin.y)));
+        }
+      }
+    }
     final junctions = [for (final j in root.children('junction')) _at(j)];
 
     // Union-find over pins, then wires, then labels.
@@ -399,7 +630,11 @@ class KicadProjectImporter {
         if (_same(at, pins[p].$1)) union(labelBase + l, p);
       }
       for (var m = l + 1; m < labels.length; m++) {
-        if (labels[m].$1 == text) union(labelBase + l, labelBase + m);
+        // The same name, or the same spot: a sheet's pin and the label
+        // written at it are one connection.
+        if (labels[m].$1 == text || _same(labels[m].$2, at)) {
+          union(labelBase + l, labelBase + m);
+        }
       }
     }
 
@@ -415,7 +650,24 @@ class KicadProjectImporter {
 
     for (final entry in pinsOf.entries) {
       final members = entry.value;
-      final name = namesOf[entry.key]?.first;
+      final names = namesOf[entry.key] ?? const <String>[];
+      // A piece joining sheets goes by the import's joining name until
+      // every sheet is in, remembering the name it will end up with.
+      final joins = [
+        for (final n in names)
+          if (n.startsWith(_SheetLinks.marker)) n,
+      ];
+      final plain = names
+          .where((n) => !n.startsWith(_SheetLinks.marker))
+          .firstOrNull;
+      String? name = names.firstOrNull;
+      if (joins.isNotEmpty && links != null) {
+        name = joins.first;
+        for (final other in joins.skip(1)) {
+          links.alias[other] = joins.first;
+        }
+        if (plain != null) links.preferred[joins.first] ??= plain;
+      }
       String? netId;
       if (members.length >= 2) {
         netId = (await nets.connectPins(members[0], members[1])).net.id;
@@ -460,6 +712,7 @@ class KicadProjectImporter {
         pinAId: pinAt(a),
         pinBId: pinAt(b),
         netId: netId,
+        sheetId: sheetId,
       );
     }
 
@@ -660,14 +913,24 @@ class KicadProjectImporter {
       ];
       if (points.length < 3) continue;
       final netName = node.childAtom('net_name') ?? '';
+      final connect = node.child('connect_pads');
+      final fill = node.child('fill');
       await boards.addZone(
         projectId: project.id,
         layer: layer,
         points: points,
         netId: netIdByName[netName],
         netName: netName,
-        clearance: node.child('connect_pads')?.childNumber('clearance') ?? 0.5,
+        clearance: connect?.childNumber('clearance') ?? 0.5,
         minThickness: node.childNumber('min_thickness') ?? 0.25,
+        priority: node.childNumber('priority')?.round() ?? 0,
+        padConnection: switch (connect?.atom(1)) {
+          'yes' => PadConnection.solid,
+          'no' => PadConnection.none,
+          _ => PadConnection.thermal,
+        },
+        thermalGap: fill?.childNumber('thermal_gap') ?? 0.5,
+        thermalSpoke: fill?.childNumber('thermal_bridge_width') ?? 0.5,
       );
     }
 
@@ -705,9 +968,18 @@ class KicadProjectImporter {
 
     // --- outline, edge cuts and rules
     await _importEdges(project, root);
-    final rules = projectFile == null
-        ? null
-        : BoardProjectWriter.rulesFrom(projectFile);
+    DesignRules? rules;
+    if (projectFile != null) {
+      try {
+        rules = BoardProjectWriter.rulesFrom(projectFile);
+      } on FormatException {
+        // A damaged project file costs its rules, not the whole import.
+        warnings.add(
+          'The .kicad_pro could not be read; design rules and net classes '
+          'were left at their defaults',
+        );
+      }
+    }
     if (rules != null) {
       final current = await boards.ensureBoard(project.id);
       await boards.updateBoard(current.copyWith(rules: rules));
@@ -1106,4 +1378,44 @@ class _Instance {
   final String reference;
   final String value;
   final String footprint;
+}
+
+/// How the sheets of an import are joined while they come in.
+///
+/// A hierarchical label inside a sheet and the pin of that sheet's box on
+/// the sheet above are the same connection. Each pair is given one name
+/// that nothing else could have, and nets with the same name are one net,
+/// so the two join. Once every sheet is in, the names are replaced.
+class _SheetLinks {
+  static const marker = '\u0001';
+
+  /// Each sheet's path, as KiCad names it: `/Power/`.
+  final pathOf = <String, String>{};
+
+  /// A joining name that turned out to be the same net as another.
+  final alias = <String, String>{};
+
+  /// The name a joined net should end up with, where a label gave one.
+  final preferred = <String, String>{};
+
+  /// Sheet files already brought in, to notice one used twice.
+  final used = <String>{};
+
+  String key(String sheetId, String pin) => '$marker$sheetId$marker$pin';
+
+  String resolve(String key) {
+    var at = key;
+    final seen = <String>{};
+    while (seen.add(at)) {
+      final next = alias[at];
+      if (next == null) break;
+      at = next;
+    }
+    return at;
+  }
+
+  (String, String) parse(String key) {
+    final parts = key.split(marker);
+    return (parts.length > 1 ? parts[1] : '', parts.length > 2 ? parts[2] : '');
+  }
 }

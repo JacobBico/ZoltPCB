@@ -2,6 +2,26 @@ import 'dart:ui';
 
 import 'board_layer.dart';
 
+/// How pads on a pour's own net join it.
+enum PadConnection {
+  /// A gap round the pad bridged by four spokes: joined, but the pad can
+  /// still be soldered without the plane soaking up the iron's heat.
+  thermal('Thermal'),
+
+  /// Poured right up to the pad: the best joint, the hardest to solder.
+  solid('Solid'),
+
+  /// Not joined at all: kept clear like any other net's pad.
+  none('None');
+
+  const PadConnection(this.label);
+
+  final String label;
+
+  static PadConnection byName(String? name) =>
+      values.where((c) => c.name == name).firstOrNull ?? thermal;
+}
+
 /// A copper pour tied to a net.
 ///
 /// The ground plane, and everything shaped like one: a region of a copper
@@ -23,6 +43,11 @@ class BoardZone {
     this.netName = '',
     this.clearance = 0.5,
     this.minThickness = 0.25,
+    this.priority = 0,
+    this.padConnection = PadConnection.thermal,
+    this.viaConnection = PadConnection.solid,
+    this.thermalGap = 0.5,
+    this.thermalSpoke = 0.5,
   });
 
   final String id;
@@ -49,6 +74,22 @@ class BoardZone {
   /// Thinnest sliver of copper the pour may leave. Below this KiCad simply
   /// does not fill, which is what keeps a pour from growing hairs.
   final double minThickness;
+
+  /// Where two pours overlap, the higher priority one is filled and the
+  /// lower one is cut back round it, as KiCad does.
+  final int priority;
+
+  final PadConnection padConnection;
+
+  /// The same, for vias and plated holes on the pour's own net. Solid by
+  /// default: nothing is soldered to a via, so there is nothing for a
+  /// thermal relief to protect, and a stitching via wants all the copper
+  /// it can get.
+  final PadConnection viaConnection;
+
+  /// The gap round a thermal pad, and the width of the spokes across it.
+  final double thermalGap;
+  final double thermalSpoke;
 
   bool get isValid => points.length >= 3;
 
@@ -97,6 +138,11 @@ class BoardZone {
     String? netName,
     double? clearance,
     double? minThickness,
+    int? priority,
+    PadConnection? padConnection,
+    PadConnection? viaConnection,
+    double? thermalGap,
+    double? thermalSpoke,
   }) => BoardZone(
     id: id,
     projectId: projectId,
@@ -106,6 +152,11 @@ class BoardZone {
     netName: clearNet ? '' : (netName ?? this.netName),
     clearance: clearance ?? this.clearance,
     minThickness: minThickness ?? this.minThickness,
+    priority: priority ?? this.priority,
+    padConnection: padConnection ?? this.padConnection,
+    viaConnection: viaConnection ?? this.viaConnection,
+    thermalGap: thermalGap ?? this.thermalGap,
+    thermalSpoke: thermalSpoke ?? this.thermalSpoke,
   );
 
   @override

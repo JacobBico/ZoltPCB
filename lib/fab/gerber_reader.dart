@@ -89,7 +89,8 @@ class DrillHole {
 /// Reads the Gerber and Excellon files this app writes, to show them.
 ///
 /// Deliberately the subset those files use — standard apertures, linear
-/// draws, flashes, regions and polarity — rather than the whole of RS-274X.
+/// and arc draws, flashes, regions and polarity — rather than the whole of
+/// RS-274X.
 /// The point of the viewer is to show exactly what goes to the board house,
 /// read back from the files themselves, not to open anyone else's.
 abstract final class GerberReader {
@@ -104,6 +105,8 @@ abstract final class GerberReader {
     var inRegion = false;
     var stroke = <Offset>[];
     var contour = <Offset>[];
+    // Interpolation: 1 straight, 2 clockwise arc, 3 counter-clockwise.
+    var mode = 1;
 
     void endStroke() {
       final aperture = current;
@@ -172,6 +175,11 @@ abstract final class GerberReader {
         inRegion = false;
         continue;
       }
+      final setMode = RegExp(r'^G0?([123])$').firstMatch(command);
+      if (setMode != null) {
+        mode = int.parse(setMode.group(1)!);
+        continue;
+      }
       final select = RegExp(r'^(?:G54)?D(\d+)$').firstMatch(command);
       if (select != null && int.parse(select.group(1)!) >= 10) {
         endStroke();
@@ -180,19 +188,35 @@ abstract final class GerberReader {
       }
 
       final coordinate = RegExp(
-        r'^(?:G0?1)?(?:X(-?\d+))?(?:Y(-?\d+))?D0?([123])$',
+        r'^(?:G0?([123]))?(?:X(-?\d+))?(?:Y(-?\d+))?'
+        r'(?:I(-?\d+))?(?:J(-?\d+))?D0?([123])$',
       ).firstMatch(command);
       if (coordinate == null) continue;
+      if (coordinate.group(1) != null) mode = int.parse(coordinate.group(1)!);
       final previous = Offset(x, -y);
-      if (coordinate.group(1) != null) {
-        x = int.parse(coordinate.group(1)!) * scale;
-      }
       if (coordinate.group(2) != null) {
-        y = int.parse(coordinate.group(2)!) * scale;
+        x = int.parse(coordinate.group(2)!) * scale;
+      }
+      if (coordinate.group(3) != null) {
+        y = int.parse(coordinate.group(3)!) * scale;
       }
       final at = Offset(x, -y);
+      // An arc arrives as the corners along it, so everything that draws
+      // or measures a stroke keeps working on points.
+      final along = mode == 1 || coordinate.group(6) != '1'
+          ? [at]
+          : _arcPoints(
+              previous,
+              at,
+              previous +
+                  Offset(
+                    int.parse(coordinate.group(4) ?? '0') * scale,
+                    -int.parse(coordinate.group(5) ?? '0') * scale,
+                  ),
+              clockwise: mode == 2,
+            );
 
-      switch (coordinate.group(3)) {
+      switch (coordinate.group(6)) {
         case '2':
           if (inRegion) {
             endContour();
@@ -204,10 +228,10 @@ abstract final class GerberReader {
         case '1':
           if (inRegion) {
             if (contour.isEmpty) contour.add(previous);
-            contour.add(at);
+            contour.addAll(along);
           } else {
             if (stroke.isEmpty) stroke.add(previous);
-            stroke.add(at);
+            stroke.addAll(along);
           }
         case '3':
           endStroke();
@@ -220,6 +244,41 @@ abstract final class GerberReader {
     endStroke();
     endContour();
     return GerberImage(shapes);
+  }
+
+  /// Corners along an arc from [from] to [to] around [centre], ending at
+  /// [to]. Clockwise as the board is seen (y down); an arc that ends where
+  /// it starts is a whole circle.
+  static List<Offset> _arcPoints(
+    Offset from,
+    Offset to,
+    Offset centre, {
+    required bool clockwise,
+  }) {
+    final r = (from - centre).distance;
+    if (r < 1e-9) return [to];
+    double angle(Offset p) => math.atan2(p.dy - centre.dy, p.dx - centre.dx);
+    final a0 = angle(from);
+    var sweep = angle(to) - a0;
+    if (clockwise) {
+      while (sweep <= 1e-9) {
+        sweep += math.pi * 2;
+      }
+    } else {
+      while (sweep >= -1e-9) {
+        sweep -= math.pi * 2;
+      }
+    }
+    final steps = math.max(8, (sweep.abs() * r / 0.1).ceil());
+    return [
+      for (var i = 1; i < steps; i++)
+        centre +
+            Offset(
+              r * math.cos(a0 + sweep * i / steps),
+              r * math.sin(a0 + sweep * i / steps),
+            ),
+      to,
+    ];
   }
 
   /// The holes in an Excellon drill file.

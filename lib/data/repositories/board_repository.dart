@@ -64,6 +64,10 @@ class BoardRepository {
         clearance: Value(board.rules.clearance),
         viaDiameter: Value(board.rules.viaDiameter),
         viaDrill: Value(board.rules.viaDrill),
+        padConnection: Value(board.rules.padConnection.name),
+        viaConnection: Value(board.rules.viaConnection.name),
+        thermalGap: Value(board.rules.thermalGap),
+        thermalSpoke: Value(board.rules.thermalSpoke),
         trackWidths: Value(_encodeWidths(board.trackWidths)),
         viaSizes: Value(_encodeViaSizes(board.viaSizes)),
         gridMm: Value(board.gridMm),
@@ -131,6 +135,22 @@ class BoardRepository {
   }
 
   Future<void> updatePlacement(PlacedFootprintRef footprint) async {
+    // A mounting hole, fiducial or test point moves the same way a part's
+    // footprint does, so the editor need not know which it is holding.
+    if (BoardFeature.isFeatureId(footprint.id)) {
+      await (_db.update(_db.boardFeatures)
+            ..where((t) => t.id.equals(BoardFeature.featureIdOf(footprint.id))))
+          .write(
+            BoardFeaturesCompanion(
+              x: Value(footprint.x),
+              y: Value(footprint.y),
+              rotation: Value(footprint.rotation),
+              back: Value(footprint.flipped),
+              placed: Value(footprint.placed),
+            ),
+          );
+      return;
+    }
     await (_db.update(
       _db.boardFootprints,
     )..where((t) => t.id.equals(footprint.id))).write(
@@ -647,6 +667,11 @@ class BoardRepository {
     String netName = '',
     double clearance = 0.5,
     double minThickness = 0.25,
+    int priority = 0,
+    PadConnection padConnection = PadConnection.thermal,
+    PadConnection viaConnection = PadConnection.solid,
+    double thermalGap = 0.5,
+    double thermalSpoke = 0.5,
   }) async {
     final id = newId();
     await _db
@@ -661,6 +686,11 @@ class BoardRepository {
             points: Value(_encodePoints(points)),
             clearance: Value(clearance),
             minThickness: Value(minThickness),
+            priority: Value(priority),
+            padConnection: Value(padConnection.name),
+            viaConnection: Value(viaConnection.name),
+            thermalGap: Value(thermalGap),
+            thermalSpoke: Value(thermalSpoke),
             createdAt: DateTime.now(),
           ),
         );
@@ -673,6 +703,11 @@ class BoardRepository {
       netName: netName,
       clearance: clearance,
       minThickness: minThickness,
+      priority: priority,
+      padConnection: padConnection,
+      viaConnection: viaConnection,
+      thermalGap: thermalGap,
+      thermalSpoke: thermalSpoke,
     );
   }
 
@@ -687,6 +722,11 @@ class BoardRepository {
         points: Value(_encodePoints(zone.points)),
         clearance: Value(zone.clearance),
         minThickness: Value(zone.minThickness),
+        priority: Value(zone.priority),
+        padConnection: Value(zone.padConnection.name),
+        viaConnection: Value(zone.viaConnection.name),
+        thermalGap: Value(zone.thermalGap),
+        thermalSpoke: Value(zone.thermalSpoke),
       ),
     );
   }
@@ -708,10 +748,199 @@ class BoardRepository {
             points: Value(_encodePoints(zone.points)),
             clearance: Value(zone.clearance),
             minThickness: Value(zone.minThickness),
+            priority: Value(zone.priority),
+            padConnection: Value(zone.padConnection.name),
+            viaConnection: Value(zone.viaConnection.name),
+            thermalGap: Value(zone.thermalGap),
+            thermalSpoke: Value(zone.thermalSpoke),
             createdAt: DateTime.now(),
           ),
           mode: InsertMode.insertOrReplace,
         );
+  }
+
+  // --- mounting holes, fiducials, test points -------------------------
+
+  Future<List<BoardFeature>> getFeatures(String projectId) async {
+    final rows =
+        await (_db.select(_db.boardFeatures)
+              ..where((t) => t.projectId.equals(projectId))
+              ..orderBy([(t) => OrderingTerm(expression: t.createdAt)]))
+            .get();
+    return rows.map(_toFeature).toList();
+  }
+
+  Stream<List<BoardFeature>> watchFeatures(String projectId) =>
+      _db.watchAggregate({_db.boardFeatures}, () => getFeatures(projectId));
+
+  /// The next free designator for [kind]: H1, H2 … FID1 … TP1.
+  Future<String> nextFeatureReference(
+    String projectId,
+    BoardFeatureKind kind,
+  ) async {
+    final taken = {
+      for (final f in await getFeatures(projectId))
+        if (f.kind == kind) f.reference,
+    };
+    var n = 1;
+    while (taken.contains('${kind.prefix}$n')) {
+      n++;
+    }
+    return '${kind.prefix}$n';
+  }
+
+  Future<BoardFeature> addFeature({
+    required String projectId,
+    required BoardFeatureKind kind,
+    required double x,
+    required double y,
+    double? size,
+    bool plated = false,
+    String? netId,
+    String netName = '',
+    bool back = false,
+  }) async {
+    final feature = BoardFeature(
+      id: newId(),
+      projectId: projectId,
+      kind: kind,
+      reference: await nextFeatureReference(projectId, kind),
+      x: x,
+      y: y,
+      back: back,
+      size: size ?? BoardFeature.defaultSize(kind),
+      plated: plated,
+      netId: netId,
+      netName: netName,
+    );
+    await restoreFeature(feature);
+    return feature;
+  }
+
+  /// Writes [feature] exactly, adding it if it is not there.
+  Future<void> restoreFeature(BoardFeature feature) async {
+    await _db
+        .into(_db.boardFeatures)
+        .insert(
+          BoardFeaturesCompanion.insert(
+            id: feature.id,
+            projectId: feature.projectId,
+            kind: feature.kind.name,
+            reference: feature.reference,
+            x: Value(feature.x),
+            y: Value(feature.y),
+            rotation: Value(feature.rotation),
+            back: Value(feature.back),
+            size: Value(feature.size),
+            plated: Value(feature.plated),
+            netId: Value(feature.netId),
+            netName: Value(feature.netName),
+            placed: Value(feature.placed),
+            createdAt: DateTime.now(),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+  }
+
+  Future<void> updateFeature(BoardFeature feature) async {
+    await (_db.update(
+      _db.boardFeatures,
+    )..where((t) => t.id.equals(feature.id))).write(
+      BoardFeaturesCompanion(
+        reference: Value(feature.reference),
+        x: Value(feature.x),
+        y: Value(feature.y),
+        rotation: Value(feature.rotation),
+        back: Value(feature.back),
+        size: Value(feature.size),
+        plated: Value(feature.plated),
+        netId: Value(feature.netId),
+        netName: Value(feature.netName),
+        placed: Value(feature.placed),
+      ),
+    );
+  }
+
+  Future<void> deleteFeature(String id) async {
+    await (_db.delete(_db.boardFeatures)..where((t) => t.id.equals(id))).go();
+  }
+
+  static BoardFeature _toFeature(BoardFeatureRow row) => BoardFeature(
+    id: row.id,
+    projectId: row.projectId,
+    kind: BoardFeatureKind.byName(row.kind),
+    reference: row.reference,
+    x: row.x,
+    y: row.y,
+    rotation: row.rotation,
+    back: row.back,
+    size: row.size,
+    plated: row.plated,
+    netId: row.netId,
+    netName: row.netName,
+    placed: row.placed,
+  );
+
+  // --- dimensions -------------------------------------------------------
+
+  Future<List<BoardDimension>> getDimensions(String projectId) async {
+    final rows =
+        await (_db.select(_db.boardDimensions)
+              ..where((t) => t.projectId.equals(projectId))
+              ..orderBy([(t) => OrderingTerm(expression: t.createdAt)]))
+            .get();
+    return [
+      for (final row in rows)
+        BoardDimension(
+          id: row.id,
+          projectId: row.projectId,
+          start: Offset(row.x1, row.y1),
+          end: Offset(row.x2, row.y2),
+          offset: row.offset,
+        ),
+    ];
+  }
+
+  Stream<List<BoardDimension>> watchDimensions(String projectId) =>
+      _db.watchAggregate({_db.boardDimensions}, () => getDimensions(projectId));
+
+  Future<BoardDimension> addDimension({
+    required String projectId,
+    required Offset start,
+    required Offset end,
+    double offset = 3,
+  }) async {
+    final dimension = BoardDimension(
+      id: newId(),
+      projectId: projectId,
+      start: start,
+      end: end,
+      offset: offset,
+    );
+    await restoreDimension(dimension);
+    return dimension;
+  }
+
+  Future<void> restoreDimension(BoardDimension d) async {
+    await _db
+        .into(_db.boardDimensions)
+        .insert(
+          BoardDimensionsCompanion.insert(
+            id: d.id,
+            projectId: d.projectId,
+            x1: d.start.dx,
+            y1: d.start.dy,
+            x2: d.end.dx,
+            y2: d.end.dy,
+            offset: Value(d.offset),
+            createdAt: DateTime.now(),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+  }
+
+  Future<void> deleteDimension(String id) async {
+    await (_db.delete(_db.boardDimensions)..where((t) => t.id.equals(id))).go();
   }
 
   static BoardEdge _toEdge(BoardEdgeRow row) => BoardEdge(
@@ -734,6 +963,11 @@ class BoardRepository {
     netName: row.netName,
     clearance: row.clearance,
     minThickness: row.minThickness,
+    priority: row.priority,
+    padConnection: PadConnection.byName(row.padConnection),
+    viaConnection: PadConnection.byName(row.viaConnection),
+    thermalGap: row.thermalGap,
+    thermalSpoke: row.thermalSpoke,
   );
 
   /// Track widths as plain millimetres separated by spaces.
@@ -799,6 +1033,10 @@ class BoardRepository {
       clearance: row.clearance,
       viaDiameter: row.viaDiameter,
       viaDrill: row.viaDrill,
+      padConnection: PadConnection.byName(row.padConnection),
+      viaConnection: PadConnection.byName(row.viaConnection),
+      thermalGap: row.thermalGap,
+      thermalSpoke: row.thermalSpoke,
     ),
     trackWidths: _decodeWidths(row.trackWidths),
     viaSizes: _decodeViaSizes(row.viaSizes),

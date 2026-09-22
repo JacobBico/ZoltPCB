@@ -25,7 +25,11 @@ class SchematicNote {
     required this.position,
     this.size = const Size(0, 0),
     this.textSize = defaultTextSize,
+    this.sheetId,
   });
+
+  /// The sub-sheet the note is on; null for the top sheet.
+  final String? sheetId;
 
   /// KiCad's own default text height, in millimetres.
   static const defaultTextSize = 1.27;
@@ -93,6 +97,7 @@ class SchematicNote {
     position: position ?? this.position,
     size: size ?? this.size,
     textSize: textSize ?? this.textSize,
+    sheetId: sheetId,
   );
 
   @override

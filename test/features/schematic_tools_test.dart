@@ -552,4 +552,87 @@ void main() {
     );
     expect(saved.levelOf(ErcRule.unconnectedPin), ErcLevel.ignore);
   });
+
+  testAppWithStorage('a selected op-amp swaps its gates, and undoes', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final project = await ProjectRepository(db).create(name: 'Gates');
+    final parts = PartRepository(db);
+    final nets = NetRepository(db);
+    // Two gates drawn alike: inputs on the left, output on the right.
+    NewPinSpec gatePin(
+      String number,
+      String name,
+      int unit,
+      double x,
+      double y,
+      PinElectricalType type,
+    ) => NewPinSpec(
+      number: number,
+      name: name,
+      electricalType: type,
+      unit: unit,
+      x: x,
+      y: y,
+      angle: x < 0 ? 0 : 180,
+    );
+    final u1 = await parts.addPart(
+      project.id,
+      NewPartSpec(
+        libId: 'Test:DualOpamp',
+        value: 'Dual',
+        referencePrefix: 'U',
+        unitCount: 2,
+        pins: [
+          gatePin('3', '+', 1, -7.62, -2.54, PinElectricalType.input),
+          gatePin('2', '-', 1, -7.62, 2.54, PinElectricalType.input),
+          gatePin('1', '~', 1, 7.62, 0, PinElectricalType.output),
+          gatePin('5', '+', 2, -7.62, -2.54, PinElectricalType.input),
+          gatePin('6', '-', 2, -7.62, 2.54, PinElectricalType.input),
+          gatePin('7', '~', 2, 7.62, 0, PinElectricalType.output),
+        ],
+      ),
+    );
+    final r1 = await parts.addPart(project.id, resistorSpec());
+    await parts.updateUnitPlacement(
+      u1.units[0].copyWith(x: 50.8, y: 50.8, placed: true),
+    );
+    await parts.updateUnitPlacement(
+      u1.units[1].copyWith(x: 101.6, y: 50.8, placed: true),
+    );
+    await parts.updateUnitPlacement(
+      r1.units.first.copyWith(x: 76.2, y: 88.9, placed: true),
+    );
+    final out = u1.pins.firstWhere((p) => p.number == '1');
+    final other = u1.pins.firstWhere((p) => p.number == '7');
+    await nets.connectPins(out.id, r1.pins.first.id);
+
+    await pumpApp(
+      tester,
+      Scaffold(body: SchematicPanel(project: project)),
+      database: db,
+      storage: storage,
+    );
+    await tester.tapAt(_screen(tester, const Offset(50.8, 50.8)));
+    await settleApp(tester);
+    await _tapAction(tester, 'Swap');
+    // Gates are offered first on a part that has them: A with B.
+    await tester.tap(find.byKey(const ValueKey('swap-ok')));
+    await settleApp(tester);
+
+    expect(await nets.netIdForPin(other.id), isNotNull);
+    expect(
+      await nets.netIdForPin(other.id),
+      await nets.netIdForPin(r1.pins.first.id),
+    );
+    expect(await nets.netIdForPin(out.id), isNull);
+
+    await _tapAction(tester, 'Undo');
+    expect(
+      await nets.netIdForPin(out.id),
+      await nets.netIdForPin(r1.pins.first.id),
+    );
+  });
 }

@@ -6,6 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/db/database.dart';
 import '../data/repositories/net_repository.dart';
+import '../data/repositories/pin_swap.dart';
+import '../data/repositories/active_sheet.dart';
+import '../data/repositories/sheet_repository.dart';
 import '../data/repositories/note_repository.dart';
 import '../data/repositories/saved_circuit_repository.dart';
 import '../data/repositories/part_repository.dart';
@@ -82,6 +85,98 @@ final ownLibraryStoreProvider = Provider<OwnLibraryStore>(
 );
 
 /// Opens KiCad projects made on a desktop.
+final sheetRepositoryProvider = Provider<SheetRepository>(
+  (ref) => SheetRepository(ref.watch(databaseProvider)),
+);
+
+/// A project's sub-sheets.
+final projectSheetsProvider =
+    StreamProvider.family<List<SchematicSheet>, String>(
+      (ref, projectId) =>
+          ref.watch(sheetRepositoryProvider).watchAll(projectId),
+      isAutoDispose: true,
+    );
+
+/// The sheet open in a project's schematic: null for the top sheet.
+final openSheetProvider = NotifierProvider.family<OpenSheet, String?, String>(
+  OpenSheet.new,
+);
+
+class OpenSheet extends Notifier<String?> {
+  OpenSheet(this.projectId);
+
+  final String projectId;
+
+  @override
+  String? build() => ActiveSheet.of(projectId);
+
+  void open(String? sheetId) {
+    ActiveSheet.set(projectId, sheetId);
+    state = sheetId;
+  }
+}
+
+/// The parts as the open sheet sees them: units placed on another sheet
+/// are left out. Units not yet placed anywhere stay, to be put down here.
+final sheetPartsProvider =
+    Provider.family<AsyncValue<List<PartWithDetails>>, String>((
+      ref,
+      projectId,
+    ) {
+      final sheet = ref.watch(openSheetProvider(projectId));
+      return ref
+          .watch(projectPartsProvider(projectId))
+          .whenData(
+            (parts) => [
+              for (final part in parts)
+                PartWithDetails(
+                  part: part.part,
+                  units: [
+                    for (final unit in part.units)
+                      if (!unit.placed || unit.sheetId == sheet) unit,
+                  ],
+                  pins: part.pins,
+                ),
+            ],
+          );
+    });
+
+/// The wires drawn on the open sheet.
+final sheetWiresProvider =
+    Provider.family<AsyncValue<List<SchematicWire>>, String>((ref, projectId) {
+      final sheet = ref.watch(openSheetProvider(projectId));
+      return ref
+          .watch(schematicWiresProvider(projectId))
+          .whenData(
+            (wires) => [
+              for (final wire in wires)
+                if (wire.sheetId == sheet) wire,
+            ],
+          );
+    });
+
+/// The notes on the open sheet.
+final sheetNotesProvider =
+    Provider.family<AsyncValue<List<SchematicNote>>, String>((ref, projectId) {
+      final sheet = ref.watch(openSheetProvider(projectId));
+      return ref
+          .watch(schematicNotesProvider(projectId))
+          .whenData(
+            (notes) => [
+              for (final note in notes)
+                if (note.sheetId == sheet) note,
+            ],
+          );
+    });
+
+/// Pin and gate swaps, with the schematic kept in step.
+final pinSwapperProvider = Provider<PinSwapper>(
+  (ref) => PinSwapper(
+    parts: ref.watch(partRepositoryProvider),
+    nets: ref.watch(netRepositoryProvider),
+  ),
+);
+
 final kicadImporterProvider = Provider<KicadProjectImporter>(
   (ref) => KicadProjectImporter(
     projects: ref.watch(projectRepositoryProvider),
@@ -90,6 +185,7 @@ final kicadImporterProvider = Provider<KicadProjectImporter>(
     boards: ref.watch(boardRepositoryProvider),
     symbols: ref.watch(symbolLibraryRepositoryProvider),
     footprints: ref.watch(footprintLibraryRepositoryProvider),
+    sheets: ref.watch(sheetRepositoryProvider),
   ),
 );
 
@@ -315,6 +411,8 @@ final boardSceneProvider = FutureProvider.family<BoardScene, String>((
   final zones = await ref.watch(boardZonesProvider(projectId).future);
   final texts = await ref.watch(boardTextsProvider(projectId).future);
   final netClasses = await ref.watch(netClassesProvider(projectId).future);
+  final features = await ref.watch(boardFeaturesProvider(projectId).future);
+  final dimensions = await ref.watch(boardDimensionsProvider(projectId).future);
 
   return BoardScene.build(
     board: board,
@@ -328,8 +426,25 @@ final boardSceneProvider = FutureProvider.family<BoardScene, String>((
     zones: zones,
     texts: texts,
     netClasses: netClasses,
+    features: features,
+    dimensions: dimensions,
   );
 }, isAutoDispose: true);
+
+/// The board's mounting holes, fiducials and test points.
+final boardFeaturesProvider = StreamProvider.family<List<BoardFeature>, String>(
+  (ref, projectId) =>
+      ref.watch(boardRepositoryProvider).watchFeatures(projectId),
+  isAutoDispose: true,
+);
+
+/// The board's dimension lines.
+final boardDimensionsProvider =
+    StreamProvider.family<List<BoardDimension>, String>(
+      (ref, projectId) =>
+          ref.watch(boardRepositoryProvider).watchDimensions(projectId),
+      isAutoDispose: true,
+    );
 
 /// The project's named net classes.
 final netClassesProvider = StreamProvider.family<List<NetClass>, String>(
@@ -452,6 +567,7 @@ final projectExporterProvider = Provider<ProjectExporter>(
     boards: ref.watch(boardRepositoryProvider),
     footprints: ref.watch(footprintLibraryRepositoryProvider),
     notes: ref.watch(noteRepositoryProvider),
+    sheets: ref.watch(sheetRepositoryProvider),
     outputDirectory: ref.watch(exportDirectoryProvider),
   ),
 );

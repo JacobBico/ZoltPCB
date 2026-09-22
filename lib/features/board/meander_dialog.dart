@@ -54,17 +54,21 @@ class _MeanderDialog extends StatefulWidget {
 class _MeanderDialogState extends State<_MeanderDialog> {
   TuneTarget _target = TuneTarget.add;
   final _value = TextEditingController(text: '5');
-  MeanderSide _side = MeanderSide.both;
-  MeanderCorner _corner = MeanderCorner.chamfered;
+  MeanderStyle _style = MeanderStyle.zigzag;
   String? _matchNetId;
 
+  /// Runs of the meander at least a track and a clearance apart: the
+  /// spacing that makes it fabricable.
   late final double _minSpacing =
       widget.track.width + widget.scene.clearanceFor(widget.track.netId);
-  late double _spacing = Meander.defaultSpacing(
-    widget.track.width,
-    widget.scene.clearanceFor(widget.track.netId),
-  );
-  late double _amplitude = math.max(1.0, _spacing * 2);
+  late double _spacing = _minSpacing;
+
+  /// How far the copper may bulge from the line. The solver spends this
+  /// before it adds more turns: big and few, or small and many.
+  late double _amplitude = math.max(1.0, _spacing * 4);
+
+  /// How round the zigzag's corners are.
+  late double _radius = math.min(0.8, _spacing);
 
   late final NetLength _current = NetLength.of(
     widget.scene,
@@ -127,17 +131,50 @@ class _MeanderDialogState extends State<_MeanderDialog> {
     }
   }
 
-  MeanderPlan? get _plan {
+  /// The tuner's answer for the segment, with its verdict.
+  TuningResult? get _tuning {
     final extra = _extra;
     if (extra == null) return null;
-    return Meander.plan(
-      a: Offset(widget.track.startX, widget.track.startY),
-      b: Offset(widget.track.endX, widget.track.endY),
-      extra: extra,
+    final a = Offset(widget.track.startX, widget.track.startY);
+    final b = Offset(widget.track.endX, widget.track.endY);
+    return MeanderEngine.tune(
+      route: [a, b],
+      targetLength: widget.track.lengthMm + extra,
+      psPerMm: _speed,
       maxAmplitude: _amplitude,
-      spacing: _spacing,
-      side: _side,
-      corner: _corner,
+      cornerRadius: _style == MeanderStyle.zigzag ? _radius : 0,
+      style: _style,
+      trackWidth: widget.track.width,
+      clearance: _spacing - widget.track.width,
+    );
+  }
+
+  /// What the board is given: the tuned segment, when there is one.
+  MeanderPlan? get _plan {
+    final tuning = _tuning;
+    if (tuning == null) return null;
+    final fit = tuning.fit;
+    final laid =
+        tuning.status == TuningStatus.matched ||
+        tuning.status == TuningStatus.short;
+    if (!laid || fit == null || tuning.addedMm <= 1e-6) {
+      return MeanderPlan(
+        points: const [],
+        added: 0,
+        loops: fit?.crossings ?? 0,
+        amplitude: fit?.amplitude ?? 0,
+        problem: tuning.reason.isEmpty ? tuning.status.label : tuning.reason,
+      );
+    }
+    final points = [...tuning.points];
+    // Exact ends, not ends rebuilt through a rotation.
+    points[0] = Offset(widget.track.startX, widget.track.startY);
+    points[points.length - 1] = Offset(widget.track.endX, widget.track.endY);
+    return MeanderPlan(
+      points: points,
+      added: tuning.addedMm,
+      loops: fit.crossings,
+      amplitude: fit.amplitude,
     );
   }
 
@@ -340,66 +377,40 @@ class _MeanderDialogState extends State<_MeanderDialog> {
             onChanged: (_) => setState(() {}),
           ),
         const SizedBox(height: 8),
+        SegmentedButton<MeanderStyle>(
+          key: const ValueKey('meander-style'),
+          showSelectedIcon: false,
+          style: const ButtonStyle(visualDensity: VisualDensity.compact),
+          segments: [
+            for (final style in MeanderStyle.values)
+              ButtonSegment(value: style, label: Text(style.label)),
+          ],
+          selected: {_style},
+          onSelectionChanged: (value) => setState(() => _style = value.first),
+        ),
+        const SizedBox(height: 6),
         _Slider(
-          label: 'Loop height',
+          label: 'Max height',
           value: _amplitude,
           min: math.max(0.2, _spacing / 2),
           max: 10,
           onChanged: (value) => setState(() => _amplitude = value),
         ),
         _Slider(
-          label: 'Loop spacing',
+          label: 'Spacing',
           value: _spacing,
           min: _minSpacing,
           max: math.max(_minSpacing + 0.1, 5),
           onChanged: (value) => setState(() => _spacing = value),
         ),
-        const SizedBox(height: 4),
-        Row(
-          children: [
-            Expanded(
-              child: SegmentedButton<MeanderSide>(
-                showSelectedIcon: false,
-                style: const ButtonStyle(visualDensity: VisualDensity.compact),
-                segments: const [
-                  ButtonSegment(
-                    value: MeanderSide.both,
-                    tooltip: 'Both sides',
-                    icon: Icon(Icons.unfold_more, size: 18),
-                  ),
-                  ButtonSegment(
-                    value: MeanderSide.left,
-                    tooltip: 'Left of the track',
-                    icon: Icon(Icons.north, size: 18),
-                  ),
-                  ButtonSegment(
-                    value: MeanderSide.right,
-                    tooltip: 'Right of the track',
-                    icon: Icon(Icons.south, size: 18),
-                  ),
-                ],
-                selected: {_side},
-                onSelectionChanged: (value) =>
-                    setState(() => _side = value.first),
-              ),
-            ),
-            const SizedBox(width: 8),
-            SegmentedButton<MeanderCorner>(
-              showSelectedIcon: false,
-              style: const ButtonStyle(visualDensity: VisualDensity.compact),
-              segments: const [
-                ButtonSegment(
-                  value: MeanderCorner.chamfered,
-                  label: Text('45°'),
-                ),
-                ButtonSegment(value: MeanderCorner.square, label: Text('90°')),
-              ],
-              selected: {_corner},
-              onSelectionChanged: (value) =>
-                  setState(() => _corner = value.first),
-            ),
-          ],
-        ),
+        if (_style == MeanderStyle.zigzag)
+          _Slider(
+            label: 'Rounding',
+            value: _radius,
+            min: 0,
+            max: math.max(0.05, _spacing),
+            onChanged: (value) => setState(() => _radius = value),
+          ),
       ],
     );
   }
@@ -434,9 +445,10 @@ class _MeanderDialogState extends State<_MeanderDialog> {
       _ => (
         Icons.check_circle_outline,
         KicadPalette.success,
-        '+${_fmt(plan.added)} mm in ${plan.loops} '
-            'loop${plan.loops == 1 ? '' : 's'}, ${_fmt(plan.amplitude)} mm '
-            'high · net ${_fmt(_current.length + plan.added)} mm, '
+        '${_tuning?.status.label ?? 'Matched'} · +${_fmt(plan.added)} mm, '
+            '${plan.loops} crossing${plan.loops == 1 ? '' : 's'}, '
+            '${_fmt(plan.amplitude)} mm high · net '
+            '${_fmt(_current.length + plan.added)} mm, '
             '${_fmt(_current.delayPs + plan.added * _speed, 0)} ps',
       ),
     };
@@ -692,4 +704,198 @@ class _MeanderPreview extends CustomPainter {
       old.clashes.length != clashes.length ||
       old.amplitude != amplitude ||
       old.spacing != spacing;
+}
+
+/// The shape the Route tool's Meander setting draws, set live.
+///
+/// Deliberately not the tuning dialog: there is no target here and nothing
+/// to solve. You pick how tall the loops are and how close together, watch
+/// what a millimetre of run turns into, and route. The length you get is
+/// read off the run as you draw it.
+Future<MeanderShape?> showMeanderShapeSheet(
+  BuildContext context, {
+  required MeanderShape shape,
+  required double trackWidth,
+  required double clearance,
+}) => showModalBottomSheet<MeanderShape>(
+  context: context,
+  backgroundColor: KicadPalette.surface,
+  isScrollControlled: true,
+  builder: (sheet) => _MeanderShapeSheet(
+    shape: shape,
+    trackWidth: trackWidth,
+    clearance: clearance,
+  ),
+);
+
+class _MeanderShapeSheet extends StatefulWidget {
+  const _MeanderShapeSheet({
+    required this.shape,
+    required this.trackWidth,
+    required this.clearance,
+  });
+
+  final MeanderShape shape;
+  final double trackWidth;
+  final double clearance;
+
+  @override
+  State<_MeanderShapeSheet> createState() => _MeanderShapeSheetState();
+}
+
+class _MeanderShapeSheetState extends State<_MeanderShapeSheet> {
+  late MeanderShape _shape = widget.shape;
+
+  /// Runs closer together than a track and a clearance would short.
+  double get _minPitch =>
+      math.max(0.3, (widget.trackWidth + widget.clearance) * 2);
+
+  /// What ten millimetres of run becomes, which is the only number that
+  /// says what these two sliders actually do.
+  double get _perTen {
+    const span = 10.0;
+    final points = MeanderEngine.serpentine(span, _shape);
+    return MeanderEngine.polylineLength(points) - span;
+  }
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Meander',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              for (final style in MeanderStyle.values)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    key: ValueKey('meander-style-${style.name}'),
+                    label: Text(style.label),
+                    selected: _shape.style == style,
+                    onSelected: (_) =>
+                        setState(() => _shape = _shape.copyWith(style: style)),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          SizedBox(
+            height: 64,
+            child: CustomPaint(
+              painter: _ShapePainter(_shape),
+              size: const Size(double.infinity, 64),
+            ),
+          ),
+          _Slider(
+            label: 'Height',
+            value: _shape.amplitude,
+            min: 0.2,
+            max: 6,
+            onChanged: (v) => setState(() => _shape = _shape.copyWith(
+              amplitude: v,
+            )),
+          ),
+          _Slider(
+            label: 'Spacing',
+            value: _shape.pitch,
+            min: _minPitch,
+            max: 6,
+            onChanged: (v) =>
+                setState(() => _shape = _shape.copyWith(pitch: v)),
+          ),
+          if (_shape.style == MeanderStyle.zigzag)
+            _Slider(
+              label: 'Roundness',
+              value: _shape.cornerRadius,
+              min: 0,
+              max: 3,
+              onChanged: (v) =>
+                  setState(() => _shape = _shape.copyWith(cornerRadius: v)),
+            ),
+          Text(
+            '10 mm of run becomes ${(10 + _perTen).toStringAsFixed(1)} mm '
+            '— ${_perTen.toStringAsFixed(1)} mm added',
+            key: const ValueKey('meander-per-ten'),
+            style: TextStyle(fontSize: 12, color: KicadPalette.textSecondary),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('CANCEL'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(_shape),
+                child: const Text('USE'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// Ten millimetres of run, drawn as the loops would be.
+class _ShapePainter extends CustomPainter {
+  _ShapePainter(this.shape);
+
+  final MeanderShape shape;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const span = 10.0;
+    final points = MeanderEngine.serpentine(span, shape);
+    var top = 0.0;
+    for (final p in points) {
+      top = math.max(top, p.dy.abs());
+    }
+    final scale = math.min(
+      size.width / span,
+      top < 0.05 ? size.height : size.height / (top * 2.4),
+    );
+    final centre = Offset(
+      (size.width - span * scale) / 2,
+      size.height / 2,
+    );
+    final path = Path();
+    for (var i = 0; i < points.length; i++) {
+      final at = centre + points[i] * scale;
+      if (i == 0) {
+        path.moveTo(at.dx, at.dy);
+      } else {
+        path.lineTo(at.dx, at.dy);
+      }
+    }
+    canvas
+      ..drawLine(
+        Offset(centre.dx, size.height / 2),
+        Offset(centre.dx + span * scale, size.height / 2),
+        Paint()
+          ..color = KicadPalette.textSecondary.withValues(alpha: 0.3)
+          ..strokeWidth = 1,
+      )
+      ..drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..strokeJoin = StrokeJoin.round
+          ..color = BoardPainter.colorFor(CopperLayer.front),
+      );
+  }
+
+  @override
+  bool shouldRepaint(_ShapePainter old) => old.shape != shape;
 }

@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hintpcb/data/db/database.dart';
 import 'package:hintpcb/data/export/project_exporter.dart';
+import 'package:hintpcb/data/repositories/board_repository.dart';
+import 'package:hintpcb/data/repositories/footprint_library_repository.dart';
 import 'package:hintpcb/data/repositories/net_repository.dart';
 import 'package:hintpcb/data/repositories/part_repository.dart';
 import 'package:hintpcb/data/repositories/project_repository.dart';
@@ -243,5 +245,42 @@ void main() {
       expect(preview.noConnectPinCount, 1);
       expect(preview.unconnectedPinCount, 1);
     });
+  });
+
+  test('a board footprint no library has stops the export, by name', () async {
+    final boards = BoardRepository(db);
+    final withBoard = ProjectExporter(
+      projects: projects,
+      parts: parts,
+      nets: nets,
+      libraries: libraries,
+      outputDirectory: output,
+      boards: boards,
+      footprints: FootprintLibraryRepository(db, InMemoryLibraryStorage()),
+    );
+    final r1 = await parts.addPart(project.id, resistorSpec());
+    final ref = await boards.assignFootprint(
+      projectId: project.id,
+      partId: r1.part.id,
+      libId: 'Gone:Missing',
+    );
+    await boards.updatePlacement(ref.copyWith(x: 10, y: 10, placed: true));
+
+    // Written anyway, the board and the Gerbers would be missing R1.
+    for (final export in [
+      () => withBoard.exportBoard(project.id),
+      () => withBoard.exportFabrication(project.id),
+    ]) {
+      await expectLater(
+        export(),
+        throwsA(
+          isA<ExportException>().having(
+            (e) => e.message,
+            'message',
+            contains('R1 (Gone:Missing)'),
+          ),
+        ),
+      );
+    }
   });
 }

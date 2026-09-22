@@ -131,6 +131,7 @@ class ProjectArchiver {
   /// end, and a backup is of the design, not of its history.
   static const _tables = [
     'projects',
+    'schematic_sheets',
     'parts',
     'part_units',
     'part_pins',
@@ -148,6 +149,8 @@ class ProjectArchiver {
     'board_edges',
     'board_zones',
     'board_texts',
+    'board_features',
+    'board_dimensions',
   ];
 
   /// How each table is reached from the project id.

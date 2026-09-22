@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../core/theme/kicad_palette.dart';
 import '../../data/repositories/saved_circuit_repository.dart';
+import '../libraries/kicad_download_dialog.dart';
 import '../../domain/symbols/symbols.dart';
 
 /// The component picker that slides in over the schematic.
@@ -104,11 +105,12 @@ class _ComponentSidebarState extends ConsumerState<ComponentSidebar> {
                     }
                     final results = snapshot.data;
                     if (results == null) return const SizedBox.shrink();
+                    if (results.isEmpty && libraries.isEmpty) {
+                      return _noLibraries();
+                    }
                     if (results.isEmpty) {
                       return _message(
-                        libraries.isEmpty
-                            ? 'Import a .kicad_sym library first.'
-                            : _starter
+                        _starter
                             ? 'No microcontrollers. Import one of KiCad\'s '
                                   'MCU_ libraries.'
                             : 'Nothing matches.',
@@ -267,6 +269,32 @@ class _ComponentSidebarState extends ConsumerState<ComponentSidebar> {
     if (confirmed != true) return;
     await ref.read(savedCircuitRepositoryProvider).delete(circuit.id);
   }
+
+  /// Nothing to search yet: the way to get parts, right here.
+  Widget _noLibraries() => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'No component libraries yet.',
+            textAlign: TextAlign.center,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: KicadPalette.textDisabled),
+          ),
+          const SizedBox(height: 10),
+          FilledButton.icon(
+            key: const ValueKey('sidebar-kicad-download'),
+            onPressed: () => showKicadLibraryDownload(context),
+            icon: const Icon(Icons.cloud_download_outlined, size: 18),
+            label: const Text('DOWNLOAD FROM KICAD'),
+          ),
+        ],
+      ),
+    ),
+  );
 
   Widget _message(String text) => Center(
     child: Padding(

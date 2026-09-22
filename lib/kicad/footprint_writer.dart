@@ -131,5 +131,6 @@ abstract final class FootprintWriter {
     ]),
     if (pad.shape == PadShape.roundrect)
       S.of('roundrect_rratio', [pad.roundrectRatio]),
+    if (pad.maskMargin != 0) S.of('solder_mask_margin', [pad.maskMargin]),
   ]);
 }

@@ -16,6 +16,7 @@ class Courtyard {
     required this.footprint,
     required this.back,
     required this.outlines,
+    this.drawn = true,
   });
 
   final PlacedFootprint footprint;
@@ -26,6 +27,10 @@ class Courtyard {
   /// Closed outlines, in board millimetres. Usually one rectangle; an
   /// L-shaped connector may draw its courtyard as two.
   final List<List<Offset>> outlines;
+
+  /// Whether the footprint's author actually drew this, or it is the body
+  /// of the part standing in for a courtyard nobody drew.
+  final bool drawn;
 
   String get reference => footprint.part.reference;
 
@@ -58,6 +63,59 @@ class Courtyard {
   static List<Courtyard> of(BoardScene scene) => [
     for (final footprint in scene.footprints) ...forFootprint(footprint),
   ];
+
+  /// The ground every placed part claims, whether or not its author drew a
+  /// courtyard.
+  ///
+  /// A footprint with no courtyard on it falls back to the box round its
+  /// body. That is not what a fabricator means by a courtyard and it is not
+  /// what the rule check treats as one — but a part with no courtyard drawn
+  /// is otherwise a part that can be dropped straight on top of another
+  /// with nothing said, and plenty of hand-made footprints have no
+  /// courtyard on them.
+  static List<Courtyard> claims(BoardScene scene) => [
+    for (final footprint in scene.footprints)
+      if (forFootprint(footprint) case final drawn when drawn.isNotEmpty)
+        ...drawn
+      else
+        Courtyard(
+          footprint: footprint,
+          back: footprint.ref.flipped,
+          drawn: false,
+          outlines: [
+            [
+              footprint.bounds.topLeft,
+              footprint.bounds.topRight,
+              footprint.bounds.bottomRight,
+              footprint.bounds.bottomLeft,
+            ],
+          ],
+        ),
+  ];
+
+  /// Which of those claims are on ground another part has already claimed.
+  ///
+  /// What the board draws in red while a part is being moved: the answer
+  /// has to be there before the part is put down, not afterwards in a
+  /// rule check.
+  static List<Courtyard> collisions(BoardScene scene) {
+    final claimed = claims(scene);
+    final hit = <int>{};
+    for (var i = 0; i < claimed.length; i++) {
+      for (var j = i + 1; j < claimed.length; j++) {
+        if (claimed[i].footprint.ref.id == claimed[j].footprint.ref.id) {
+          continue;
+        }
+        if (!claimed[i].overlaps(claimed[j])) continue;
+        hit
+          ..add(i)
+          ..add(j);
+      }
+    }
+    return [
+      for (final i in hit.toList()..sort()) claimed[i],
+    ];
+  }
 
   static List<Courtyard> forFootprint(PlacedFootprint footprint) {
     final definition = footprint.definition;

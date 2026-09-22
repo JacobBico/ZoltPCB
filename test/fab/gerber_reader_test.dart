@@ -7,10 +7,13 @@ BoardScene _scene({
   List<Track> tracks = const [],
   List<Via> vias = const [],
   List<BoardZone> zones = const [],
+  List<BoardEdge> edges = const [],
+  BoardOutlineKind outline = BoardOutlineKind.rectangle,
 }) => BoardScene(
   board: Board(
     id: 'b',
     projectId: 'p',
+    outlineKind: outline,
     outlineX: 0,
     outlineY: 0,
     outlineWidth: 40,
@@ -26,6 +29,7 @@ BoardScene _scene({
   ratsnest: const [],
   unplaced: const [],
   zones: zones,
+  edges: edges,
 );
 
 String _file(BoardScene scene, String suffix) => FabricationWriter.write(
@@ -92,7 +96,11 @@ void main() {
       ],
     );
     final image = GerberReader.parse(_file(scene, '-F_Cu.gbr'));
-    final region = image.shapes.whereType<GerberRegion>().single;
+    // The pour itself; the other region clears everything off the board.
+    final region = image.shapes
+        .whereType<GerberRegion>()
+        .where((r) => !r.clear)
+        .single;
     expect(region.points, hasLength(4));
     expect(region.points[2], const Offset(40, 30));
     expect(image.shapes.where((s) => s.clear), isNotEmpty);
@@ -107,6 +115,50 @@ void main() {
     expect(bounds.left, closeTo(0, 0.05));
     expect(bounds.right, closeTo(40, 0.05));
     expect(bounds.bottom, closeTo(30, 0.05));
+  });
+
+  test('a round board and a curved cut go out as true arcs', () {
+    final text = _file(
+      _scene(
+        outline: BoardOutlineKind.circle,
+        edges: const [
+          // A quarter arc from (30,15) through the top-right to (20,5),
+          // round the centre (20,15).
+          BoardEdge(
+            id: 'e',
+            projectId: 'p',
+            kind: BoardEdgeKind.arc,
+            points: [
+              Offset(30, 15),
+              Offset(27.0710678, 7.9289322),
+              Offset(20, 5),
+            ],
+          ),
+        ],
+      ),
+      '-Edge_Cuts.gbr',
+    );
+    // Arcs, not flats: the file says G02/G03 with a centre offset.
+    expect(text, contains('G75*'));
+    expect(RegExp(r'I-?\d+J-?\d+D01\*').allMatches(text), hasLength(2));
+
+    final strokes = GerberReader.parse(
+      text,
+    ).shapes.whereType<GerberStroke>().toList();
+    expect(strokes, hasLength(2));
+    // The outline: a 30 mm circle in the 40 x 30 box, every point on it.
+    for (final p in strokes[0].points) {
+      expect((p - const Offset(20, 15)).distance, closeTo(15, 1e-4));
+    }
+    expect(strokes[0].points.first, strokes[0].points.last);
+    // The cut: every point radius 10 from its centre, and on the side the
+    // middle point said — up and to the right, not the long way round.
+    for (final p in strokes[1].points) {
+      expect((p - const Offset(20, 15)).distance, closeTo(10, 1e-4));
+      expect(p.dx, greaterThanOrEqualTo(20 - 1e-6));
+      expect(p.dy, lessThanOrEqualTo(15 + 1e-6));
+    }
+    expect(strokes[1].points.last, const Offset(20, 5));
   });
 
   test('drill holes read back where they were', () {

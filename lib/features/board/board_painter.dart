@@ -26,7 +26,10 @@ class BoardPainter extends CustomPainter {
     this.pendingRoute = const [],
     this.pendingLayer,
     this.pendingWidth,
+    this.pendingClearance,
+    this.pendingBus = const [],
     this.routeClashes = const [],
+    this.collisions = const [],
     this.showRatsnest = true,
     this.showOutlineGrips = false,
     this.draggingOutline = false,
@@ -78,8 +81,19 @@ class BoardPainter extends CustomPainter {
   /// Width the route will be laid at; the design rule when null.
   final double? pendingWidth;
 
+  /// The clearance the route being drawn keeps, shown as a halo round it.
+  final double? pendingClearance;
+
+  /// The tracks a bus being drawn will lay, one run of corners each.
+  final List<List<Offset>> pendingBus;
+
   /// Where the route being drawn is too close to other copper.
   final List<RouteClash> routeClashes;
+
+  /// Parts standing on ground another part has already claimed. Drawn in
+  /// red over everything, so a part dropped on another says so while it is
+  /// still on the crosshair rather than in a rule check later.
+  final List<Courtyard> collisions;
 
   final bool showRatsnest;
 
@@ -130,7 +144,9 @@ class BoardPainter extends CustomPainter {
     _paintVias(canvas);
 
     _paintFootprints(canvas);
+    _paintCollisions(canvas);
     _paintTexts(canvas);
+    _paintDimensions(canvas);
     if (showRatsnest) _paintRatsnest(canvas);
     _paintPendingRoute(canvas);
   }
@@ -473,13 +489,71 @@ class BoardPainter extends CustomPainter {
       ..[13] = origin.dy;
   }
 
-  /// Copper pours, drawn as a translucent wash with a hatched edge.
+  /// Pour fills worked out once per scene, not once per frame: panning
+  /// repaints constantly, and the board does not change while it does.
+  static final _pourCache = Expando<Map<CopperLayer, PourPlan>>();
+
+  PourPlan _pourPlan(CopperLayer layer) => (_pourCache[scene] ??= {})
+      .putIfAbsent(layer, () => PourFill.plan(scene, layer));
+
+  /// Copper pours: the real fill, translucent, with the outline drawn over.
   ///
   /// Not solid. A pour covers most of the board, and a solid one would hide
   /// every track under it — which is exactly the thing you are looking at
   /// when you have a pour. KiCad hatches them for the same reason.
   void _paintZones(Canvas canvas) {
     if (scene.zones.isEmpty) return;
+
+    // The fill itself, as it will be made: each layer's pour steps drawn
+    // into a layer of their own, where the clear steps erase. The whole
+    // layer is then laid down translucent so the tracks stay readable.
+    for (final layer in scene.board.copperLayers.reversed) {
+      final plan = _pourPlan(layer);
+      if (plan.isEmpty) continue;
+      final onActive = layer == activeLayer;
+      canvas.saveLayer(
+        null,
+        Paint()..color = Color.fromRGBO(0, 0, 0, onActive ? 0.32 : 0.12),
+      );
+      final matrix = _toScreenMatrix();
+      final scale = viewport.pixelsPerMm;
+      final ink = Paint()..color = colorFor(layer);
+      final erase = Paint()..blendMode = BlendMode.clear;
+      for (final step in plan.steps) {
+        final paint = step.clear ? erase : ink;
+        switch (step.shape) {
+          case PourRegion(:final points, :final hole):
+            final path = Path()..fillType = PathFillType.evenOdd;
+            path.addPolygon(points, true);
+            if (hole != null) path.addPolygon(hole, true);
+            canvas.drawPath(path.transform(matrix), paint);
+          case PourStroke(:final points, :final width, :final closed):
+            final path = Path()..addPolygon(points, closed);
+            canvas.drawPath(
+              path.transform(matrix),
+              Paint()
+                ..blendMode = paint.blendMode
+                ..color = paint.color
+                ..style = PaintingStyle.stroke
+                ..strokeCap = StrokeCap.round
+                ..strokeJoin = StrokeJoin.round
+                ..strokeWidth = width * scale,
+            );
+          case PourPad(:final pad, :final grow):
+            canvas.drawPath(
+              PourFill.padPath(pad, grow).transform(matrix),
+              paint,
+            );
+          case PourDisc(:final centre, :final diameter):
+            canvas.drawCircle(
+              viewport.toScreen(centre),
+              diameter / 2 * scale,
+              paint,
+            );
+        }
+      }
+      canvas.restore();
+    }
 
     for (final zone in scene.zones) {
       if (!zone.isValid) continue;
@@ -490,10 +564,6 @@ class BoardPainter extends CustomPainter {
       final selected = zone.id == selectedZoneId;
 
       final path = zone.path.transform(_toScreenMatrix());
-      canvas.drawPath(
-        path,
-        Paint()..color = base.withValues(alpha: onActive ? 0.18 : 0.08),
-      );
       canvas.drawPath(
         path,
         Paint()
@@ -515,6 +585,66 @@ class BoardPainter extends CustomPainter {
           size: 10,
         );
       }
+    }
+  }
+
+  /// Dimension lines, drawn the way a drawing office would: extension
+  /// lines from the measured points, the line between them with arrows at
+  /// both ends, and the length above it.
+  void _paintDimensions(Canvas canvas) {
+    if (scene.dimensions.isEmpty) return;
+    final colour = KicadPalette.textSecondary;
+    final line = Paint()
+      ..color = colour
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+    for (final d in scene.dimensions) {
+      if (d.length < 1e-6) continue;
+      final (a, b) = d.line;
+      final sa = viewport.toScreen(a);
+      final sb = viewport.toScreen(b);
+      // Extension lines, from just clear of the part to just past the line.
+      final gap = d.normal * (d.offset.sign * 0.5);
+      final over = d.normal * (d.offset.sign * 0.8);
+      canvas
+        ..drawLine(
+          viewport.toScreen(d.start + gap),
+          viewport.toScreen(a + over),
+          line,
+        )
+        ..drawLine(
+          viewport.toScreen(d.end + gap),
+          viewport.toScreen(b + over),
+          line,
+        )
+        ..drawLine(sa, sb, line);
+      // Arrowheads, pointing outwards to the extension lines.
+      final along = sb - sa;
+      final unit = along / along.distance;
+      final side = Offset(-unit.dy, unit.dx);
+      for (final (tip, back) in [(sa, unit), (sb, -unit)]) {
+        canvas.drawPath(
+          Path()
+            ..moveTo(tip.dx, tip.dy)
+            ..lineTo(
+              (tip + back * 8 + side * 3).dx,
+              (tip + back * 8 + side * 3).dy,
+            )
+            ..lineTo(
+              (tip + back * 8 - side * 3).dx,
+              (tip + back * 8 - side * 3).dy,
+            )
+            ..close(),
+          Paint()..color = colour,
+        );
+      }
+      _paintText(
+        canvas,
+        d.text,
+        viewport.toScreen(Offset.lerp(a, b, 0.5)! + d.normal * 1.2),
+        color: colour,
+        size: 10,
+      );
     }
   }
 
@@ -723,6 +853,29 @@ class BoardPainter extends CustomPainter {
             ..style = PaintingStyle.stroke
             ..strokeWidth = 1.5,
         );
+      }
+    }
+  }
+
+  /// The ground two parts are both standing on, in red.
+  void _paintCollisions(Canvas canvas) {
+    if (collisions.isEmpty) return;
+    final fill = Paint()
+      ..color = KicadPalette.error.withValues(alpha: 0.18);
+    final edge = Paint()
+      ..color = KicadPalette.error
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    for (final courtyard in collisions) {
+      for (final outline in courtyard.outlines) {
+        if (outline.length < 3) continue;
+        final path = Path()
+          ..addPolygon([
+            for (final point in outline) viewport.toScreen(point),
+          ], true);
+        canvas
+          ..drawPath(path, fill)
+          ..drawPath(path, edge);
       }
     }
   }
@@ -1038,9 +1191,51 @@ class BoardPainter extends CustomPainter {
     }
   }
 
+  void _paintPendingBus(Canvas canvas) {
+    if (pendingBus.isEmpty) return;
+    final paint = Paint()
+      ..color = colorFor(activeLayer).withValues(alpha: 0.75)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = math.max(
+        1.2,
+        viewport.lengthToScreen(scene.board.rules.trackWidth),
+      )
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    for (final points in pendingBus) {
+      if (points.length < 2) continue;
+      canvas.drawPath(
+        Path()
+          ..addPolygon([for (final p in points) viewport.toScreen(p)], false),
+        paint,
+      );
+    }
+  }
+
   void _paintPendingRoute(Canvas canvas) {
+    _paintPendingBus(canvas);
     if (pendingRoute.length < 2) return;
     final layer = pendingLayer ?? activeLayer;
+    // The room the track needs: its clearance, drawn round it, so what it
+    // will come too close to is visible before it does.
+    final clearance = pendingClearance;
+    if (clearance != null && clearance > 0) {
+      final halo = Paint()
+        ..color =
+            (routeClashes.isEmpty ? KicadPalette.highlight : KicadPalette.error)
+                .withValues(alpha: 0.16)
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..strokeWidth = viewport.lengthToScreen(
+          (pendingWidth ?? scene.board.rules.trackWidth) + clearance * 2,
+        );
+      final path = Path()
+        ..addPolygon([
+          for (final p in pendingRoute) viewport.toScreen(p),
+        ], false);
+      canvas.drawPath(path, halo);
+    }
     final paint = Paint()
       ..color = colorFor(layer).withValues(alpha: 0.85)
       ..strokeWidth = math.max(
@@ -1122,11 +1317,14 @@ class BoardPainter extends CustomPainter {
       old.scene != scene ||
       old.viewport != viewport ||
       old.activeLayer != activeLayer ||
+      !identical(old.collisions, collisions) ||
       old.selectedFootprintId != selectedFootprintId ||
       old.selectedTrackId != selectedTrackId ||
       old.highlightedNetId != highlightedNetId ||
       old.pendingRoute != pendingRoute ||
       old.pendingWidth != pendingWidth ||
+      old.pendingClearance != pendingClearance ||
+      old.pendingBus != pendingBus ||
       old.routeClashes.length != routeClashes.length ||
       old.pendingLayer != pendingLayer ||
       old.showRatsnest != showRatsnest ||

@@ -9,6 +9,7 @@ import 'schematic_scene.dart';
 import '../domain/geometry/drawn_wire_geometry.dart';
 import '../domain/geometry/wire_router.dart';
 import '../domain/models/schematic_note.dart';
+import '../domain/models/sheet_views.dart';
 import 'schematic_viewport.dart';
 import 'symbol_renderer.dart';
 
@@ -31,7 +32,17 @@ class SchematicPainter extends CustomPainter {
     this.zigzagResistors = false,
     this.notes = const [],
     this.selectedNoteId,
+    this.sheetBoxes = const [],
+    this.selectedSheetId,
+    this.offSheetLabels = const [],
   }) : palette = KicadPalette.current;
+
+  /// The sub-sheets on this sheet, as boxes.
+  final List<SheetBoxView> sheetBoxes;
+  final String? selectedSheetId;
+
+  /// Names at pins whose nets continue on another sheet.
+  final List<OffSheetLabel> offSheetLabels;
 
   /// Text and boxes on the sheet, drawn under everything else.
   final List<SchematicNote> notes;
@@ -95,6 +106,8 @@ class SchematicPainter extends CustomPainter {
     _paintConnections(canvas);
     _paintUnits(canvas);
     _paintNetLabels(canvas);
+    _paintSheetBoxes(canvas);
+    _paintOffSheetLabels(canvas);
     _paintPendingWire(canvas);
     _paintSelectionBox(canvas);
   }
@@ -153,6 +166,88 @@ class SchematicPainter extends CustomPainter {
           ? Offset(fontSize * 0.4, fontSize * 0.3)
           : Offset.zero;
       painter.paint(canvas, viewport.toScreen(note.position) + inset);
+    }
+  }
+
+  TextPainter _label(String text, Color colour, double size) => TextPainter(
+    text: TextSpan(
+      text: text,
+      style: TextStyle(color: colour, fontSize: size, fontFamily: 'monospace'),
+    ),
+    textDirection: TextDirection.ltr,
+  )..layout();
+
+  /// Sub-sheets, drawn as KiCad draws them: a box with the sheet's name
+  /// above it, its file below, and its pins down the left side.
+  void _paintSheetBoxes(Canvas canvas) {
+    for (final view in sheetBoxes) {
+      final selected = view.sheet.id == selectedSheetId;
+      final colour = selected ? colors.highlight : KicadPalette.sheet;
+      final rect = _rectToScreen(view.box);
+      canvas
+        ..drawRect(rect, Paint()..color = colour.withValues(alpha: 0.06))
+        ..drawRect(
+          rect,
+          Paint()
+            ..color = colour
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = selected ? 2.4 : 1.4,
+        );
+      final size = math.max(8.0, viewport.lengthToScreen(1.5));
+      final name = _label(view.sheet.name, colour, size * 1.1);
+      name.paint(canvas, rect.topLeft - Offset(0, name.height + 2));
+      final file = _label(
+        view.sheet.fileName,
+        colour.withValues(alpha: 0.7),
+        size * 0.85,
+      );
+      file.paint(canvas, rect.bottomLeft + const Offset(0, 2));
+      for (var i = 0; i < view.pins.length; i++) {
+        final at = viewport.toScreen(view.pinAt(i));
+        final s = math.max(3.0, viewport.lengthToScreen(0.8));
+        canvas.drawPath(
+          Path()
+            ..moveTo(at.dx, at.dy - s)
+            ..lineTo(at.dx + s * 1.4, at.dy)
+            ..lineTo(at.dx, at.dy + s)
+            ..close(),
+          Paint()..color = KicadPalette.globalLabel,
+        );
+        if (size < 7) continue;
+        final text = _label(view.pins[i], KicadPalette.globalLabel, size);
+        text.paint(canvas, at + Offset(s * 1.8, -text.height / 2));
+      }
+    }
+  }
+
+  /// Names at pins whose nets carry on elsewhere: a flag shape for a
+  /// hierarchical label, as KiCad draws one, and plain text on the top.
+  void _paintOffSheetLabels(Canvas canvas) {
+    final size = math.max(8.0, viewport.lengthToScreen(1.27));
+    for (final label in offSheetLabels) {
+      final at = viewport.toScreen(label.at);
+      final colour = label.hierarchical
+          ? KicadPalette.globalLabel
+          : KicadPalette.label;
+      final text = _label(label.name, colour, size);
+      final h = text.height + 2;
+      final box = Rect.fromLTWH(at.dx + 4, at.dy - h / 2, text.width + h, h);
+      if (label.hierarchical) {
+        canvas.drawPath(
+          Path()
+            ..moveTo(at.dx, at.dy)
+            ..lineTo(box.left + h / 2, box.top)
+            ..lineTo(box.right, box.top)
+            ..lineTo(box.right, box.bottom)
+            ..lineTo(box.left + h / 2, box.bottom)
+            ..close(),
+          Paint()
+            ..color = colour
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.2,
+        );
+      }
+      text.paint(canvas, Offset(box.left + h / 2 + 1, box.top + 1));
     }
   }
 
@@ -771,5 +866,8 @@ class SchematicPainter extends CustomPainter {
       old.highlightedNetId != highlightedNetId ||
       old.showGrid != showGrid ||
       !listEquals(old.notes, notes) ||
+      old.sheetBoxes != sheetBoxes ||
+      old.selectedSheetId != selectedSheetId ||
+      old.offSheetLabels != offSheetLabels ||
       old.selectedNoteId != selectedNoteId;
 }

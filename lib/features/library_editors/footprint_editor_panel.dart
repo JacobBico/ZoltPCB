@@ -87,7 +87,17 @@ class _FootprintEditorPanelState extends ConsumerState<FootprintEditorPanel> {
   }
 
   Future<void> _reload() async {
-    final saved = await _store.loadFootprints();
+    final List<FootprintDefinition> saved;
+    try {
+      saved = await _store.loadFootprints();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(content: Text('Could not read My Library: $error')),
+        );
+      }
+      return;
+    }
     if (!mounted) return;
     setState(() => _saved = saved);
     // A footprint My Library asked to open.

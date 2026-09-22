@@ -71,6 +71,9 @@ class PartUnits extends Table {
   BoolColumn get mirrorY => boolean().withDefault(const Constant(false))();
   BoolColumn get placed => boolean().withDefault(const Constant(false))();
 
+  /// The sub-sheet the unit is drawn on; null for the top sheet.
+  TextColumn get sheetId => text().nullable()();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 
@@ -194,6 +197,9 @@ class SchematicWires extends Table {
 
   /// Corners in sheet millimetres, `x,y;x,y;…`, from the A end to the B end.
   TextColumn get points => text()();
+
+  /// The sub-sheet the wire is drawn on; null for the top sheet.
+  TextColumn get sheetId => text().nullable()();
 
   DateTimeColumn get createdAt => dateTime()();
 
@@ -419,6 +425,19 @@ class Boards extends Table {
   TextColumn get trackWidths => text().withDefault(const Constant(''))();
   TextColumn get viaSizes => text().withDefault(const Constant(''))();
 
+  /// How a new pour joins the copper of its own net: `thermal`, `solid` or
+  /// `none` for pads, and the same three for vias. Vias default to solid
+  /// because nobody solders one, which is the only reason a thermal exists.
+  TextColumn get padConnection =>
+      text().withDefault(const Constant('thermal'))();
+  TextColumn get viaConnection =>
+      text().withDefault(const Constant('solid'))();
+
+  /// The gap a thermal relief leaves round the copper, and the width of
+  /// the spokes that bridge it.
+  RealColumn get thermalGap => real().withDefault(const Constant(0.5))();
+  RealColumn get thermalSpoke => real().withDefault(const Constant(0.5))();
+
   /// Placement grid. 0.5 mm rather than the schematic's 1.27 mm: boards are
   /// laid out in a much finer world than schematics.
   RealColumn get gridMm => real().withDefault(const Constant(0.5))();
@@ -576,6 +595,20 @@ class BoardZones extends Table {
 
   RealColumn get clearance => real().withDefault(const Constant(0.5))();
   RealColumn get minThickness => real().withDefault(const Constant(0.25))();
+
+  /// Which pour wins where two overlap: the higher one is filled, the lower
+  /// is cut back around it.
+  IntColumn get priority => integer().withDefault(const Constant(0))();
+
+  /// How same-net pads join the pour: `thermal`, `solid` or `none`.
+  TextColumn get padConnection =>
+      text().withDefault(const Constant('thermal'))();
+
+  /// The same three, for vias and plated holes on the pour's own net.
+  TextColumn get viaConnection =>
+      text().withDefault(const Constant('solid'))();
+  RealColumn get thermalGap => real().withDefault(const Constant(0.5))();
+  RealColumn get thermalSpoke => real().withDefault(const Constant(0.5))();
   DateTimeColumn get createdAt => dateTime()();
 
   @override
@@ -689,6 +722,9 @@ class SchematicNotes extends Table {
 
   /// Character height, in millimetres.
   RealColumn get size => real().withDefault(const Constant(1.27))();
+
+  /// The sub-sheet the note is on; null for the top sheet.
+  TextColumn get sheetId => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 
   @override
@@ -721,6 +757,87 @@ class SavedCircuits extends Table {
 
   /// The circuit, as JSON.
   TextColumn get data => text()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// Mounting holes, fiducials and test points: board-only footprints no
+/// schematic part stands behind.
+@TableIndex(name: 'idx_board_features_project', columns: {#projectId})
+@DataClassName('BoardFeatureRow')
+class BoardFeatures extends Table {
+  TextColumn get id => text()();
+  TextColumn get projectId =>
+      text().references(Projects, #id, onDelete: KeyAction.cascade)();
+
+  /// `mountingHole`, `fiducial` or `testPoint`.
+  TextColumn get kind => text()();
+  TextColumn get reference => text()();
+  RealColumn get x => real().withDefault(const Constant(0))();
+  RealColumn get y => real().withDefault(const Constant(0))();
+  RealColumn get rotation => real().withDefault(const Constant(0))();
+  BoolColumn get back => boolean().withDefault(const Constant(false))();
+  RealColumn get size => real().withDefault(const Constant(3.2))();
+  BoolColumn get plated => boolean().withDefault(const Constant(false))();
+
+  /// A test point's or plated hole's net. A deleted net leaves the feature
+  /// unconnected rather than deleting it.
+  TextColumn get netId =>
+      text().nullable().references(Nets, #id, onDelete: KeyAction.setNull)();
+  TextColumn get netName => text().withDefault(const Constant(''))();
+  BoolColumn get placed => boolean().withDefault(const Constant(true))();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// Measurements drawn on the board.
+@TableIndex(name: 'idx_board_dimensions_project', columns: {#projectId})
+@DataClassName('BoardDimensionRow')
+class BoardDimensions extends Table {
+  TextColumn get id => text()();
+  TextColumn get projectId =>
+      text().references(Projects, #id, onDelete: KeyAction.cascade)();
+  RealColumn get x1 => real()();
+  RealColumn get y1 => real()();
+  RealColumn get x2 => real()();
+  RealColumn get y2 => real()();
+  RealColumn get offset => real().withDefault(const Constant(3))();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// A sub-sheet of a hierarchical schematic.
+///
+/// Drawn on its parent as a box, the way KiCad draws one, with a pin for
+/// every net that crosses its edge. Those pins are not stored: nets are
+/// project-wide, so which ones cross is worked out from where their pins
+/// are, and can never disagree with it.
+@TableIndex(name: 'idx_schematic_sheets_project', columns: {#projectId})
+@DataClassName('SchematicSheetRow')
+class SchematicSheets extends Table {
+  TextColumn get id => text()();
+  TextColumn get projectId =>
+      text().references(Projects, #id, onDelete: KeyAction.cascade)();
+
+  /// The sheet this one sits on; null for a sheet on the top sheet.
+  TextColumn get parentId => text().nullable()();
+  TextColumn get name => text()();
+
+  /// The `.kicad_sch` file the sheet is written to.
+  TextColumn get fileName => text()();
+
+  /// The box on the parent sheet, in sheet millimetres.
+  RealColumn get x => real().withDefault(const Constant(0))();
+  RealColumn get y => real().withDefault(const Constant(0))();
+  RealColumn get width => real().withDefault(const Constant(30.48))();
+  RealColumn get height => real().withDefault(const Constant(20.32))();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime()();
 
   @override

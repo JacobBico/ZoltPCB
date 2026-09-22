@@ -9,8 +9,11 @@ import '../../domain/symbols/symbols.dart';
 import '../../fab/gerber_writer.dart';
 import '../../rendering/schematic_pdf.dart';
 import '../../rendering/schematic_scene.dart';
+import '../../rendering/sheet_overlays.dart';
+import '../../domain/models/models.dart';
 import '../../kicad/board_project_writer.dart';
 import '../../kicad/board_writer.dart';
+import '../../kicad/footprint_writer.dart';
 import '../../kicad/bom_writer.dart';
 import '../../kicad/schematic_writer.dart';
 import '../repositories/board_repository.dart';
@@ -19,6 +22,7 @@ import '../repositories/net_repository.dart';
 import '../repositories/note_repository.dart';
 import '../repositories/part_repository.dart';
 import '../repositories/project_repository.dart';
+import '../repositories/sheet_repository.dart';
 import '../repositories/symbol_library_repository.dart';
 
 /// What kind of file an export produced.
@@ -28,6 +32,7 @@ enum ExportKind {
   boardProject('KiCad project', '.kicad_pro'),
   bom('Bill of materials', '.csv'),
   fabrication('Gerbers and drill files', '.zip'),
+  panel('Panel Gerbers and drill files', '.zip'),
   pdf('Schematic PDF', '.pdf');
 
   const ExportKind(this.label, this.extension);
@@ -79,7 +84,11 @@ class ProjectExporter {
     this.boards,
     this.footprints,
     this.notes,
+    this.sheets,
   });
+
+  /// The sub-sheets; optional, as a design without them is one sheet.
+  final SheetRepository? sheets;
 
   final ProjectRepository projects;
   final PartRepository parts;
@@ -127,6 +136,7 @@ class ProjectExporter {
       routeHints: hints,
       drawnWires: await nets.getWires(projectId),
       notes: await notes?.getAll(projectId) ?? const [],
+      sheets: await sheets?.getAll(projectId) ?? const [],
     );
   }
 
@@ -143,7 +153,10 @@ class ProjectExporter {
     }
 
     final placements = await boards.getFootprints(projectId);
-    if (placements.where((p) => p.placed).isEmpty) return null;
+    if (placements.where((p) => p.placed).isEmpty &&
+        (await boards.getFeatures(projectId)).every((f) => !f.placed)) {
+      return null;
+    }
 
     final definitions = <String, FootprintDefinition>{};
     final sources = <String, Object>{};
@@ -167,24 +180,37 @@ class ProjectExporter {
       zones: await boards.getZones(projectId),
       texts: await boards.getTexts(projectId),
       netClasses: await boards.getNetClasses(projectId),
+      features: await boards.getFeatures(projectId),
+      dimensions: await boards.getDimensions(projectId),
     );
+    // A feature's footprint is made here, not found in a library.
+    for (final feature in scene.features) {
+      sources[feature.libId] = FootprintWriter.node(feature.definition);
+    }
 
-    return BoardDocument(
+    final document = BoardDocument(
       project: project,
       scene: scene,
       nets: netList,
       footprintSources: sources,
     );
+    // Refused rather than written without them: a board file or a set of
+    // Gerbers quietly missing a part is worse than no file at all.
+    final missing = document.missingFootprints;
+    if (missing.isNotEmpty) {
+      throw ExportException(
+        'These footprints are not in any installed library, so the board '
+        'would be missing them: ${missing.join(', ')}. Re-import the '
+        'library or pick another footprint.',
+      );
+    }
+    return document;
   }
 
   Future<List<ExportedFile>> exportAll(String projectId) async {
     final document = await buildDocument(projectId);
     final files = [
-      await _write(
-        document,
-        ExportKind.schematic,
-        const SchematicWriter().write(document),
-      ),
+      ...await _writeSchematic(document),
       await _write(document, ExportKind.bom, BomWriter.write(document)),
     ];
 
@@ -285,21 +311,73 @@ class ProjectExporter {
     );
   }
 
+  /// Gerbers and drill files for a panel of copies of the board, laid out
+  /// by [settings].
+  Future<ExportedFile> exportPanel(
+    String projectId,
+    PanelSettings settings, {
+    FabPreset? fab,
+  }) async {
+    final board = await buildBoardDocument(projectId);
+    if (board == null) {
+      throw const ExportException('Nothing has been placed on the board yet');
+    }
+    final base = '${fileNameFor(board.project.name)}-panel';
+    final layout = PanelLayout.of(board.scene, settings, fab: fab);
+    final archive = Archive();
+    for (final file in FabricationWriter.writePanel(
+      board.scene,
+      layout,
+      baseName: base,
+      title: board.project.name,
+    )) {
+      archive.addFile(ArchiveFile.string(file.name, file.content));
+    }
+    return _writeBytes(
+      ExportKind.panel,
+      '$base-gerbers.zip',
+      ZipEncoder().encodeBytes(archive),
+    );
+  }
+
   /// The sheet as a PDF to share with someone who has no KiCad.
+  /// A page for each sheet, top sheet first.
   Future<ExportedFile> exportSchematicPdf(String projectId) async {
     final document = await buildDocument(projectId);
-    final scene = SchematicScene.build(
-      paper: document.project.paper,
+    final links = SheetConnections.of(
       parts: document.parts,
       nets: document.nets,
-      symbols: document.symbols,
-      routeHints: document.routeHints,
-      drawnWires: document.drawnWires,
+      sheets: document.sheets,
     );
-    final bytes = await renderSchematicPdf(
-      scene,
+    final pages = <SchematicPdfPage>[];
+    for (final sheetId in <String?>[
+      null,
+      for (final sheet in links.tree.inPageOrder()) sheet.id,
+    ]) {
+      final sheet = document.onSheet(sheetId);
+      final scene = SchematicScene.build(
+        paper: document.project.paper,
+        parts: sheet.parts,
+        nets: sheet.nets,
+        symbols: sheet.symbols,
+        routeHints: sheet.routeHints,
+        drawnWires: sheet.drawnWires,
+      );
+      final (boxes, labels) = document.sheets.isEmpty
+          ? (const <SheetBoxView>[], const <OffSheetLabel>[])
+          : sheetOverlays(links: links, scene: scene, sheetId: sheetId);
+      pages.add(
+        SchematicPdfPage(
+          scene: scene,
+          notes: sheet.notes,
+          sheetBoxes: boxes,
+          offSheetLabels: labels,
+        ),
+      );
+    }
+    final bytes = await renderSchematicPdfPages(
+      pages,
       title: document.project.name,
-      notes: document.notes,
     );
     return _writeBytes(
       ExportKind.pdf,
@@ -326,13 +404,23 @@ class ProjectExporter {
     );
   }
 
+  /// The top sheet's file; a hierarchical design's other sheets are
+  /// written beside it, where KiCad looks for them.
   Future<ExportedFile> exportSchematic(String projectId) async {
     final document = await buildDocument(projectId);
-    return _write(
-      document,
-      ExportKind.schematic,
-      const SchematicWriter().write(document),
-    );
+    return (await _writeSchematic(document)).first;
+  }
+
+  /// Every sheet's file, the top one first.
+  Future<List<ExportedFile>> _writeSchematic(SchematicDocument document) async {
+    final top =
+        '${fileNameFor(document.project.name)}'
+        '${ExportKind.schematic.extension}';
+    final files = const SchematicWriter().writeFiles(document, topFile: top);
+    return [
+      for (final entry in files.entries)
+        await _writeNamed(ExportKind.schematic, entry.key, entry.value),
+    ];
   }
 
   Future<ExportedFile> exportBom(String projectId) async {
@@ -368,7 +456,7 @@ class ProjectExporter {
       kind: kind,
       path: file.path,
       fileName: fileName,
-      byteSize: contents.length,
+      byteSize: await file.length(),
     );
   }
 
