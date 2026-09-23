@@ -70,17 +70,18 @@ class _NetField extends StatelessWidget {
 }
 
 /// Nets with the ones a stray piece of copper usually wants at the top.
-List<NetChoice> orderedNets(List<NetChoice> nets) => [...nets]..sort((a, b) {
-  int rank(NetChoice n) {
-    final name = n.name.toUpperCase();
-    if (name == 'GND') return 0;
-    if (name.startsWith('GND') || name == 'VSS') return 1;
-    return 2;
-  }
+List<NetChoice> orderedNets(List<NetChoice> nets) => [...nets]
+  ..sort((a, b) {
+    int rank(NetChoice n) {
+      final name = n.name.toUpperCase();
+      if (name == 'GND') return 0;
+      if (name.startsWith('GND') || name == 'VSS') return 1;
+      return 2;
+    }
 
-  final byRank = rank(a).compareTo(rank(b));
-  return byRank != 0 ? byRank : a.name.compareTo(b.name);
-});
+    final byRank = rank(a).compareTo(rank(b));
+    return byRank != 0 ? byRank : a.name.compareTo(b.name);
+  });
 
 /// A placed part's numbers, typed rather than dragged.
 ///
@@ -601,22 +602,32 @@ Future<PropertiesResult<Via>?> showViaProperties(
   BuildContext context, {
   required Via via,
   required String netName,
+  required Board board,
   List<NetChoice> nets = const [],
 }) => showDialog<PropertiesResult<Via>>(
   context: context,
-  builder: (context) =>
-      _ViaProperties(via: via, netName: netName, nets: orderedNets(nets)),
+  builder: (context) => _ViaProperties(
+    via: via,
+    netName: netName,
+    board: board,
+    nets: orderedNets(nets),
+  ),
 );
 
 class _ViaProperties extends StatefulWidget {
   const _ViaProperties({
     required this.via,
     required this.netName,
+    required this.board,
     required this.nets,
   });
 
   final Via via;
   final String netName;
+
+  /// The board, for the layers a span can be drilled between and for
+  /// checking that the one asked for makes sense.
+  final Board board;
   final List<NetChoice> nets;
 
   @override
@@ -629,11 +640,18 @@ class _ViaPropertiesState extends State<_ViaProperties> {
   late final TextEditingController _diameter;
   late final TextEditingController _drill;
   late String? _netId;
+  late ViaKind _kind;
+  late CopperLayer _from;
+  late CopperLayer _to;
 
   @override
   void initState() {
     super.initState();
     _netId = widget.via.netId;
+    _kind = widget.via.kind;
+    final layers = widget.board.copperLayers;
+    _from = widget.via.fromLayer ?? layers.first;
+    _to = widget.via.toLayer ?? layers.last;
     _x = TextEditingController(text: _mm(widget.via.x));
     _y = TextEditingController(text: _mm(widget.via.y));
     _diameter = TextEditingController(text: _mm(widget.via.diameter));
@@ -659,8 +677,42 @@ class _ViaPropertiesState extends State<_ViaProperties> {
     // A hole wider than its pad is not a tight tolerance, it is a hole with
     // no copper round it.
     if (diameter <= drill) return 'The pad has to be wider than the hole';
-    return null;
+    return _proposed.problemOn(widget.board);
   }
+
+  Widget _layerField(
+    String label,
+    CopperLayer value,
+    void Function(CopperLayer) set,
+  ) => DropdownButtonFormField<CopperLayer>(
+    key: ValueKey('via-span-$label'),
+    initialValue: value,
+    isExpanded: true,
+    decoration: InputDecoration(
+      labelText: label,
+      isDense: true,
+      floatingLabelBehavior: FloatingLabelBehavior.always,
+    ),
+    items: [
+      for (final layer in widget.board.copperLayers)
+        DropdownMenuItem(value: layer, child: Text(layer.label)),
+    ],
+    onChanged: (layer) => setState(() {
+      if (layer != null) set(layer);
+    }),
+  );
+
+  Via get _proposed => widget.via
+      .copyWith(
+        x: _parse(_x),
+        y: _parse(_y),
+        diameter: _parse(_diameter),
+        drill: _parse(_drill),
+        kind: _kind,
+        fromLayer: _kind == ViaKind.through ? null : _from,
+        toLayer: _kind == ViaKind.through ? null : _to,
+      )
+      .withNet(_netId);
 
   @override
   Widget build(BuildContext context) {
@@ -703,6 +755,40 @@ class _ViaPropertiesState extends State<_ViaProperties> {
               value: _netId,
               onChanged: (id) => setState(() => _netId = id),
             ),
+            if (widget.board.copperLayerCount > 2) ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<ViaKind>(
+                key: const ValueKey('via-kind'),
+                initialValue: _kind,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Drilled',
+                  isDense: true,
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
+                ),
+                items: [
+                  for (final kind in ViaKind.values)
+                    DropdownMenuItem(
+                      value: kind,
+                      child: Text('${kind.label} — ${kind.note}'),
+                    ),
+                ],
+                onChanged: (kind) =>
+                    setState(() => _kind = kind ?? ViaKind.through),
+              ),
+              if (_kind != ViaKind.through) ...[
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _layerField('From', _from, (l) => _from = l),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(child: _layerField('To', _to, (l) => _to = l)),
+                  ],
+                ),
+              ],
+            ],
             if (problem != null)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
@@ -727,18 +813,7 @@ class _ViaPropertiesState extends State<_ViaProperties> {
         FilledButton(
           onPressed: problem != null
               ? null
-              : () => Navigator.of(context).pop(
-                  PropertiesSaved(
-                    widget.via
-                        .copyWith(
-                          x: _parse(_x),
-                          y: _parse(_y),
-                          diameter: _parse(_diameter),
-                          drill: _parse(_drill),
-                        )
-                        .withNet(_netId),
-                  ),
-                ),
+              : () => Navigator.of(context).pop(PropertiesSaved(_proposed)),
           child: const Text('SAVE'),
         ),
       ],

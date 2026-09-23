@@ -12,11 +12,13 @@ class BoardSettingsResult {
   const BoardSettingsResult({
     required this.rules,
     required this.gridMm,
+    this.teardrops = const TeardropRules(),
     this.fabPreset,
   });
 
   final DesignRules rules;
   final double gridMm;
+  final TeardropRules teardrops;
 
   /// The board house the board is being made by, or null for none.
   final FabPreset? fabPreset;
@@ -60,6 +62,7 @@ class _DesignRulesDialogState extends State<_DesignRulesDialog> {
   late final TextEditingController _thermalSpoke;
   late PadConnection _padConnection;
   late PadConnection _viaConnection;
+  late TeardropRules _teardrops;
   late double _grid;
   FabPreset? _fab;
 
@@ -79,6 +82,7 @@ class _DesignRulesDialogState extends State<_DesignRulesDialog> {
     _thermalSpoke = TextEditingController(text: _format(rules.thermalSpoke));
     _padConnection = rules.padConnection;
     _viaConnection = rules.viaConnection;
+    _teardrops = widget.board.teardrops;
     _grid = _grids.contains(widget.board.gridMm) ? widget.board.gridMm : 0.5;
     _fab = widget.fabPreset;
   }
@@ -245,6 +249,89 @@ class _DesignRulesDialogState extends State<_DesignRulesDialog> {
                         )
                       else
                         const SizedBox(height: 12),
+                      const SizedBox(height: 4),
+                      _heading(context, 'TEARDROPS'),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          RulePicture(
+                            TeardropFigure(filled: _teardrops.enabled),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: SwitchListTile(
+                              key: const ValueKey('teardrops-on'),
+                              contentPadding: EdgeInsets.zero,
+                              dense: true,
+                              value: _teardrops.enabled,
+                              title: const Text('Fill the corner'),
+                              subtitle: Text(
+                                'Where a track meets a pad or a via',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                              onChanged: (value) => setState(
+                                () => _teardrops = _teardrops.copyWith(
+                                  enabled: value,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_teardrops.enabled) ...[
+                        _ratio(
+                          'Length',
+                          _teardrops.lengthRatio,
+                          (v) => setState(
+                            () => _teardrops = _teardrops.copyWith(
+                              lengthRatio: v,
+                            ),
+                          ),
+                        ),
+                        _ratio(
+                          'Width',
+                          _teardrops.widthRatio,
+                          (v) => setState(
+                            () =>
+                                _teardrops = _teardrops.copyWith(widthRatio: v),
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: CheckboxListTile(
+                                contentPadding: EdgeInsets.zero,
+                                dense: true,
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                                value: _teardrops.onPads,
+                                title: const Text('Pads'),
+                                onChanged: (v) => setState(
+                                  () => _teardrops = _teardrops.copyWith(
+                                    onPads: v ?? true,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: CheckboxListTile(
+                                contentPadding: EdgeInsets.zero,
+                                dense: true,
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                                value: _teardrops.onVias,
+                                title: const Text('Vias'),
+                                onChanged: (v) => setState(
+                                  () => _teardrops = _teardrops.copyWith(
+                                    onVias: v ?? true,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 6),
                       DropdownButtonFormField<double>(
                         initialValue: _grid,
                         isExpanded: true,
@@ -279,6 +366,34 @@ class _DesignRulesDialogState extends State<_DesignRulesDialog> {
       ],
     );
   }
+
+  /// A fraction of the pad's size, shown as a percentage because that is
+  /// how every tool that has these states them.
+  Widget _ratio(String label, double value, ValueChanged<double> onChanged) =>
+      Row(
+        children: [
+          SizedBox(
+            width: 64,
+            child: Text(label, style: const TextStyle(fontSize: 12)),
+          ),
+          Expanded(
+            child: Slider(
+              value: value.clamp(0.1, 1.0),
+              min: 0.1,
+              max: 1.0,
+              onChanged: (v) => onChanged((v * 20).roundToDouble() / 20),
+            ),
+          ),
+          SizedBox(
+            width: 44,
+            child: Text(
+              '${(value * 100).round()}%',
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+        ],
+      );
 
   Widget _heading(BuildContext context, String text) => Text(
     text,
@@ -358,8 +473,13 @@ class _DesignRulesDialogState extends State<_DesignRulesDialog> {
       return;
     }
 
-    Navigator.of(
-      context,
-    ).pop(BoardSettingsResult(rules: rules, gridMm: _grid, fabPreset: _fab));
+    Navigator.of(context).pop(
+      BoardSettingsResult(
+        rules: rules,
+        gridMm: _grid,
+        teardrops: _teardrops,
+        fabPreset: _fab,
+      ),
+    );
   }
 }

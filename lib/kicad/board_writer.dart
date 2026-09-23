@@ -420,6 +420,7 @@ class BoardWriter {
       SList([SAtom('layer'), S.text(side)]),
       SList([SAtom('uuid'), S.text(derivedId('footprint:${ref.id}'))]),
       S.of('at', [ref.x, ref.y, ref.rotation]),
+      if (ref.locked) S.of('locked', [SAtom('yes')]),
     ];
 
     for (final item in body) {
@@ -650,21 +651,52 @@ class BoardWriter {
         S.of('width', [track.width]),
         SList([SAtom('layer'), S.text(track.layer.layer.token)]),
         S.of('net', [numbers[track.netId] ?? 0]),
+        if (track.locked) S.of('locked', [SAtom('yes')]),
         SList([SAtom('uuid'), S.text(derivedId('segment:${track.id}'))]),
       ]),
   ];
 
-  List<SList> _vias(BoardDocument document, Map<String, int> numbers) => [
-    for (final via in document.scene.vias)
-      S.list('via', [
-        S.of('at', [via.x, via.y]),
-        S.of('size', [via.diameter]),
-        S.of('drill', [via.drill]),
-        SList([SAtom('layers'), S.text('F.Cu'), S.text('B.Cu')]),
-        S.of('net', [numbers[via.netId] ?? 0]),
-        SList([SAtom('uuid'), S.text(derivedId('via:${via.id}'))]),
-      ]),
-  ];
+  /// Vias, with the span a blind or buried one was drilled for.
+  ///
+  /// KiCad states a via by the two layers it joins and infers the rest, so
+  /// a through via is simply top to bottom. The word `blind` goes in front
+  /// of both blind and buried vias: KiCad has one keyword for the pair and
+  /// tells them apart by whether the span touches an outside layer, which
+  /// is also how the rule check here tells them apart.
+  List<SList> _vias(BoardDocument document, Map<String, int> numbers) {
+    final board = document.scene.board;
+    final teardrops = board.teardrops;
+    return [
+      for (final via in document.scene.vias)
+        S.list('via', [
+          if (via.kind != ViaKind.through) SAtom('blind'),
+          if (via.locked) SAtom('locked'),
+          S.of('at', [via.x, via.y]),
+          S.of('size', [via.diameter]),
+          S.of('drill', [via.drill]),
+          SList([
+            SAtom('layers'),
+            S.text(_spanOf(via, board).first.layer.token),
+            S.text(_spanOf(via, board).last.layer.token),
+          ]),
+          S.of('net', [numbers[via.netId] ?? 0]),
+          if (teardrops.enabled && teardrops.onVias)
+            S.list('teardrops', [
+              S.of('best_length_ratio', [teardrops.lengthRatio]),
+              S.of('best_width_ratio', [teardrops.widthRatio]),
+              S.of('enabled', [SAtom('yes')]),
+              S.of('allow_two_segments', [SAtom('yes')]),
+              S.of('prefer_zone_connections', [SAtom('yes')]),
+            ]),
+          SList([SAtom('uuid'), S.text(derivedId('via:${via.id}'))]),
+        ]),
+    ];
+  }
+
+  static List<CopperLayer> _spanOf(Via via, Board board) {
+    final span = via.layersOn(board);
+    return span.length >= 2 ? span : board.copperLayers;
+  }
 
   /// The board outline on Edge.Cuts.
   ///
@@ -811,14 +843,28 @@ class BoardWriter {
       final number = zone.netId == null ? 0 : (netNumbers[zone.netId] ?? 0);
       final name = number == 0 ? '' : zone.netName;
 
+      String allowed(bool no) => no ? 'not_allowed' : 'allowed';
+
       nodes.add(
         S.list('zone', [
           S.of('net', [number]),
           SList([SAtom('net_name'), S.text(name)]),
           SList([SAtom('layer'), S.text(zone.layer.token)]),
           SList([SAtom('uuid'), S.text(derivedId('zone:${zone.id}'))]),
+          if (zone.locked) S.of('locked', [SAtom('yes')]),
           S.list('hatch', [SAtom('edge'), SAtom('0.5')]),
           if (zone.priority != 0) S.of('priority', [zone.priority]),
+          // A keepout is the same object with the fill turned off and a
+          // list of what may not be put inside it. KiCad calls it a rule
+          // area; the file still calls it a zone.
+          if (zone.keepout)
+            S.list('keepout', [
+              S.of('tracks', [SAtom(allowed(zone.noTracks))]),
+              S.of('vias', [SAtom(allowed(zone.noVias))]),
+              S.of('pads', [SAtom(allowed(zone.noVias))]),
+              S.of('copperpour', [SAtom(allowed(zone.noPours))]),
+              S.of('footprints', [SAtom(allowed(zone.noParts))]),
+            ]),
           // Thermal is KiCad's default and is written bare; solid is
           // `yes`, and a pour that avoids its own pads is `no`.
           S.list('connect_pads', [
@@ -828,7 +874,7 @@ class BoardWriter {
           ]),
           S.of('min_thickness', [zone.minThickness]),
           S.list('fill', [
-            SAtom('yes'),
+            if (!zone.keepout) SAtom('yes'),
             S.of('thermal_gap', [zone.thermalGap]),
             S.of('thermal_bridge_width', [zone.thermalSpoke]),
           ]),

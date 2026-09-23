@@ -236,6 +236,15 @@ class WalkaroundField {
       rows: rows,
       reach: width / 2 + scene.board.rules.clearance,
     );
+    _blockKeepouts(
+      scene,
+      blocked,
+      origin: origin,
+      step: step,
+      columns: columns,
+      rows: rows,
+      layer: layer,
+    );
     _blockCopper(
       scene,
       blocked,
@@ -359,6 +368,39 @@ class WalkaroundField {
             on[i - k * columns] == 0 ||
             on[i + k * columns] == 0) {
           blocked[i] = 1;
+        }
+      }
+    }
+  }
+
+  /// Areas that say no track may cross them.
+  ///
+  /// Unlike copper, a keepout applies whatever net the route is on: it is
+  /// there to protect something the board cannot see, and the route's own
+  /// ground plane is no more welcome inside it than anyone else's signal.
+  static void _blockKeepouts(
+    BoardScene scene,
+    Uint8List blocked, {
+    required Offset origin,
+    required double step,
+    required int columns,
+    required int rows,
+    required CopperLayer layer,
+  }) {
+    for (final zone in scene.zones) {
+      if (!zone.isValid || !zone.keepout || !zone.noTracks) continue;
+      if (zone.layer != layer.layer) continue;
+      final box = zone.bounds;
+      final c0 = math.max(0, ((box.left - origin.dx) / step).floor());
+      final c1 = math.min(columns - 1, ((box.right - origin.dx) / step).ceil());
+      final r0 = math.max(0, ((box.top - origin.dy) / step).floor());
+      final r1 = math.min(rows - 1, ((box.bottom - origin.dy) / step).ceil());
+      for (var r = r0; r <= r1; r++) {
+        final y = origin.dy + r * step;
+        for (var c = c0; c <= c1; c++) {
+          final i = r * columns + c;
+          if (blocked[i] != 0) continue;
+          if (zone.contains(Offset(origin.dx + c * step, y))) blocked[i] = 1;
         }
       }
     }

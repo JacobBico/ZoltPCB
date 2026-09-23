@@ -99,7 +99,15 @@ abstract final class PourFill {
   static PourPlan plan(BoardScene scene, CopperLayer layer) {
     final indexed = [
       for (final (i, zone) in scene.zones.indexed)
-        if (zone.isValid && zone.layer == layer.layer) (i, zone),
+        if (zone.isValid && zone.layer == layer.layer && !zone.keepout)
+          (i, zone),
+    ];
+    // Areas that keep copper out of themselves. Not filled — a keepout is
+    // ground claimed, not ground poured — but they do cut back whatever is
+    // poured over them.
+    final keepouts = [
+      for (final zone in scene.zones)
+        if (zone.isValid && zone.keepout && zone.noPours) zone,
     ];
     if (indexed.isEmpty) return PourPlan.empty;
     // Lowest priority first, so the higher one is laid last and wins;
@@ -141,6 +149,19 @@ abstract final class PourFill {
           ..add(PourStep.clear(PourStroke(points, gap * 2, closed: true)));
       }
       steps.add(PourStep.dark(PourRegion(points)));
+    }
+
+    // 1b. Keepouts, cut out of everything poured so far.
+    for (final keepout in keepouts) {
+      final points = clipToRect(keepout.points, box);
+      if (points.length < 3) continue;
+      steps
+        ..add(PourStep.clear(PourRegion(points)))
+        ..add(
+          PourStep.clear(
+            PourStroke(points, keepout.clearance * 2, closed: true),
+          ),
+        );
     }
 
     // 2. The board's edge.

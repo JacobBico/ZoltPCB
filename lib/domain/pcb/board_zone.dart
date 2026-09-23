@@ -48,7 +48,27 @@ class BoardZone {
     this.viaConnection = PadConnection.solid,
     this.thermalGap = 0.5,
     this.thermalSpoke = 0.5,
+    this.keepout = false,
+    this.noTracks = true,
+    this.noVias = true,
+    this.noPours = true,
+    this.noParts = false,
+    this.locked = false,
   });
+
+  /// A keepout over [points]: an area claimed rather than filled.
+  factory BoardZone.keepoutAt({
+    required String id,
+    required String projectId,
+    required BoardLayer layer,
+    required List<Offset> points,
+  }) => BoardZone(
+    id: id,
+    projectId: projectId,
+    layer: layer,
+    points: points,
+    keepout: true,
+  );
 
   final String id;
   final String projectId;
@@ -91,6 +111,31 @@ class BoardZone {
   final double thermalGap;
   final double thermalSpoke;
 
+  /// Whether this area is a keepout rather than a pour.
+  ///
+  /// A pour says "fill this with GND"; a keepout says "put nothing here" —
+  /// under an antenna, beneath a connector's plastic, inside the swing of
+  /// a mounting screw's washer. KiCad calls it a rule area and stores it as
+  /// the same object with the fill turned off, which is what this is.
+  final bool keepout;
+
+  /// What a keepout keeps out. Ignored on an ordinary pour.
+  final bool noTracks;
+  final bool noVias;
+  final bool noPours;
+  final bool noParts;
+
+  /// Held where it is: not dragged, not swept into a move or a delete.
+  final bool locked;
+
+  /// What this area refuses, in the order it reads.
+  List<String> get keptOut => [
+    if (noTracks) 'tracks',
+    if (noVias) 'vias',
+    if (noPours) 'pours',
+    if (noParts) 'parts',
+  ];
+
   bool get isValid => points.length >= 3;
 
   Rect get bounds {
@@ -128,7 +173,9 @@ class BoardZone {
     return inside;
   }
 
-  String get label => netName.isEmpty ? 'No net' : netName;
+  String get label => keepout
+      ? 'Keepout'
+      : (netName.isEmpty ? 'No net' : netName);
 
   BoardZone copyWith({
     BoardLayer? layer,
@@ -143,6 +190,12 @@ class BoardZone {
     PadConnection? viaConnection,
     double? thermalGap,
     double? thermalSpoke,
+    bool? keepout,
+    bool? noTracks,
+    bool? noVias,
+    bool? noPours,
+    bool? noParts,
+    bool? locked,
   }) => BoardZone(
     id: id,
     projectId: projectId,
@@ -157,6 +210,12 @@ class BoardZone {
     viaConnection: viaConnection ?? this.viaConnection,
     thermalGap: thermalGap ?? this.thermalGap,
     thermalSpoke: thermalSpoke ?? this.thermalSpoke,
+    keepout: keepout ?? this.keepout,
+    noTracks: noTracks ?? this.noTracks,
+    noVias: noVias ?? this.noVias,
+    noPours: noPours ?? this.noPours,
+    noParts: noParts ?? this.noParts,
+    locked: locked ?? this.locked,
   );
 
   @override

@@ -68,6 +68,7 @@ class BoardRepository {
         viaConnection: Value(board.rules.viaConnection.name),
         thermalGap: Value(board.rules.thermalGap),
         thermalSpoke: Value(board.rules.thermalSpoke),
+        teardrops: Value(board.teardrops.encode()),
         trackWidths: Value(_encodeWidths(board.trackWidths)),
         viaSizes: Value(_encodeViaSizes(board.viaSizes)),
         gridMm: Value(board.gridMm),
@@ -164,6 +165,7 @@ class BoardRepository {
         labelY: Value(footprint.labelOffset?.dy),
         labelSize: Value(footprint.labelSize),
         labelHidden: Value(footprint.labelHidden),
+        locked: Value(footprint.locked),
       ),
     );
   }
@@ -298,6 +300,7 @@ class BoardRepository {
         endY: Value(track.endY),
         width: Value(track.width),
         netId: Value(track.netId),
+        locked: Value(track.locked),
       ),
     );
   }
@@ -310,6 +313,10 @@ class BoardRepository {
         diameter: Value(via.diameter),
         drill: Value(via.drill),
         netId: Value(via.netId),
+        viaKind: Value(via.kind.name),
+        fromLayer: Value(via.fromLayer?.layer.token ?? ''),
+        toLayer: Value(via.toLayer?.layer.token ?? ''),
+        locked: Value(via.locked),
       ),
     );
   }
@@ -384,6 +391,7 @@ class BoardRepository {
             endX: track.endX,
             endY: track.endY,
             width: Value(track.width),
+            locked: Value(track.locked),
           ),
           mode: InsertMode.insertOrReplace,
         );
@@ -399,6 +407,10 @@ class BoardRepository {
             y: via.y,
             diameter: Value(via.diameter),
             drill: Value(via.drill),
+            viaKind: Value(via.kind.name),
+            fromLayer: Value(via.fromLayer?.layer.token ?? ''),
+            toLayer: Value(via.toLayer?.layer.token ?? ''),
+            locked: Value(via.locked),
           ),
           mode: InsertMode.insertOrReplace,
         );
@@ -672,6 +684,11 @@ class BoardRepository {
     PadConnection viaConnection = PadConnection.solid,
     double thermalGap = 0.5,
     double thermalSpoke = 0.5,
+    bool keepout = false,
+    bool noTracks = true,
+    bool noVias = true,
+    bool noPours = true,
+    bool noParts = false,
   }) async {
     final id = newId();
     await _db
@@ -691,6 +708,11 @@ class BoardRepository {
             viaConnection: Value(viaConnection.name),
             thermalGap: Value(thermalGap),
             thermalSpoke: Value(thermalSpoke),
+            keepout: Value(keepout),
+            noTracks: Value(noTracks),
+            noVias: Value(noVias),
+            noPours: Value(noPours),
+            noParts: Value(noParts),
             createdAt: DateTime.now(),
           ),
         );
@@ -708,6 +730,11 @@ class BoardRepository {
       viaConnection: viaConnection,
       thermalGap: thermalGap,
       thermalSpoke: thermalSpoke,
+      keepout: keepout,
+      noTracks: noTracks,
+      noVias: noVias,
+      noPours: noPours,
+      noParts: noParts,
     );
   }
 
@@ -727,6 +754,12 @@ class BoardRepository {
         viaConnection: Value(zone.viaConnection.name),
         thermalGap: Value(zone.thermalGap),
         thermalSpoke: Value(zone.thermalSpoke),
+        keepout: Value(zone.keepout),
+        noTracks: Value(zone.noTracks),
+        noVias: Value(zone.noVias),
+        noPours: Value(zone.noPours),
+        noParts: Value(zone.noParts),
+        locked: Value(zone.locked),
       ),
     );
   }
@@ -753,6 +786,12 @@ class BoardRepository {
             viaConnection: Value(zone.viaConnection.name),
             thermalGap: Value(zone.thermalGap),
             thermalSpoke: Value(zone.thermalSpoke),
+            keepout: Value(zone.keepout),
+            noTracks: Value(zone.noTracks),
+            noVias: Value(zone.noVias),
+            noPours: Value(zone.noPours),
+            noParts: Value(zone.noParts),
+            locked: Value(zone.locked),
             createdAt: DateTime.now(),
           ),
           mode: InsertMode.insertOrReplace,
@@ -968,6 +1007,12 @@ class BoardRepository {
     viaConnection: PadConnection.byName(row.viaConnection),
     thermalGap: row.thermalGap,
     thermalSpoke: row.thermalSpoke,
+    keepout: row.keepout,
+    noTracks: row.noTracks,
+    noVias: row.noVias,
+    noPours: row.noPours,
+    noParts: row.noParts,
+    locked: row.locked,
   );
 
   /// Track widths as plain millimetres separated by spaces.
@@ -1038,6 +1083,7 @@ class BoardRepository {
       thermalGap: row.thermalGap,
       thermalSpoke: row.thermalSpoke,
     ),
+    teardrops: TeardropRules.decode(row.teardrops),
     trackWidths: _decodeWidths(row.trackWidths),
     viaSizes: _decodeViaSizes(row.viaSizes),
     gridMm: row.gridMm,
@@ -1065,6 +1111,7 @@ class BoardRepository {
             : Offset(row.labelX!, row.labelY!),
         labelSize: row.labelSize,
         labelHidden: row.labelHidden,
+        locked: row.locked,
       );
 
   static Track _toTrack(BoardTrackRow row) => Track(
@@ -1077,6 +1124,7 @@ class BoardRepository {
     endX: row.endX,
     endY: row.endY,
     width: row.width,
+    locked: row.locked,
   );
 
   static Via _toVia(BoardViaRow row) => Via(
@@ -1087,5 +1135,9 @@ class BoardRepository {
     y: row.y,
     diameter: row.diameter,
     drill: row.drill,
+    kind: ViaKind.byName(row.viaKind),
+    fromLayer: CopperLayer.fromToken(row.fromLayer),
+    toLayer: CopperLayer.fromToken(row.toLayer),
+    locked: row.locked,
   );
 }

@@ -102,7 +102,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -280,6 +280,39 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(boards, boards.thermalGap);
         await m.addColumn(boards, boards.thermalSpoke);
         await m.addColumn(boardZones, boardZones.viaConnection);
+      }
+      // v20: keepout areas, blind and buried vias, and holding copper and
+      // parts where they are.
+      //
+      // The flags go in as raw SQL rather than through the migrator, and
+      // deliberately without the `CHECK (x IN (0, 1))` a boolean column
+      // normally carries. SQLite validates a new CHECK against the rows
+      // already in the table, and once other columns have been added to
+      // that table earlier in the same transaction it reads those rows
+      // with the old column count — so it finds nothing where the columns
+      // it just added should be, and refuses the whole migration with a
+      // NOT NULL failure. Nothing but this app writes these columns, and a
+      // database made fresh still gets the check from the schema.
+      Future<void> flag(String table, String column, bool value) =>
+          customStatement(
+            'ALTER TABLE $table ADD COLUMN "$column" INTEGER NOT NULL '
+            'DEFAULT ${value ? 1 : 0}',
+          );
+
+      if (from < 20) {
+        await flag('board_tracks', 'locked', false);
+        await flag('board_vias', 'locked', false);
+        await m.addColumn(boardVias, boardVias.viaKind);
+        await m.addColumn(boardVias, boardVias.fromLayer);
+        await m.addColumn(boardVias, boardVias.toLayer);
+        await flag('board_footprints', 'locked', false);
+        await m.addColumn(boards, boards.teardrops);
+        await flag('board_zones', 'keepout', false);
+        await flag('board_zones', 'no_tracks', true);
+        await flag('board_zones', 'no_vias', true);
+        await flag('board_zones', 'no_pours', true);
+        await flag('board_zones', 'no_parts', false);
+        await flag('board_zones', 'locked', false);
       }
     },
     beforeOpen: (details) async {

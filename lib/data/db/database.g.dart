@@ -7827,6 +7827,18 @@ class $BoardsTable extends Boards with TableInfo<$BoardsTable, BoardRow> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0.5),
   );
+  static const VerificationMeta _teardropsMeta = const VerificationMeta(
+    'teardrops',
+  );
+  @override
+  late final GeneratedColumn<String> teardrops = GeneratedColumn<String>(
+    'teardrops',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _gridMmMeta = const VerificationMeta('gridMm');
   @override
   late final GeneratedColumn<double> gridMm = GeneratedColumn<double>(
@@ -7904,6 +7916,7 @@ class $BoardsTable extends Boards with TableInfo<$BoardsTable, BoardRow> {
     viaConnection,
     thermalGap,
     thermalSpoke,
+    teardrops,
     gridMm,
     copperLayers,
     thickness,
@@ -8058,6 +8071,12 @@ class $BoardsTable extends Boards with TableInfo<$BoardsTable, BoardRow> {
         ),
       );
     }
+    if (data.containsKey('teardrops')) {
+      context.handle(
+        _teardropsMeta,
+        teardrops.isAcceptableOrUnknown(data['teardrops']!, _teardropsMeta),
+      );
+    }
     if (data.containsKey('grid_mm')) {
       context.handle(
         _gridMmMeta,
@@ -8178,6 +8197,10 @@ class $BoardsTable extends Boards with TableInfo<$BoardsTable, BoardRow> {
         DriftSqlType.double,
         data['${effectivePrefix}thermal_spoke'],
       )!,
+      teardrops: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}teardrops'],
+      )!,
       gridMm: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
         data['${effectivePrefix}grid_mm'],
@@ -8250,6 +8273,9 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
   final double thermalGap;
   final double thermalSpoke;
 
+  /// Teardrop settings, encoded by `TeardropRules`. Empty means off.
+  final String teardrops;
+
   /// Placement grid. 0.5 mm rather than the schematic's 1.27 mm: boards are
   /// laid out in a much finer world than schematics.
   final double gridMm;
@@ -8284,6 +8310,7 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
     required this.viaConnection,
     required this.thermalGap,
     required this.thermalSpoke,
+    required this.teardrops,
     required this.gridMm,
     required this.copperLayers,
     required this.thickness,
@@ -8311,6 +8338,7 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
     map['via_connection'] = Variable<String>(viaConnection);
     map['thermal_gap'] = Variable<double>(thermalGap);
     map['thermal_spoke'] = Variable<double>(thermalSpoke);
+    map['teardrops'] = Variable<String>(teardrops);
     map['grid_mm'] = Variable<double>(gridMm);
     map['copper_layers'] = Variable<int>(copperLayers);
     map['thickness'] = Variable<double>(thickness);
@@ -8339,6 +8367,7 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
       viaConnection: Value(viaConnection),
       thermalGap: Value(thermalGap),
       thermalSpoke: Value(thermalSpoke),
+      teardrops: Value(teardrops),
       gridMm: Value(gridMm),
       copperLayers: Value(copperLayers),
       thickness: Value(thickness),
@@ -8371,6 +8400,7 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
       viaConnection: serializer.fromJson<String>(json['viaConnection']),
       thermalGap: serializer.fromJson<double>(json['thermalGap']),
       thermalSpoke: serializer.fromJson<double>(json['thermalSpoke']),
+      teardrops: serializer.fromJson<String>(json['teardrops']),
       gridMm: serializer.fromJson<double>(json['gridMm']),
       copperLayers: serializer.fromJson<int>(json['copperLayers']),
       thickness: serializer.fromJson<double>(json['thickness']),
@@ -8400,6 +8430,7 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
       'viaConnection': serializer.toJson<String>(viaConnection),
       'thermalGap': serializer.toJson<double>(thermalGap),
       'thermalSpoke': serializer.toJson<double>(thermalSpoke),
+      'teardrops': serializer.toJson<String>(teardrops),
       'gridMm': serializer.toJson<double>(gridMm),
       'copperLayers': serializer.toJson<int>(copperLayers),
       'thickness': serializer.toJson<double>(thickness),
@@ -8427,6 +8458,7 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
     String? viaConnection,
     double? thermalGap,
     double? thermalSpoke,
+    String? teardrops,
     double? gridMm,
     int? copperLayers,
     double? thickness,
@@ -8451,6 +8483,7 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
     viaConnection: viaConnection ?? this.viaConnection,
     thermalGap: thermalGap ?? this.thermalGap,
     thermalSpoke: thermalSpoke ?? this.thermalSpoke,
+    teardrops: teardrops ?? this.teardrops,
     gridMm: gridMm ?? this.gridMm,
     copperLayers: copperLayers ?? this.copperLayers,
     thickness: thickness ?? this.thickness,
@@ -8499,6 +8532,7 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
       thermalSpoke: data.thermalSpoke.present
           ? data.thermalSpoke.value
           : this.thermalSpoke,
+      teardrops: data.teardrops.present ? data.teardrops.value : this.teardrops,
       gridMm: data.gridMm.present ? data.gridMm.value : this.gridMm,
       copperLayers: data.copperLayers.present
           ? data.copperLayers.value
@@ -8532,6 +8566,7 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
           ..write('viaConnection: $viaConnection, ')
           ..write('thermalGap: $thermalGap, ')
           ..write('thermalSpoke: $thermalSpoke, ')
+          ..write('teardrops: $teardrops, ')
           ..write('gridMm: $gridMm, ')
           ..write('copperLayers: $copperLayers, ')
           ..write('thickness: $thickness, ')
@@ -8561,6 +8596,7 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
     viaConnection,
     thermalGap,
     thermalSpoke,
+    teardrops,
     gridMm,
     copperLayers,
     thickness,
@@ -8589,6 +8625,7 @@ class BoardRow extends DataClass implements Insertable<BoardRow> {
           other.viaConnection == this.viaConnection &&
           other.thermalGap == this.thermalGap &&
           other.thermalSpoke == this.thermalSpoke &&
+          other.teardrops == this.teardrops &&
           other.gridMm == this.gridMm &&
           other.copperLayers == this.copperLayers &&
           other.thickness == this.thickness &&
@@ -8615,6 +8652,7 @@ class BoardsCompanion extends UpdateCompanion<BoardRow> {
   final Value<String> viaConnection;
   final Value<double> thermalGap;
   final Value<double> thermalSpoke;
+  final Value<String> teardrops;
   final Value<double> gridMm;
   final Value<int> copperLayers;
   final Value<double> thickness;
@@ -8640,6 +8678,7 @@ class BoardsCompanion extends UpdateCompanion<BoardRow> {
     this.viaConnection = const Value.absent(),
     this.thermalGap = const Value.absent(),
     this.thermalSpoke = const Value.absent(),
+    this.teardrops = const Value.absent(),
     this.gridMm = const Value.absent(),
     this.copperLayers = const Value.absent(),
     this.thickness = const Value.absent(),
@@ -8666,6 +8705,7 @@ class BoardsCompanion extends UpdateCompanion<BoardRow> {
     this.viaConnection = const Value.absent(),
     this.thermalGap = const Value.absent(),
     this.thermalSpoke = const Value.absent(),
+    this.teardrops = const Value.absent(),
     this.gridMm = const Value.absent(),
     this.copperLayers = const Value.absent(),
     this.thickness = const Value.absent(),
@@ -8694,6 +8734,7 @@ class BoardsCompanion extends UpdateCompanion<BoardRow> {
     Expression<String>? viaConnection,
     Expression<double>? thermalGap,
     Expression<double>? thermalSpoke,
+    Expression<String>? teardrops,
     Expression<double>? gridMm,
     Expression<int>? copperLayers,
     Expression<double>? thickness,
@@ -8720,6 +8761,7 @@ class BoardsCompanion extends UpdateCompanion<BoardRow> {
       if (viaConnection != null) 'via_connection': viaConnection,
       if (thermalGap != null) 'thermal_gap': thermalGap,
       if (thermalSpoke != null) 'thermal_spoke': thermalSpoke,
+      if (teardrops != null) 'teardrops': teardrops,
       if (gridMm != null) 'grid_mm': gridMm,
       if (copperLayers != null) 'copper_layers': copperLayers,
       if (thickness != null) 'thickness': thickness,
@@ -8748,6 +8790,7 @@ class BoardsCompanion extends UpdateCompanion<BoardRow> {
     Value<String>? viaConnection,
     Value<double>? thermalGap,
     Value<double>? thermalSpoke,
+    Value<String>? teardrops,
     Value<double>? gridMm,
     Value<int>? copperLayers,
     Value<double>? thickness,
@@ -8774,6 +8817,7 @@ class BoardsCompanion extends UpdateCompanion<BoardRow> {
       viaConnection: viaConnection ?? this.viaConnection,
       thermalGap: thermalGap ?? this.thermalGap,
       thermalSpoke: thermalSpoke ?? this.thermalSpoke,
+      teardrops: teardrops ?? this.teardrops,
       gridMm: gridMm ?? this.gridMm,
       copperLayers: copperLayers ?? this.copperLayers,
       thickness: thickness ?? this.thickness,
@@ -8840,6 +8884,9 @@ class BoardsCompanion extends UpdateCompanion<BoardRow> {
     if (thermalSpoke.present) {
       map['thermal_spoke'] = Variable<double>(thermalSpoke.value);
     }
+    if (teardrops.present) {
+      map['teardrops'] = Variable<String>(teardrops.value);
+    }
     if (gridMm.present) {
       map['grid_mm'] = Variable<double>(gridMm.value);
     }
@@ -8882,6 +8929,7 @@ class BoardsCompanion extends UpdateCompanion<BoardRow> {
           ..write('viaConnection: $viaConnection, ')
           ..write('thermalGap: $thermalGap, ')
           ..write('thermalSpoke: $thermalSpoke, ')
+          ..write('teardrops: $teardrops, ')
           ..write('gridMm: $gridMm, ')
           ..write('copperLayers: $copperLayers, ')
           ..write('thickness: $thickness, ')
@@ -9048,6 +9096,19 @@ class $BoardFootprintsTable extends BoardFootprints
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _lockedMeta = const VerificationMeta('locked');
+  @override
+  late final GeneratedColumn<bool> locked = GeneratedColumn<bool>(
+    'locked',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("locked" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -9063,6 +9124,7 @@ class $BoardFootprintsTable extends BoardFootprints
     labelY,
     labelSize,
     labelHidden,
+    locked,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -9156,6 +9218,12 @@ class $BoardFootprintsTable extends BoardFootprints
         ),
       );
     }
+    if (data.containsKey('locked')) {
+      context.handle(
+        _lockedMeta,
+        locked.isAcceptableOrUnknown(data['locked']!, _lockedMeta),
+      );
+    }
     return context;
   }
 
@@ -9221,6 +9289,10 @@ class $BoardFootprintsTable extends BoardFootprints
         DriftSqlType.bool,
         data['${effectivePrefix}label_hidden'],
       )!,
+      locked: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}locked'],
+      )!,
     );
   }
 
@@ -9259,6 +9331,9 @@ class BoardFootprintRow extends DataClass
   /// Taken off the silkscreen. The part keeps its reference; the board just
   /// does not print it.
   final bool labelHidden;
+
+  /// Held where it is: not picked up, not dragged, not swept into a move.
+  final bool locked;
   const BoardFootprintRow({
     required this.id,
     required this.projectId,
@@ -9273,6 +9348,7 @@ class BoardFootprintRow extends DataClass
     this.labelY,
     required this.labelSize,
     required this.labelHidden,
+    required this.locked,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -9294,6 +9370,7 @@ class BoardFootprintRow extends DataClass
     }
     map['label_size'] = Variable<double>(labelSize);
     map['label_hidden'] = Variable<bool>(labelHidden);
+    map['locked'] = Variable<bool>(locked);
     return map;
   }
 
@@ -9316,6 +9393,7 @@ class BoardFootprintRow extends DataClass
           : Value(labelY),
       labelSize: Value(labelSize),
       labelHidden: Value(labelHidden),
+      locked: Value(locked),
     );
   }
 
@@ -9338,6 +9416,7 @@ class BoardFootprintRow extends DataClass
       labelY: serializer.fromJson<double?>(json['labelY']),
       labelSize: serializer.fromJson<double>(json['labelSize']),
       labelHidden: serializer.fromJson<bool>(json['labelHidden']),
+      locked: serializer.fromJson<bool>(json['locked']),
     );
   }
   @override
@@ -9357,6 +9436,7 @@ class BoardFootprintRow extends DataClass
       'labelY': serializer.toJson<double?>(labelY),
       'labelSize': serializer.toJson<double>(labelSize),
       'labelHidden': serializer.toJson<bool>(labelHidden),
+      'locked': serializer.toJson<bool>(locked),
     };
   }
 
@@ -9374,6 +9454,7 @@ class BoardFootprintRow extends DataClass
     Value<double?> labelY = const Value.absent(),
     double? labelSize,
     bool? labelHidden,
+    bool? locked,
   }) => BoardFootprintRow(
     id: id ?? this.id,
     projectId: projectId ?? this.projectId,
@@ -9388,6 +9469,7 @@ class BoardFootprintRow extends DataClass
     labelY: labelY.present ? labelY.value : this.labelY,
     labelSize: labelSize ?? this.labelSize,
     labelHidden: labelHidden ?? this.labelHidden,
+    locked: locked ?? this.locked,
   );
   BoardFootprintRow copyWithCompanion(BoardFootprintsCompanion data) {
     return BoardFootprintRow(
@@ -9406,6 +9488,7 @@ class BoardFootprintRow extends DataClass
       labelHidden: data.labelHidden.present
           ? data.labelHidden.value
           : this.labelHidden,
+      locked: data.locked.present ? data.locked.value : this.locked,
     );
   }
 
@@ -9424,7 +9507,8 @@ class BoardFootprintRow extends DataClass
           ..write('labelX: $labelX, ')
           ..write('labelY: $labelY, ')
           ..write('labelSize: $labelSize, ')
-          ..write('labelHidden: $labelHidden')
+          ..write('labelHidden: $labelHidden, ')
+          ..write('locked: $locked')
           ..write(')'))
         .toString();
   }
@@ -9444,6 +9528,7 @@ class BoardFootprintRow extends DataClass
     labelY,
     labelSize,
     labelHidden,
+    locked,
   );
   @override
   bool operator ==(Object other) =>
@@ -9461,7 +9546,8 @@ class BoardFootprintRow extends DataClass
           other.labelX == this.labelX &&
           other.labelY == this.labelY &&
           other.labelSize == this.labelSize &&
-          other.labelHidden == this.labelHidden);
+          other.labelHidden == this.labelHidden &&
+          other.locked == this.locked);
 }
 
 class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
@@ -9478,6 +9564,7 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
   final Value<double?> labelY;
   final Value<double> labelSize;
   final Value<bool> labelHidden;
+  final Value<bool> locked;
   final Value<int> rowid;
   const BoardFootprintsCompanion({
     this.id = const Value.absent(),
@@ -9493,6 +9580,7 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
     this.labelY = const Value.absent(),
     this.labelSize = const Value.absent(),
     this.labelHidden = const Value.absent(),
+    this.locked = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   BoardFootprintsCompanion.insert({
@@ -9509,6 +9597,7 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
     this.labelY = const Value.absent(),
     this.labelSize = const Value.absent(),
     this.labelHidden = const Value.absent(),
+    this.locked = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        projectId = Value(projectId),
@@ -9528,6 +9617,7 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
     Expression<double>? labelY,
     Expression<double>? labelSize,
     Expression<bool>? labelHidden,
+    Expression<bool>? locked,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -9544,6 +9634,7 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
       if (labelY != null) 'label_y': labelY,
       if (labelSize != null) 'label_size': labelSize,
       if (labelHidden != null) 'label_hidden': labelHidden,
+      if (locked != null) 'locked': locked,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -9562,6 +9653,7 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
     Value<double?>? labelY,
     Value<double>? labelSize,
     Value<bool>? labelHidden,
+    Value<bool>? locked,
     Value<int>? rowid,
   }) {
     return BoardFootprintsCompanion(
@@ -9578,6 +9670,7 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
       labelY: labelY ?? this.labelY,
       labelSize: labelSize ?? this.labelSize,
       labelHidden: labelHidden ?? this.labelHidden,
+      locked: locked ?? this.locked,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -9624,6 +9717,9 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
     if (labelHidden.present) {
       map['label_hidden'] = Variable<bool>(labelHidden.value);
     }
+    if (locked.present) {
+      map['locked'] = Variable<bool>(locked.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -9646,6 +9742,7 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
           ..write('labelY: $labelY, ')
           ..write('labelSize: $labelSize, ')
           ..write('labelHidden: $labelHidden, ')
+          ..write('locked: $locked, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -9748,6 +9845,19 @@ class $BoardTracksTable extends BoardTracks
     requiredDuringInsert: false,
     defaultValue: const Constant(0.25),
   );
+  static const VerificationMeta _lockedMeta = const VerificationMeta('locked');
+  @override
+  late final GeneratedColumn<bool> locked = GeneratedColumn<bool>(
+    'locked',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("locked" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -9759,6 +9869,7 @@ class $BoardTracksTable extends BoardTracks
     endX,
     endY,
     width,
+    locked,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -9837,6 +9948,12 @@ class $BoardTracksTable extends BoardTracks
         width.isAcceptableOrUnknown(data['width']!, _widthMeta),
       );
     }
+    if (data.containsKey('locked')) {
+      context.handle(
+        _lockedMeta,
+        locked.isAcceptableOrUnknown(data['locked']!, _lockedMeta),
+      );
+    }
     return context;
   }
 
@@ -9882,6 +9999,10 @@ class $BoardTracksTable extends BoardTracks
         DriftSqlType.double,
         data['${effectivePrefix}width'],
       )!,
+      locked: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}locked'],
+      )!,
     );
   }
 
@@ -9905,6 +10026,9 @@ class BoardTrackRow extends DataClass implements Insertable<BoardTrackRow> {
   final double endX;
   final double endY;
   final double width;
+
+  /// Held where it is: not moved, not slid, not deleted by a sweep.
+  final bool locked;
   const BoardTrackRow({
     required this.id,
     required this.projectId,
@@ -9915,6 +10039,7 @@ class BoardTrackRow extends DataClass implements Insertable<BoardTrackRow> {
     required this.endX,
     required this.endY,
     required this.width,
+    required this.locked,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -9930,6 +10055,7 @@ class BoardTrackRow extends DataClass implements Insertable<BoardTrackRow> {
     map['end_x'] = Variable<double>(endX);
     map['end_y'] = Variable<double>(endY);
     map['width'] = Variable<double>(width);
+    map['locked'] = Variable<bool>(locked);
     return map;
   }
 
@@ -9946,6 +10072,7 @@ class BoardTrackRow extends DataClass implements Insertable<BoardTrackRow> {
       endX: Value(endX),
       endY: Value(endY),
       width: Value(width),
+      locked: Value(locked),
     );
   }
 
@@ -9964,6 +10091,7 @@ class BoardTrackRow extends DataClass implements Insertable<BoardTrackRow> {
       endX: serializer.fromJson<double>(json['endX']),
       endY: serializer.fromJson<double>(json['endY']),
       width: serializer.fromJson<double>(json['width']),
+      locked: serializer.fromJson<bool>(json['locked']),
     );
   }
   @override
@@ -9979,6 +10107,7 @@ class BoardTrackRow extends DataClass implements Insertable<BoardTrackRow> {
       'endX': serializer.toJson<double>(endX),
       'endY': serializer.toJson<double>(endY),
       'width': serializer.toJson<double>(width),
+      'locked': serializer.toJson<bool>(locked),
     };
   }
 
@@ -9992,6 +10121,7 @@ class BoardTrackRow extends DataClass implements Insertable<BoardTrackRow> {
     double? endX,
     double? endY,
     double? width,
+    bool? locked,
   }) => BoardTrackRow(
     id: id ?? this.id,
     projectId: projectId ?? this.projectId,
@@ -10002,6 +10132,7 @@ class BoardTrackRow extends DataClass implements Insertable<BoardTrackRow> {
     endX: endX ?? this.endX,
     endY: endY ?? this.endY,
     width: width ?? this.width,
+    locked: locked ?? this.locked,
   );
   BoardTrackRow copyWithCompanion(BoardTracksCompanion data) {
     return BoardTrackRow(
@@ -10014,6 +10145,7 @@ class BoardTrackRow extends DataClass implements Insertable<BoardTrackRow> {
       endX: data.endX.present ? data.endX.value : this.endX,
       endY: data.endY.present ? data.endY.value : this.endY,
       width: data.width.present ? data.width.value : this.width,
+      locked: data.locked.present ? data.locked.value : this.locked,
     );
   }
 
@@ -10028,7 +10160,8 @@ class BoardTrackRow extends DataClass implements Insertable<BoardTrackRow> {
           ..write('startY: $startY, ')
           ..write('endX: $endX, ')
           ..write('endY: $endY, ')
-          ..write('width: $width')
+          ..write('width: $width, ')
+          ..write('locked: $locked')
           ..write(')'))
         .toString();
   }
@@ -10044,6 +10177,7 @@ class BoardTrackRow extends DataClass implements Insertable<BoardTrackRow> {
     endX,
     endY,
     width,
+    locked,
   );
   @override
   bool operator ==(Object other) =>
@@ -10057,7 +10191,8 @@ class BoardTrackRow extends DataClass implements Insertable<BoardTrackRow> {
           other.startY == this.startY &&
           other.endX == this.endX &&
           other.endY == this.endY &&
-          other.width == this.width);
+          other.width == this.width &&
+          other.locked == this.locked);
 }
 
 class BoardTracksCompanion extends UpdateCompanion<BoardTrackRow> {
@@ -10070,6 +10205,7 @@ class BoardTracksCompanion extends UpdateCompanion<BoardTrackRow> {
   final Value<double> endX;
   final Value<double> endY;
   final Value<double> width;
+  final Value<bool> locked;
   final Value<int> rowid;
   const BoardTracksCompanion({
     this.id = const Value.absent(),
@@ -10081,6 +10217,7 @@ class BoardTracksCompanion extends UpdateCompanion<BoardTrackRow> {
     this.endX = const Value.absent(),
     this.endY = const Value.absent(),
     this.width = const Value.absent(),
+    this.locked = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   BoardTracksCompanion.insert({
@@ -10093,6 +10230,7 @@ class BoardTracksCompanion extends UpdateCompanion<BoardTrackRow> {
     required double endX,
     required double endY,
     this.width = const Value.absent(),
+    this.locked = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        projectId = Value(projectId),
@@ -10111,6 +10249,7 @@ class BoardTracksCompanion extends UpdateCompanion<BoardTrackRow> {
     Expression<double>? endX,
     Expression<double>? endY,
     Expression<double>? width,
+    Expression<bool>? locked,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -10123,6 +10262,7 @@ class BoardTracksCompanion extends UpdateCompanion<BoardTrackRow> {
       if (endX != null) 'end_x': endX,
       if (endY != null) 'end_y': endY,
       if (width != null) 'width': width,
+      if (locked != null) 'locked': locked,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -10137,6 +10277,7 @@ class BoardTracksCompanion extends UpdateCompanion<BoardTrackRow> {
     Value<double>? endX,
     Value<double>? endY,
     Value<double>? width,
+    Value<bool>? locked,
     Value<int>? rowid,
   }) {
     return BoardTracksCompanion(
@@ -10149,6 +10290,7 @@ class BoardTracksCompanion extends UpdateCompanion<BoardTrackRow> {
       endX: endX ?? this.endX,
       endY: endY ?? this.endY,
       width: width ?? this.width,
+      locked: locked ?? this.locked,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -10183,6 +10325,9 @@ class BoardTracksCompanion extends UpdateCompanion<BoardTrackRow> {
     if (width.present) {
       map['width'] = Variable<double>(width.value);
     }
+    if (locked.present) {
+      map['locked'] = Variable<bool>(locked.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -10201,6 +10346,7 @@ class BoardTracksCompanion extends UpdateCompanion<BoardTrackRow> {
           ..write('endX: $endX, ')
           ..write('endY: $endY, ')
           ..write('width: $width, ')
+          ..write('locked: $locked, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -10288,6 +10434,55 @@ class $BoardViasTable extends BoardVias
     requiredDuringInsert: false,
     defaultValue: const Constant(0.4),
   );
+  static const VerificationMeta _viaKindMeta = const VerificationMeta(
+    'viaKind',
+  );
+  @override
+  late final GeneratedColumn<String> viaKind = GeneratedColumn<String>(
+    'via_kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('through'),
+  );
+  static const VerificationMeta _fromLayerMeta = const VerificationMeta(
+    'fromLayer',
+  );
+  @override
+  late final GeneratedColumn<String> fromLayer = GeneratedColumn<String>(
+    'from_layer',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _toLayerMeta = const VerificationMeta(
+    'toLayer',
+  );
+  @override
+  late final GeneratedColumn<String> toLayer = GeneratedColumn<String>(
+    'to_layer',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _lockedMeta = const VerificationMeta('locked');
+  @override
+  late final GeneratedColumn<bool> locked = GeneratedColumn<bool>(
+    'locked',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("locked" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -10297,6 +10492,10 @@ class $BoardViasTable extends BoardVias
     y,
     diameter,
     drill,
+    viaKind,
+    fromLayer,
+    toLayer,
+    locked,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -10351,6 +10550,30 @@ class $BoardViasTable extends BoardVias
         drill.isAcceptableOrUnknown(data['drill']!, _drillMeta),
       );
     }
+    if (data.containsKey('via_kind')) {
+      context.handle(
+        _viaKindMeta,
+        viaKind.isAcceptableOrUnknown(data['via_kind']!, _viaKindMeta),
+      );
+    }
+    if (data.containsKey('from_layer')) {
+      context.handle(
+        _fromLayerMeta,
+        fromLayer.isAcceptableOrUnknown(data['from_layer']!, _fromLayerMeta),
+      );
+    }
+    if (data.containsKey('to_layer')) {
+      context.handle(
+        _toLayerMeta,
+        toLayer.isAcceptableOrUnknown(data['to_layer']!, _toLayerMeta),
+      );
+    }
+    if (data.containsKey('locked')) {
+      context.handle(
+        _lockedMeta,
+        locked.isAcceptableOrUnknown(data['locked']!, _lockedMeta),
+      );
+    }
     return context;
   }
 
@@ -10388,6 +10611,22 @@ class $BoardViasTable extends BoardVias
         DriftSqlType.double,
         data['${effectivePrefix}drill'],
       )!,
+      viaKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}via_kind'],
+      )!,
+      fromLayer: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}from_layer'],
+      )!,
+      toLayer: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}to_layer'],
+      )!,
+      locked: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}locked'],
+      )!,
     );
   }
 
@@ -10405,6 +10644,18 @@ class BoardViaRow extends DataClass implements Insertable<BoardViaRow> {
   final double y;
   final double diameter;
   final double drill;
+
+  /// `through`, `blind` or `buried`. A through via is drilled from the top
+  /// of the board to the bottom and costs nothing extra; the other two are
+  /// drilled before the board is pressed together, and every fab charges
+  /// for the extra lamination cycle.
+  final String viaKind;
+
+  /// The copper layers a blind or buried via joins, as layer tokens. Empty
+  /// means top to bottom, which is what a through via always is.
+  final String fromLayer;
+  final String toLayer;
+  final bool locked;
   const BoardViaRow({
     required this.id,
     required this.projectId,
@@ -10413,6 +10664,10 @@ class BoardViaRow extends DataClass implements Insertable<BoardViaRow> {
     required this.y,
     required this.diameter,
     required this.drill,
+    required this.viaKind,
+    required this.fromLayer,
+    required this.toLayer,
+    required this.locked,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -10426,6 +10681,10 @@ class BoardViaRow extends DataClass implements Insertable<BoardViaRow> {
     map['y'] = Variable<double>(y);
     map['diameter'] = Variable<double>(diameter);
     map['drill'] = Variable<double>(drill);
+    map['via_kind'] = Variable<String>(viaKind);
+    map['from_layer'] = Variable<String>(fromLayer);
+    map['to_layer'] = Variable<String>(toLayer);
+    map['locked'] = Variable<bool>(locked);
     return map;
   }
 
@@ -10440,6 +10699,10 @@ class BoardViaRow extends DataClass implements Insertable<BoardViaRow> {
       y: Value(y),
       diameter: Value(diameter),
       drill: Value(drill),
+      viaKind: Value(viaKind),
+      fromLayer: Value(fromLayer),
+      toLayer: Value(toLayer),
+      locked: Value(locked),
     );
   }
 
@@ -10456,6 +10719,10 @@ class BoardViaRow extends DataClass implements Insertable<BoardViaRow> {
       y: serializer.fromJson<double>(json['y']),
       diameter: serializer.fromJson<double>(json['diameter']),
       drill: serializer.fromJson<double>(json['drill']),
+      viaKind: serializer.fromJson<String>(json['viaKind']),
+      fromLayer: serializer.fromJson<String>(json['fromLayer']),
+      toLayer: serializer.fromJson<String>(json['toLayer']),
+      locked: serializer.fromJson<bool>(json['locked']),
     );
   }
   @override
@@ -10469,6 +10736,10 @@ class BoardViaRow extends DataClass implements Insertable<BoardViaRow> {
       'y': serializer.toJson<double>(y),
       'diameter': serializer.toJson<double>(diameter),
       'drill': serializer.toJson<double>(drill),
+      'viaKind': serializer.toJson<String>(viaKind),
+      'fromLayer': serializer.toJson<String>(fromLayer),
+      'toLayer': serializer.toJson<String>(toLayer),
+      'locked': serializer.toJson<bool>(locked),
     };
   }
 
@@ -10480,6 +10751,10 @@ class BoardViaRow extends DataClass implements Insertable<BoardViaRow> {
     double? y,
     double? diameter,
     double? drill,
+    String? viaKind,
+    String? fromLayer,
+    String? toLayer,
+    bool? locked,
   }) => BoardViaRow(
     id: id ?? this.id,
     projectId: projectId ?? this.projectId,
@@ -10488,6 +10763,10 @@ class BoardViaRow extends DataClass implements Insertable<BoardViaRow> {
     y: y ?? this.y,
     diameter: diameter ?? this.diameter,
     drill: drill ?? this.drill,
+    viaKind: viaKind ?? this.viaKind,
+    fromLayer: fromLayer ?? this.fromLayer,
+    toLayer: toLayer ?? this.toLayer,
+    locked: locked ?? this.locked,
   );
   BoardViaRow copyWithCompanion(BoardViasCompanion data) {
     return BoardViaRow(
@@ -10498,6 +10777,10 @@ class BoardViaRow extends DataClass implements Insertable<BoardViaRow> {
       y: data.y.present ? data.y.value : this.y,
       diameter: data.diameter.present ? data.diameter.value : this.diameter,
       drill: data.drill.present ? data.drill.value : this.drill,
+      viaKind: data.viaKind.present ? data.viaKind.value : this.viaKind,
+      fromLayer: data.fromLayer.present ? data.fromLayer.value : this.fromLayer,
+      toLayer: data.toLayer.present ? data.toLayer.value : this.toLayer,
+      locked: data.locked.present ? data.locked.value : this.locked,
     );
   }
 
@@ -10510,13 +10793,29 @@ class BoardViaRow extends DataClass implements Insertable<BoardViaRow> {
           ..write('x: $x, ')
           ..write('y: $y, ')
           ..write('diameter: $diameter, ')
-          ..write('drill: $drill')
+          ..write('drill: $drill, ')
+          ..write('viaKind: $viaKind, ')
+          ..write('fromLayer: $fromLayer, ')
+          ..write('toLayer: $toLayer, ')
+          ..write('locked: $locked')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, projectId, netId, x, y, diameter, drill);
+  int get hashCode => Object.hash(
+    id,
+    projectId,
+    netId,
+    x,
+    y,
+    diameter,
+    drill,
+    viaKind,
+    fromLayer,
+    toLayer,
+    locked,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -10527,7 +10826,11 @@ class BoardViaRow extends DataClass implements Insertable<BoardViaRow> {
           other.x == this.x &&
           other.y == this.y &&
           other.diameter == this.diameter &&
-          other.drill == this.drill);
+          other.drill == this.drill &&
+          other.viaKind == this.viaKind &&
+          other.fromLayer == this.fromLayer &&
+          other.toLayer == this.toLayer &&
+          other.locked == this.locked);
 }
 
 class BoardViasCompanion extends UpdateCompanion<BoardViaRow> {
@@ -10538,6 +10841,10 @@ class BoardViasCompanion extends UpdateCompanion<BoardViaRow> {
   final Value<double> y;
   final Value<double> diameter;
   final Value<double> drill;
+  final Value<String> viaKind;
+  final Value<String> fromLayer;
+  final Value<String> toLayer;
+  final Value<bool> locked;
   final Value<int> rowid;
   const BoardViasCompanion({
     this.id = const Value.absent(),
@@ -10547,6 +10854,10 @@ class BoardViasCompanion extends UpdateCompanion<BoardViaRow> {
     this.y = const Value.absent(),
     this.diameter = const Value.absent(),
     this.drill = const Value.absent(),
+    this.viaKind = const Value.absent(),
+    this.fromLayer = const Value.absent(),
+    this.toLayer = const Value.absent(),
+    this.locked = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   BoardViasCompanion.insert({
@@ -10557,6 +10868,10 @@ class BoardViasCompanion extends UpdateCompanion<BoardViaRow> {
     required double y,
     this.diameter = const Value.absent(),
     this.drill = const Value.absent(),
+    this.viaKind = const Value.absent(),
+    this.fromLayer = const Value.absent(),
+    this.toLayer = const Value.absent(),
+    this.locked = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        projectId = Value(projectId),
@@ -10570,6 +10885,10 @@ class BoardViasCompanion extends UpdateCompanion<BoardViaRow> {
     Expression<double>? y,
     Expression<double>? diameter,
     Expression<double>? drill,
+    Expression<String>? viaKind,
+    Expression<String>? fromLayer,
+    Expression<String>? toLayer,
+    Expression<bool>? locked,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -10580,6 +10899,10 @@ class BoardViasCompanion extends UpdateCompanion<BoardViaRow> {
       if (y != null) 'y': y,
       if (diameter != null) 'diameter': diameter,
       if (drill != null) 'drill': drill,
+      if (viaKind != null) 'via_kind': viaKind,
+      if (fromLayer != null) 'from_layer': fromLayer,
+      if (toLayer != null) 'to_layer': toLayer,
+      if (locked != null) 'locked': locked,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -10592,6 +10915,10 @@ class BoardViasCompanion extends UpdateCompanion<BoardViaRow> {
     Value<double>? y,
     Value<double>? diameter,
     Value<double>? drill,
+    Value<String>? viaKind,
+    Value<String>? fromLayer,
+    Value<String>? toLayer,
+    Value<bool>? locked,
     Value<int>? rowid,
   }) {
     return BoardViasCompanion(
@@ -10602,6 +10929,10 @@ class BoardViasCompanion extends UpdateCompanion<BoardViaRow> {
       y: y ?? this.y,
       diameter: diameter ?? this.diameter,
       drill: drill ?? this.drill,
+      viaKind: viaKind ?? this.viaKind,
+      fromLayer: fromLayer ?? this.fromLayer,
+      toLayer: toLayer ?? this.toLayer,
+      locked: locked ?? this.locked,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -10630,6 +10961,18 @@ class BoardViasCompanion extends UpdateCompanion<BoardViaRow> {
     if (drill.present) {
       map['drill'] = Variable<double>(drill.value);
     }
+    if (viaKind.present) {
+      map['via_kind'] = Variable<String>(viaKind.value);
+    }
+    if (fromLayer.present) {
+      map['from_layer'] = Variable<String>(fromLayer.value);
+    }
+    if (toLayer.present) {
+      map['to_layer'] = Variable<String>(toLayer.value);
+    }
+    if (locked.present) {
+      map['locked'] = Variable<bool>(locked.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -10646,6 +10989,10 @@ class BoardViasCompanion extends UpdateCompanion<BoardViaRow> {
           ..write('y: $y, ')
           ..write('diameter: $diameter, ')
           ..write('drill: $drill, ')
+          ..write('viaKind: $viaKind, ')
+          ..write('fromLayer: $fromLayer, ')
+          ..write('toLayer: $toLayer, ')
+          ..write('locked: $locked, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -11215,6 +11562,92 @@ class $BoardZonesTable extends BoardZones
     requiredDuringInsert: false,
     defaultValue: const Constant(0.5),
   );
+  static const VerificationMeta _keepoutMeta = const VerificationMeta(
+    'keepout',
+  );
+  @override
+  late final GeneratedColumn<bool> keepout = GeneratedColumn<bool>(
+    'keepout',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("keepout" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _noTracksMeta = const VerificationMeta(
+    'noTracks',
+  );
+  @override
+  late final GeneratedColumn<bool> noTracks = GeneratedColumn<bool>(
+    'no_tracks',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("no_tracks" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _noViasMeta = const VerificationMeta('noVias');
+  @override
+  late final GeneratedColumn<bool> noVias = GeneratedColumn<bool>(
+    'no_vias',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("no_vias" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _noPoursMeta = const VerificationMeta(
+    'noPours',
+  );
+  @override
+  late final GeneratedColumn<bool> noPours = GeneratedColumn<bool>(
+    'no_pours',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("no_pours" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _noPartsMeta = const VerificationMeta(
+    'noParts',
+  );
+  @override
+  late final GeneratedColumn<bool> noParts = GeneratedColumn<bool>(
+    'no_parts',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("no_parts" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _lockedMeta = const VerificationMeta('locked');
+  @override
+  late final GeneratedColumn<bool> locked = GeneratedColumn<bool>(
+    'locked',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("locked" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -11241,6 +11674,12 @@ class $BoardZonesTable extends BoardZones
     viaConnection,
     thermalGap,
     thermalSpoke,
+    keepout,
+    noTracks,
+    noVias,
+    noPours,
+    noParts,
+    locked,
     createdAt,
   ];
   @override
@@ -11348,6 +11787,42 @@ class $BoardZonesTable extends BoardZones
         ),
       );
     }
+    if (data.containsKey('keepout')) {
+      context.handle(
+        _keepoutMeta,
+        keepout.isAcceptableOrUnknown(data['keepout']!, _keepoutMeta),
+      );
+    }
+    if (data.containsKey('no_tracks')) {
+      context.handle(
+        _noTracksMeta,
+        noTracks.isAcceptableOrUnknown(data['no_tracks']!, _noTracksMeta),
+      );
+    }
+    if (data.containsKey('no_vias')) {
+      context.handle(
+        _noViasMeta,
+        noVias.isAcceptableOrUnknown(data['no_vias']!, _noViasMeta),
+      );
+    }
+    if (data.containsKey('no_pours')) {
+      context.handle(
+        _noPoursMeta,
+        noPours.isAcceptableOrUnknown(data['no_pours']!, _noPoursMeta),
+      );
+    }
+    if (data.containsKey('no_parts')) {
+      context.handle(
+        _noPartsMeta,
+        noParts.isAcceptableOrUnknown(data['no_parts']!, _noPartsMeta),
+      );
+    }
+    if (data.containsKey('locked')) {
+      context.handle(
+        _lockedMeta,
+        locked.isAcceptableOrUnknown(data['locked']!, _lockedMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -11417,6 +11892,30 @@ class $BoardZonesTable extends BoardZones
         DriftSqlType.double,
         data['${effectivePrefix}thermal_spoke'],
       )!,
+      keepout: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}keepout'],
+      )!,
+      noTracks: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}no_tracks'],
+      )!,
+      noVias: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}no_vias'],
+      )!,
+      noPours: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}no_pours'],
+      )!,
+      noParts: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}no_parts'],
+      )!,
+      locked: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}locked'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -11461,6 +11960,15 @@ class BoardZoneRow extends DataClass implements Insertable<BoardZoneRow> {
   final String viaConnection;
   final double thermalGap;
   final double thermalSpoke;
+
+  /// A keepout claims ground rather than filling it: nothing on this list
+  /// may be put inside it. An ordinary pour keeps all four false.
+  final bool keepout;
+  final bool noTracks;
+  final bool noVias;
+  final bool noPours;
+  final bool noParts;
+  final bool locked;
   final DateTime createdAt;
   const BoardZoneRow({
     required this.id,
@@ -11476,6 +11984,12 @@ class BoardZoneRow extends DataClass implements Insertable<BoardZoneRow> {
     required this.viaConnection,
     required this.thermalGap,
     required this.thermalSpoke,
+    required this.keepout,
+    required this.noTracks,
+    required this.noVias,
+    required this.noPours,
+    required this.noParts,
+    required this.locked,
     required this.createdAt,
   });
   @override
@@ -11496,6 +12010,12 @@ class BoardZoneRow extends DataClass implements Insertable<BoardZoneRow> {
     map['via_connection'] = Variable<String>(viaConnection);
     map['thermal_gap'] = Variable<double>(thermalGap);
     map['thermal_spoke'] = Variable<double>(thermalSpoke);
+    map['keepout'] = Variable<bool>(keepout);
+    map['no_tracks'] = Variable<bool>(noTracks);
+    map['no_vias'] = Variable<bool>(noVias);
+    map['no_pours'] = Variable<bool>(noPours);
+    map['no_parts'] = Variable<bool>(noParts);
+    map['locked'] = Variable<bool>(locked);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -11517,6 +12037,12 @@ class BoardZoneRow extends DataClass implements Insertable<BoardZoneRow> {
       viaConnection: Value(viaConnection),
       thermalGap: Value(thermalGap),
       thermalSpoke: Value(thermalSpoke),
+      keepout: Value(keepout),
+      noTracks: Value(noTracks),
+      noVias: Value(noVias),
+      noPours: Value(noPours),
+      noParts: Value(noParts),
+      locked: Value(locked),
       createdAt: Value(createdAt),
     );
   }
@@ -11540,6 +12066,12 @@ class BoardZoneRow extends DataClass implements Insertable<BoardZoneRow> {
       viaConnection: serializer.fromJson<String>(json['viaConnection']),
       thermalGap: serializer.fromJson<double>(json['thermalGap']),
       thermalSpoke: serializer.fromJson<double>(json['thermalSpoke']),
+      keepout: serializer.fromJson<bool>(json['keepout']),
+      noTracks: serializer.fromJson<bool>(json['noTracks']),
+      noVias: serializer.fromJson<bool>(json['noVias']),
+      noPours: serializer.fromJson<bool>(json['noPours']),
+      noParts: serializer.fromJson<bool>(json['noParts']),
+      locked: serializer.fromJson<bool>(json['locked']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -11560,6 +12092,12 @@ class BoardZoneRow extends DataClass implements Insertable<BoardZoneRow> {
       'viaConnection': serializer.toJson<String>(viaConnection),
       'thermalGap': serializer.toJson<double>(thermalGap),
       'thermalSpoke': serializer.toJson<double>(thermalSpoke),
+      'keepout': serializer.toJson<bool>(keepout),
+      'noTracks': serializer.toJson<bool>(noTracks),
+      'noVias': serializer.toJson<bool>(noVias),
+      'noPours': serializer.toJson<bool>(noPours),
+      'noParts': serializer.toJson<bool>(noParts),
+      'locked': serializer.toJson<bool>(locked),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -11578,6 +12116,12 @@ class BoardZoneRow extends DataClass implements Insertable<BoardZoneRow> {
     String? viaConnection,
     double? thermalGap,
     double? thermalSpoke,
+    bool? keepout,
+    bool? noTracks,
+    bool? noVias,
+    bool? noPours,
+    bool? noParts,
+    bool? locked,
     DateTime? createdAt,
   }) => BoardZoneRow(
     id: id ?? this.id,
@@ -11593,6 +12137,12 @@ class BoardZoneRow extends DataClass implements Insertable<BoardZoneRow> {
     viaConnection: viaConnection ?? this.viaConnection,
     thermalGap: thermalGap ?? this.thermalGap,
     thermalSpoke: thermalSpoke ?? this.thermalSpoke,
+    keepout: keepout ?? this.keepout,
+    noTracks: noTracks ?? this.noTracks,
+    noVias: noVias ?? this.noVias,
+    noPours: noPours ?? this.noPours,
+    noParts: noParts ?? this.noParts,
+    locked: locked ?? this.locked,
     createdAt: createdAt ?? this.createdAt,
   );
   BoardZoneRow copyWithCompanion(BoardZonesCompanion data) {
@@ -11620,6 +12170,12 @@ class BoardZoneRow extends DataClass implements Insertable<BoardZoneRow> {
       thermalSpoke: data.thermalSpoke.present
           ? data.thermalSpoke.value
           : this.thermalSpoke,
+      keepout: data.keepout.present ? data.keepout.value : this.keepout,
+      noTracks: data.noTracks.present ? data.noTracks.value : this.noTracks,
+      noVias: data.noVias.present ? data.noVias.value : this.noVias,
+      noPours: data.noPours.present ? data.noPours.value : this.noPours,
+      noParts: data.noParts.present ? data.noParts.value : this.noParts,
+      locked: data.locked.present ? data.locked.value : this.locked,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -11640,6 +12196,12 @@ class BoardZoneRow extends DataClass implements Insertable<BoardZoneRow> {
           ..write('viaConnection: $viaConnection, ')
           ..write('thermalGap: $thermalGap, ')
           ..write('thermalSpoke: $thermalSpoke, ')
+          ..write('keepout: $keepout, ')
+          ..write('noTracks: $noTracks, ')
+          ..write('noVias: $noVias, ')
+          ..write('noPours: $noPours, ')
+          ..write('noParts: $noParts, ')
+          ..write('locked: $locked, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -11660,6 +12222,12 @@ class BoardZoneRow extends DataClass implements Insertable<BoardZoneRow> {
     viaConnection,
     thermalGap,
     thermalSpoke,
+    keepout,
+    noTracks,
+    noVias,
+    noPours,
+    noParts,
+    locked,
     createdAt,
   );
   @override
@@ -11679,6 +12247,12 @@ class BoardZoneRow extends DataClass implements Insertable<BoardZoneRow> {
           other.viaConnection == this.viaConnection &&
           other.thermalGap == this.thermalGap &&
           other.thermalSpoke == this.thermalSpoke &&
+          other.keepout == this.keepout &&
+          other.noTracks == this.noTracks &&
+          other.noVias == this.noVias &&
+          other.noPours == this.noPours &&
+          other.noParts == this.noParts &&
+          other.locked == this.locked &&
           other.createdAt == this.createdAt);
 }
 
@@ -11696,6 +12270,12 @@ class BoardZonesCompanion extends UpdateCompanion<BoardZoneRow> {
   final Value<String> viaConnection;
   final Value<double> thermalGap;
   final Value<double> thermalSpoke;
+  final Value<bool> keepout;
+  final Value<bool> noTracks;
+  final Value<bool> noVias;
+  final Value<bool> noPours;
+  final Value<bool> noParts;
+  final Value<bool> locked;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const BoardZonesCompanion({
@@ -11712,6 +12292,12 @@ class BoardZonesCompanion extends UpdateCompanion<BoardZoneRow> {
     this.viaConnection = const Value.absent(),
     this.thermalGap = const Value.absent(),
     this.thermalSpoke = const Value.absent(),
+    this.keepout = const Value.absent(),
+    this.noTracks = const Value.absent(),
+    this.noVias = const Value.absent(),
+    this.noPours = const Value.absent(),
+    this.noParts = const Value.absent(),
+    this.locked = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -11729,6 +12315,12 @@ class BoardZonesCompanion extends UpdateCompanion<BoardZoneRow> {
     this.viaConnection = const Value.absent(),
     this.thermalGap = const Value.absent(),
     this.thermalSpoke = const Value.absent(),
+    this.keepout = const Value.absent(),
+    this.noTracks = const Value.absent(),
+    this.noVias = const Value.absent(),
+    this.noPours = const Value.absent(),
+    this.noParts = const Value.absent(),
+    this.locked = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -11749,6 +12341,12 @@ class BoardZonesCompanion extends UpdateCompanion<BoardZoneRow> {
     Expression<String>? viaConnection,
     Expression<double>? thermalGap,
     Expression<double>? thermalSpoke,
+    Expression<bool>? keepout,
+    Expression<bool>? noTracks,
+    Expression<bool>? noVias,
+    Expression<bool>? noPours,
+    Expression<bool>? noParts,
+    Expression<bool>? locked,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -11766,6 +12364,12 @@ class BoardZonesCompanion extends UpdateCompanion<BoardZoneRow> {
       if (viaConnection != null) 'via_connection': viaConnection,
       if (thermalGap != null) 'thermal_gap': thermalGap,
       if (thermalSpoke != null) 'thermal_spoke': thermalSpoke,
+      if (keepout != null) 'keepout': keepout,
+      if (noTracks != null) 'no_tracks': noTracks,
+      if (noVias != null) 'no_vias': noVias,
+      if (noPours != null) 'no_pours': noPours,
+      if (noParts != null) 'no_parts': noParts,
+      if (locked != null) 'locked': locked,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -11785,6 +12389,12 @@ class BoardZonesCompanion extends UpdateCompanion<BoardZoneRow> {
     Value<String>? viaConnection,
     Value<double>? thermalGap,
     Value<double>? thermalSpoke,
+    Value<bool>? keepout,
+    Value<bool>? noTracks,
+    Value<bool>? noVias,
+    Value<bool>? noPours,
+    Value<bool>? noParts,
+    Value<bool>? locked,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -11802,6 +12412,12 @@ class BoardZonesCompanion extends UpdateCompanion<BoardZoneRow> {
       viaConnection: viaConnection ?? this.viaConnection,
       thermalGap: thermalGap ?? this.thermalGap,
       thermalSpoke: thermalSpoke ?? this.thermalSpoke,
+      keepout: keepout ?? this.keepout,
+      noTracks: noTracks ?? this.noTracks,
+      noVias: noVias ?? this.noVias,
+      noPours: noPours ?? this.noPours,
+      noParts: noParts ?? this.noParts,
+      locked: locked ?? this.locked,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -11849,6 +12465,24 @@ class BoardZonesCompanion extends UpdateCompanion<BoardZoneRow> {
     if (thermalSpoke.present) {
       map['thermal_spoke'] = Variable<double>(thermalSpoke.value);
     }
+    if (keepout.present) {
+      map['keepout'] = Variable<bool>(keepout.value);
+    }
+    if (noTracks.present) {
+      map['no_tracks'] = Variable<bool>(noTracks.value);
+    }
+    if (noVias.present) {
+      map['no_vias'] = Variable<bool>(noVias.value);
+    }
+    if (noPours.present) {
+      map['no_pours'] = Variable<bool>(noPours.value);
+    }
+    if (noParts.present) {
+      map['no_parts'] = Variable<bool>(noParts.value);
+    }
+    if (locked.present) {
+      map['locked'] = Variable<bool>(locked.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -11874,6 +12508,12 @@ class BoardZonesCompanion extends UpdateCompanion<BoardZoneRow> {
           ..write('viaConnection: $viaConnection, ')
           ..write('thermalGap: $thermalGap, ')
           ..write('thermalSpoke: $thermalSpoke, ')
+          ..write('keepout: $keepout, ')
+          ..write('noTracks: $noTracks, ')
+          ..write('noVias: $noVias, ')
+          ..write('noPours: $noPours, ')
+          ..write('noParts: $noParts, ')
+          ..write('locked: $locked, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -25246,6 +25886,7 @@ typedef $$BoardsTableCreateCompanionBuilder =
       Value<String> viaConnection,
       Value<double> thermalGap,
       Value<double> thermalSpoke,
+      Value<String> teardrops,
       Value<double> gridMm,
       Value<int> copperLayers,
       Value<double> thickness,
@@ -25273,6 +25914,7 @@ typedef $$BoardsTableUpdateCompanionBuilder =
       Value<String> viaConnection,
       Value<double> thermalGap,
       Value<double> thermalSpoke,
+      Value<String> teardrops,
       Value<double> gridMm,
       Value<int> copperLayers,
       Value<double> thickness,
@@ -25394,6 +26036,11 @@ class $$BoardsTableFilterComposer
 
   ColumnFilters<double> get thermalSpoke => $composableBuilder(
     column: $table.thermalSpoke,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get teardrops => $composableBuilder(
+    column: $table.teardrops,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -25540,6 +26187,11 @@ class $$BoardsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get teardrops => $composableBuilder(
+    column: $table.teardrops,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<double> get gridMm => $composableBuilder(
     column: $table.gridMm,
     builder: (column) => ColumnOrderings(column),
@@ -25671,6 +26323,9 @@ class $$BoardsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get teardrops =>
+      $composableBuilder(column: $table.teardrops, builder: (column) => column);
+
   GeneratedColumn<double> get gridMm =>
       $composableBuilder(column: $table.gridMm, builder: (column) => column);
 
@@ -25760,6 +26415,7 @@ class $$BoardsTableTableManager
                 Value<String> viaConnection = const Value.absent(),
                 Value<double> thermalGap = const Value.absent(),
                 Value<double> thermalSpoke = const Value.absent(),
+                Value<String> teardrops = const Value.absent(),
                 Value<double> gridMm = const Value.absent(),
                 Value<int> copperLayers = const Value.absent(),
                 Value<double> thickness = const Value.absent(),
@@ -25785,6 +26441,7 @@ class $$BoardsTableTableManager
                 viaConnection: viaConnection,
                 thermalGap: thermalGap,
                 thermalSpoke: thermalSpoke,
+                teardrops: teardrops,
                 gridMm: gridMm,
                 copperLayers: copperLayers,
                 thickness: thickness,
@@ -25812,6 +26469,7 @@ class $$BoardsTableTableManager
                 Value<String> viaConnection = const Value.absent(),
                 Value<double> thermalGap = const Value.absent(),
                 Value<double> thermalSpoke = const Value.absent(),
+                Value<String> teardrops = const Value.absent(),
                 Value<double> gridMm = const Value.absent(),
                 Value<int> copperLayers = const Value.absent(),
                 Value<double> thickness = const Value.absent(),
@@ -25837,6 +26495,7 @@ class $$BoardsTableTableManager
                 viaConnection: viaConnection,
                 thermalGap: thermalGap,
                 thermalSpoke: thermalSpoke,
+                teardrops: teardrops,
                 gridMm: gridMm,
                 copperLayers: copperLayers,
                 thickness: thickness,
@@ -25924,6 +26583,7 @@ typedef $$BoardFootprintsTableCreateCompanionBuilder =
       Value<double?> labelY,
       Value<double> labelSize,
       Value<bool> labelHidden,
+      Value<bool> locked,
       Value<int> rowid,
     });
 typedef $$BoardFootprintsTableUpdateCompanionBuilder =
@@ -25941,6 +26601,7 @@ typedef $$BoardFootprintsTableUpdateCompanionBuilder =
       Value<double?> labelY,
       Value<double> labelSize,
       Value<bool> labelHidden,
+      Value<bool> locked,
       Value<int> rowid,
     });
 
@@ -26059,6 +26720,11 @@ class $$BoardFootprintsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<bool> get locked => $composableBuilder(
+    column: $table.locked,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$ProjectsTableFilterComposer get projectId {
     final $$ProjectsTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -26170,6 +26836,11 @@ class $$BoardFootprintsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get locked => $composableBuilder(
+    column: $table.locked,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$ProjectsTableOrderingComposer get projectId {
     final $$ProjectsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -26261,6 +26932,9 @@ class $$BoardFootprintsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get locked =>
+      $composableBuilder(column: $table.locked, builder: (column) => column);
+
   $$ProjectsTableAnnotationComposer get projectId {
     final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -26351,6 +27025,7 @@ class $$BoardFootprintsTableTableManager
                 Value<double?> labelY = const Value.absent(),
                 Value<double> labelSize = const Value.absent(),
                 Value<bool> labelHidden = const Value.absent(),
+                Value<bool> locked = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BoardFootprintsCompanion(
                 id: id,
@@ -26366,6 +27041,7 @@ class $$BoardFootprintsTableTableManager
                 labelY: labelY,
                 labelSize: labelSize,
                 labelHidden: labelHidden,
+                locked: locked,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -26383,6 +27059,7 @@ class $$BoardFootprintsTableTableManager
                 Value<double?> labelY = const Value.absent(),
                 Value<double> labelSize = const Value.absent(),
                 Value<bool> labelHidden = const Value.absent(),
+                Value<bool> locked = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BoardFootprintsCompanion.insert(
                 id: id,
@@ -26398,6 +27075,7 @@ class $$BoardFootprintsTableTableManager
                 labelY: labelY,
                 labelSize: labelSize,
                 labelHidden: labelHidden,
+                locked: locked,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -26495,6 +27173,7 @@ typedef $$BoardTracksTableCreateCompanionBuilder =
       required double endX,
       required double endY,
       Value<double> width,
+      Value<bool> locked,
       Value<int> rowid,
     });
 typedef $$BoardTracksTableUpdateCompanionBuilder =
@@ -26508,6 +27187,7 @@ typedef $$BoardTracksTableUpdateCompanionBuilder =
       Value<double> endX,
       Value<double> endY,
       Value<double> width,
+      Value<bool> locked,
       Value<int> rowid,
     });
 
@@ -26594,6 +27274,11 @@ class $$BoardTracksTableFilterComposer
 
   ColumnFilters<double> get width => $composableBuilder(
     column: $table.width,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get locked => $composableBuilder(
+    column: $table.locked,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -26688,6 +27373,11 @@ class $$BoardTracksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get locked => $composableBuilder(
+    column: $table.locked,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$ProjectsTableOrderingComposer get projectId {
     final $$ProjectsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -26764,6 +27454,9 @@ class $$BoardTracksTableAnnotationComposer
 
   GeneratedColumn<double> get width =>
       $composableBuilder(column: $table.width, builder: (column) => column);
+
+  GeneratedColumn<bool> get locked =>
+      $composableBuilder(column: $table.locked, builder: (column) => column);
 
   $$ProjectsTableAnnotationComposer get projectId {
     final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
@@ -26849,6 +27542,7 @@ class $$BoardTracksTableTableManager
                 Value<double> endX = const Value.absent(),
                 Value<double> endY = const Value.absent(),
                 Value<double> width = const Value.absent(),
+                Value<bool> locked = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BoardTracksCompanion(
                 id: id,
@@ -26860,6 +27554,7 @@ class $$BoardTracksTableTableManager
                 endX: endX,
                 endY: endY,
                 width: width,
+                locked: locked,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -26873,6 +27568,7 @@ class $$BoardTracksTableTableManager
                 required double endX,
                 required double endY,
                 Value<double> width = const Value.absent(),
+                Value<bool> locked = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BoardTracksCompanion.insert(
                 id: id,
@@ -26884,6 +27580,7 @@ class $$BoardTracksTableTableManager
                 endX: endX,
                 endY: endY,
                 width: width,
+                locked: locked,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -26975,6 +27672,10 @@ typedef $$BoardViasTableCreateCompanionBuilder =
       required double y,
       Value<double> diameter,
       Value<double> drill,
+      Value<String> viaKind,
+      Value<String> fromLayer,
+      Value<String> toLayer,
+      Value<bool> locked,
       Value<int> rowid,
     });
 typedef $$BoardViasTableUpdateCompanionBuilder =
@@ -26986,6 +27687,10 @@ typedef $$BoardViasTableUpdateCompanionBuilder =
       Value<double> y,
       Value<double> diameter,
       Value<double> drill,
+      Value<String> viaKind,
+      Value<String> fromLayer,
+      Value<String> toLayer,
+      Value<bool> locked,
       Value<int> rowid,
     });
 
@@ -27061,6 +27766,26 @@ class $$BoardViasTableFilterComposer
 
   ColumnFilters<double> get drill => $composableBuilder(
     column: $table.drill,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get viaKind => $composableBuilder(
+    column: $table.viaKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fromLayer => $composableBuilder(
+    column: $table.fromLayer,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get toLayer => $composableBuilder(
+    column: $table.toLayer,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get locked => $composableBuilder(
+    column: $table.locked,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -27145,6 +27870,26 @@ class $$BoardViasTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get viaKind => $composableBuilder(
+    column: $table.viaKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get fromLayer => $composableBuilder(
+    column: $table.fromLayer,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get toLayer => $composableBuilder(
+    column: $table.toLayer,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get locked => $composableBuilder(
+    column: $table.locked,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$ProjectsTableOrderingComposer get projectId {
     final $$ProjectsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -27215,6 +27960,18 @@ class $$BoardViasTableAnnotationComposer
 
   GeneratedColumn<double> get drill =>
       $composableBuilder(column: $table.drill, builder: (column) => column);
+
+  GeneratedColumn<String> get viaKind =>
+      $composableBuilder(column: $table.viaKind, builder: (column) => column);
+
+  GeneratedColumn<String> get fromLayer =>
+      $composableBuilder(column: $table.fromLayer, builder: (column) => column);
+
+  GeneratedColumn<String> get toLayer =>
+      $composableBuilder(column: $table.toLayer, builder: (column) => column);
+
+  GeneratedColumn<bool> get locked =>
+      $composableBuilder(column: $table.locked, builder: (column) => column);
 
   $$ProjectsTableAnnotationComposer get projectId {
     final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
@@ -27298,6 +28055,10 @@ class $$BoardViasTableTableManager
                 Value<double> y = const Value.absent(),
                 Value<double> diameter = const Value.absent(),
                 Value<double> drill = const Value.absent(),
+                Value<String> viaKind = const Value.absent(),
+                Value<String> fromLayer = const Value.absent(),
+                Value<String> toLayer = const Value.absent(),
+                Value<bool> locked = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BoardViasCompanion(
                 id: id,
@@ -27307,6 +28068,10 @@ class $$BoardViasTableTableManager
                 y: y,
                 diameter: diameter,
                 drill: drill,
+                viaKind: viaKind,
+                fromLayer: fromLayer,
+                toLayer: toLayer,
+                locked: locked,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -27318,6 +28083,10 @@ class $$BoardViasTableTableManager
                 required double y,
                 Value<double> diameter = const Value.absent(),
                 Value<double> drill = const Value.absent(),
+                Value<String> viaKind = const Value.absent(),
+                Value<String> fromLayer = const Value.absent(),
+                Value<String> toLayer = const Value.absent(),
+                Value<bool> locked = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BoardViasCompanion.insert(
                 id: id,
@@ -27327,6 +28096,10 @@ class $$BoardViasTableTableManager
                 y: y,
                 diameter: diameter,
                 drill: drill,
+                viaKind: viaKind,
+                fromLayer: fromLayer,
+                toLayer: toLayer,
+                locked: locked,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -27762,6 +28535,12 @@ typedef $$BoardZonesTableCreateCompanionBuilder =
       Value<String> viaConnection,
       Value<double> thermalGap,
       Value<double> thermalSpoke,
+      Value<bool> keepout,
+      Value<bool> noTracks,
+      Value<bool> noVias,
+      Value<bool> noPours,
+      Value<bool> noParts,
+      Value<bool> locked,
       required DateTime createdAt,
       Value<int> rowid,
     });
@@ -27780,6 +28559,12 @@ typedef $$BoardZonesTableUpdateCompanionBuilder =
       Value<String> viaConnection,
       Value<double> thermalGap,
       Value<double> thermalSpoke,
+      Value<bool> keepout,
+      Value<bool> noTracks,
+      Value<bool> noVias,
+      Value<bool> noPours,
+      Value<bool> noParts,
+      Value<bool> locked,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -27887,6 +28672,36 @@ class $$BoardZonesTableFilterComposer
 
   ColumnFilters<double> get thermalSpoke => $composableBuilder(
     column: $table.thermalSpoke,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get keepout => $composableBuilder(
+    column: $table.keepout,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get noTracks => $composableBuilder(
+    column: $table.noTracks,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get noVias => $composableBuilder(
+    column: $table.noVias,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get noPours => $composableBuilder(
+    column: $table.noPours,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get noParts => $composableBuilder(
+    column: $table.noParts,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get locked => $composableBuilder(
+    column: $table.locked,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -28006,6 +28821,36 @@ class $$BoardZonesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get keepout => $composableBuilder(
+    column: $table.keepout,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get noTracks => $composableBuilder(
+    column: $table.noTracks,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get noVias => $composableBuilder(
+    column: $table.noVias,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get noPours => $composableBuilder(
+    column: $table.noPours,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get noParts => $composableBuilder(
+    column: $table.noParts,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get locked => $composableBuilder(
+    column: $table.locked,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -28110,6 +28955,24 @@ class $$BoardZonesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get keepout =>
+      $composableBuilder(column: $table.keepout, builder: (column) => column);
+
+  GeneratedColumn<bool> get noTracks =>
+      $composableBuilder(column: $table.noTracks, builder: (column) => column);
+
+  GeneratedColumn<bool> get noVias =>
+      $composableBuilder(column: $table.noVias, builder: (column) => column);
+
+  GeneratedColumn<bool> get noPours =>
+      $composableBuilder(column: $table.noPours, builder: (column) => column);
+
+  GeneratedColumn<bool> get noParts =>
+      $composableBuilder(column: $table.noParts, builder: (column) => column);
+
+  GeneratedColumn<bool> get locked =>
+      $composableBuilder(column: $table.locked, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -28201,6 +29064,12 @@ class $$BoardZonesTableTableManager
                 Value<String> viaConnection = const Value.absent(),
                 Value<double> thermalGap = const Value.absent(),
                 Value<double> thermalSpoke = const Value.absent(),
+                Value<bool> keepout = const Value.absent(),
+                Value<bool> noTracks = const Value.absent(),
+                Value<bool> noVias = const Value.absent(),
+                Value<bool> noPours = const Value.absent(),
+                Value<bool> noParts = const Value.absent(),
+                Value<bool> locked = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BoardZonesCompanion(
@@ -28217,6 +29086,12 @@ class $$BoardZonesTableTableManager
                 viaConnection: viaConnection,
                 thermalGap: thermalGap,
                 thermalSpoke: thermalSpoke,
+                keepout: keepout,
+                noTracks: noTracks,
+                noVias: noVias,
+                noPours: noPours,
+                noParts: noParts,
+                locked: locked,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -28235,6 +29110,12 @@ class $$BoardZonesTableTableManager
                 Value<String> viaConnection = const Value.absent(),
                 Value<double> thermalGap = const Value.absent(),
                 Value<double> thermalSpoke = const Value.absent(),
+                Value<bool> keepout = const Value.absent(),
+                Value<bool> noTracks = const Value.absent(),
+                Value<bool> noVias = const Value.absent(),
+                Value<bool> noPours = const Value.absent(),
+                Value<bool> noParts = const Value.absent(),
+                Value<bool> locked = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
               }) => BoardZonesCompanion.insert(
@@ -28251,6 +29132,12 @@ class $$BoardZonesTableTableManager
                 viaConnection: viaConnection,
                 thermalGap: thermalGap,
                 thermalSpoke: thermalSpoke,
+                keepout: keepout,
+                noTracks: noTracks,
+                noVias: noVias,
+                noPours: noPours,
+                noParts: noParts,
+                locked: locked,
                 createdAt: createdAt,
                 rowid: rowid,
               ),

@@ -19,6 +19,12 @@ abstract final class BoardProjectWriter {
 
   static String write(BoardDocument document, {required String fileName}) {
     final rules = document.board.rules;
+    final teardrops = document.board.teardrops;
+    // Only turned on when the board actually has one: KiCad's own rule
+    // check refuses a blind via on a board whose project says it may not
+    // have any, which would turn our own board into an error the moment it
+    // was opened.
+    final blind = document.scene.vias.any((v) => v.kind != ViaKind.through);
 
     final project = <String, Object?>{
       'board': {
@@ -38,7 +44,7 @@ abstract final class BoardProjectWriter {
           // than from KiCad's defaults, so running DRC on the desktop
           // checks the board the phone thought it was checking.
           'rules': {
-            'allow_blind_buried_vias': false,
+            'allow_blind_buried_vias': blind,
             'allow_microvias': false,
             'max_error': 0.005,
             'min_clearance': rules.clearance,
@@ -49,6 +55,34 @@ abstract final class BoardProjectWriter {
             'min_via_annular_width': (rules.viaDiameter - rules.viaDrill) / 2,
             'min_via_diameter': rules.viaDiameter,
           },
+          // So "Edit Teardrops" on the desktop regenerates the same
+          // fillets the phone drew and the Gerbers already hold.
+          'teardrop_options': [
+            {
+              'td_onpadsmd': teardrops.enabled && teardrops.onPads,
+              'td_onroundshapesonly': false,
+              'td_ontrackend': false,
+              'td_onviapad': teardrops.enabled && teardrops.onVias,
+            },
+          ],
+          'teardrop_parameters': [
+            for (final target in const [
+              'td_round_shape',
+              'td_rect_shape',
+              'td_track_end',
+            ])
+              {
+                'td_allow_use_two_tracks': true,
+                'td_curve_segcount': 0,
+                'td_height_ratio': teardrops.widthRatio,
+                'td_length_ratio': teardrops.lengthRatio,
+                'td_maxheight': 2.0,
+                'td_maxlen': 1.0,
+                'td_on_pad_in_zone': false,
+                'td_target_name': target,
+                'td_width_to_size_filter_ratio': 0.9,
+              },
+          ],
           'track_widths': [0.0, rules.trackWidth],
           'via_dimensions': [
             {'diameter': 0.0, 'drill': 0.0},

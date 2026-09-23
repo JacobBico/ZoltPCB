@@ -149,17 +149,16 @@ class ConnectionFigure extends RuleFigure {
         return Path()
           ..addOval(Rect.fromCircle(center: centre, radius: half + grow));
       }
-      return Path()
-        ..addRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromCenter(
-              center: centre,
-              width: (half + grow) * 2,
-              height: (half + grow) * 2,
-            ),
-            Radius.circular(unit * 0.05),
+      return Path()..addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: centre,
+            width: (half + grow) * 2,
+            height: (half + grow) * 2,
           ),
-        );
+          Radius.circular(unit * 0.05),
+        ),
+      );
     }
 
     switch (connection) {
@@ -252,6 +251,52 @@ class ThermalFigure extends RuleFigure {
   }
 }
 
+/// A track meeting a round pad, with and without the fillet that fills
+/// the corner in.
+class TeardropFigure extends RuleFigure {
+  const TeardropFigure({this.filled = true});
+
+  /// Whether the fillet is drawn, or only the bare corner it fills.
+  final bool filled;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final ink = _Ink(BoardPainter.colorFor(CopperLayer.front));
+    final unit = math.min(size.width, size.height);
+    final centre = Offset(size.width * 0.32, size.height / 2);
+    final radius = unit * 0.26;
+    final half = unit * 0.06;
+    final end = Offset(size.width * 0.95, size.height / 2);
+
+    if (filled) {
+      final path = Path()..moveTo(centre.dx - radius, centre.dy);
+      final reach = (end.dx - centre.dx) * 0.55;
+      for (final side in [-1.0, 1.0]) {
+        path.moveTo(centre.dx - radius * 0.9, centre.dy);
+        for (var i = 0; i <= 8; i++) {
+          final t = i / 8;
+          final w = half + (radius * 0.92 - half) * (1 - t) * (1 - t);
+          path.lineTo(centre.dx + reach * t, centre.dy + side * w);
+        }
+        path.lineTo(centre.dx + reach, centre.dy);
+        path.close();
+      }
+      canvas.drawPath(path, ink.fill);
+    }
+
+    canvas
+      ..drawCircle(centre, radius, ink.fill)
+      ..drawCircle(centre, radius * 0.45, ink.drill)
+      ..drawLine(
+        centre,
+        end,
+        Paint()
+          ..color = ink.copper
+          ..strokeWidth = half * 2,
+      );
+  }
+}
+
 /// A double-headed arrow between two points, the way a drawing dimensions
 /// anything.
 void _arrow(Canvas canvas, Offset a, Offset b, _Ink ink, {bool above = false}) {
@@ -272,7 +317,12 @@ void _arrow(Canvas canvas, Offset a, Offset b, _Ink ink, {bool above = false}) {
 
 /// A [RuleFigure] as a widget.
 class RulePicture extends StatelessWidget {
-  const RulePicture(this.figure, {super.key, this.width = 44, this.height = 32});
+  const RulePicture(
+    this.figure, {
+    super.key,
+    this.width = 44,
+    this.height = 32,
+  });
 
   final RuleFigure figure;
   final double width;
@@ -356,9 +406,7 @@ class ConnectionPicker extends StatelessWidget {
                       choice.label,
                       style: TextStyle(
                         fontSize: 11,
-                        color: choice == value
-                            ? KicadPalette.highlight
-                            : null,
+                        color: choice == value ? KicadPalette.highlight : null,
                       ),
                     ),
                     Text(

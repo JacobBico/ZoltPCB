@@ -142,6 +142,7 @@ class BoardPainter extends CustomPainter {
     }
     _paintTracks(canvas, activeLayer, dimmed: false);
     _paintVias(canvas);
+    _paintTeardrops(canvas);
 
     _paintFootprints(canvas);
     _paintCollisions(canvas);
@@ -558,12 +559,18 @@ class BoardPainter extends CustomPainter {
     for (final zone in scene.zones) {
       if (!zone.isValid) continue;
       final onActive = zone.layer == activeLayer.layer;
-      final base = zone.layer == BoardLayer.frontCopper
-          ? KicadPalette.frontCopper
-          : KicadPalette.backCopper;
+      final base = zone.keepout
+          ? KicadPalette.warning
+          : (CopperLayer.fromToken(zone.layer.token) == null
+                ? KicadPalette.backCopper
+                : colorFor(CopperLayer.fromToken(zone.layer.token)!));
       final selected = zone.id == selectedZoneId;
 
       final path = zone.path.transform(_toScreenMatrix());
+      // A keepout is hatched rather than filled: it is ground claimed, and
+      // it has to read as an area with nothing in it rather than as a
+      // pour that somehow failed to fill.
+      if (zone.keepout) _paintHatch(canvas, zone, base, onActive);
       canvas.drawPath(
         path,
         Paint()
@@ -574,18 +581,73 @@ class BoardPainter extends CustomPainter {
               : base.withValues(alpha: onActive ? 0.9 : 0.45),
       );
 
-      // The net's name in the middle, which is the only question anyone
-      // asks of a pour.
-      if (zone.netName.isNotEmpty && viewport.pixelsPerMm > 2) {
+      // What it is, in the middle: the net for a pour, and for a keepout
+      // the thing it is there to stop.
+      final caption = zone.keepout
+          ? 'No ${zone.keptOut.join(', ')}'
+          : zone.netName;
+      if (zone.locked) {
+        _paintLock(
+          canvas,
+          viewport.toScreen(zone.bounds.center) + const Offset(0, -12),
+        );
+      }
+      if (caption.isNotEmpty && viewport.pixelsPerMm > 2) {
         _paintText(
           canvas,
-          zone.netName,
+          caption,
           viewport.toScreen(zone.bounds.center),
           color: base.withValues(alpha: onActive ? 0.95 : 0.5),
           size: 10,
         );
       }
     }
+  }
+
+  /// A small padlock, so what is held says so without being selected.
+  void _paintLock(Canvas canvas, Offset at) {
+    if (viewport.pixelsPerMm < 1.5) return;
+    final paint = Paint()
+      ..color = KicadPalette.warning
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
+    final body = Rect.fromCenter(
+      center: at + const Offset(0, 2),
+      width: 7,
+      height: 6,
+    );
+    canvas
+      ..drawRRect(
+        RRect.fromRectAndRadius(body, const Radius.circular(1.2)),
+        Paint()..color = KicadPalette.warning,
+      )
+      ..drawArc(
+        Rect.fromCenter(center: at - const Offset(0, 1.5), width: 5, height: 6),
+        math.pi,
+        math.pi,
+        false,
+        paint,
+      );
+  }
+
+  /// Diagonal lines across a keepout, clipped to its outline.
+  void _paintHatch(Canvas canvas, BoardZone zone, Color colour, bool onActive) {
+    final box = zone.bounds;
+    final step = math.max(1.5, 10 / viewport.pixelsPerMm);
+    final paint = Paint()
+      ..color = colour.withValues(alpha: onActive ? 0.35 : 0.18)
+      ..strokeWidth = 1;
+    canvas
+      ..save()
+      ..clipPath(zone.path.transform(_toScreenMatrix()));
+    for (var d = box.left - box.height; d < box.right; d += step) {
+      canvas.drawLine(
+        viewport.toScreen(Offset(d, box.top)),
+        viewport.toScreen(Offset(d + box.height, box.bottom)),
+        paint,
+      );
+    }
+    canvas.restore();
   }
 
   /// Dimension lines, drawn the way a drawing office would: extension
@@ -821,6 +883,30 @@ class BoardPainter extends CustomPainter {
     }
   }
 
+  /// The fillets where a track meets a pad or a via.
+  ///
+  /// Drawn after the copper they join and before the pads, so a fillet
+  /// reads as part of the same piece of copper rather than as a shape
+  /// sitting on top of it.
+  void _paintTeardrops(Canvas canvas) {
+    if (!scene.board.teardrops.enabled) return;
+    for (final layer in scene.board.copperLayers) {
+      final drops = Teardrops.of(scene, layer);
+      if (drops.isEmpty) continue;
+      var colour = colorFor(layer);
+      if (layer != activeLayer) colour = colour.withValues(alpha: 0.35);
+      final paint = Paint()..color = colour;
+      for (final drop in drops) {
+        canvas.drawPath(
+          Path()..addPolygon([
+            for (final point in drop.points) viewport.toScreen(point),
+          ], true),
+          paint,
+        );
+      }
+    }
+  }
+
   // --- footprints ------------------------------------------------------
 
   void _paintFootprints(Canvas canvas) {
@@ -840,6 +926,9 @@ class BoardPainter extends CustomPainter {
         _paintPad(canvas, pad);
       }
       _paintReference(canvas, footprint, selected: selected);
+      if (footprint.ref.locked) {
+        _paintLock(canvas, viewport.toScreen(footprint.bounds.center));
+      }
 
       if (selected) {
         final rect = Rect.fromPoints(
@@ -860,8 +949,7 @@ class BoardPainter extends CustomPainter {
   /// The ground two parts are both standing on, in red.
   void _paintCollisions(Canvas canvas) {
     if (collisions.isEmpty) return;
-    final fill = Paint()
-      ..color = KicadPalette.error.withValues(alpha: 0.18);
+    final fill = Paint()..color = KicadPalette.error.withValues(alpha: 0.18);
     final edge = Paint()
       ..color = KicadPalette.error
       ..style = PaintingStyle.stroke

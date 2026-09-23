@@ -438,6 +438,9 @@ class Boards extends Table {
   RealColumn get thermalGap => real().withDefault(const Constant(0.5))();
   RealColumn get thermalSpoke => real().withDefault(const Constant(0.5))();
 
+  /// Teardrop settings, encoded by `TeardropRules`. Empty means off.
+  TextColumn get teardrops => text().withDefault(const Constant(''))();
+
   /// Placement grid. 0.5 mm rather than the schematic's 1.27 mm: boards are
   /// laid out in a much finer world than schematics.
   RealColumn get gridMm => real().withDefault(const Constant(0.5))();
@@ -504,6 +507,9 @@ class BoardFootprints extends Table {
   /// does not print it.
   BoolColumn get labelHidden => boolean().withDefault(const Constant(false))();
 
+  /// Held where it is: not picked up, not dragged, not swept into a move.
+  BoolColumn get locked => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 
@@ -539,6 +545,9 @@ class BoardTracks extends Table {
   RealColumn get endX => real()();
   RealColumn get endY => real()();
   RealColumn get width => real().withDefault(const Constant(0.25))();
+
+  /// Held where it is: not moved, not slid, not deleted by a sweep.
+  BoolColumn get locked => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -609,6 +618,16 @@ class BoardZones extends Table {
       text().withDefault(const Constant('solid'))();
   RealColumn get thermalGap => real().withDefault(const Constant(0.5))();
   RealColumn get thermalSpoke => real().withDefault(const Constant(0.5))();
+
+  /// A keepout claims ground rather than filling it: nothing on this list
+  /// may be put inside it. An ordinary pour keeps all four false.
+  BoolColumn get keepout => boolean().withDefault(const Constant(false))();
+  BoolColumn get noTracks => boolean().withDefault(const Constant(true))();
+  BoolColumn get noVias => boolean().withDefault(const Constant(true))();
+  BoolColumn get noPours => boolean().withDefault(const Constant(true))();
+  BoolColumn get noParts => boolean().withDefault(const Constant(false))();
+
+  BoolColumn get locked => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime()();
 
   @override
@@ -650,6 +669,20 @@ class BoardVias extends Table {
   RealColumn get y => real()();
   RealColumn get diameter => real().withDefault(const Constant(0.8))();
   RealColumn get drill => real().withDefault(const Constant(0.4))();
+
+  /// `through`, `blind` or `buried`. A through via is drilled from the top
+  /// of the board to the bottom and costs nothing extra; the other two are
+  /// drilled before the board is pressed together, and every fab charges
+  /// for the extra lamination cycle.
+  TextColumn get viaKind =>
+      text().withDefault(const Constant('through'))();
+
+  /// The copper layers a blind or buried via joins, as layer tokens. Empty
+  /// means top to bottom, which is what a through via always is.
+  TextColumn get fromLayer => text().withDefault(const Constant(''))();
+  TextColumn get toLayer => text().withDefault(const Constant(''))();
+
+  BoolColumn get locked => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};

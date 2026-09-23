@@ -1,15 +1,15 @@
 # HintPCB
 
-A mobile schematic-capture tool for electronic circuit design. Search for
-components, check pinouts, decide what connects to what, and export the
-result into a normal desktop KiCad workflow.
+A mobile schematic-capture and PCB layout tool for electronic circuit design.
+Search for components, check pinouts, decide what connects to what, lay the
+board out, and export the result into a normal desktop KiCad workflow — or
+straight to a fabricator as Gerbers.
 
-It also lays out the board: place footprints, draw copper on two layers,
-check the design rules, and export a `.kicad_pcb` the desktop opens. That was
-added after the fact — the original brief put PCB work firmly on the desktop —
-so the board deliberately stays the smaller half of the app. Anything
-elaborate (zones, inner layers, differential pairs, autorouting) is still
-desktop work.
+The board started as the smaller half of the app and is no longer: 2 to 8
+copper layers, copper pours with thermal reliefs, keepout areas, walk-around
+routing, buses, differential pairs, length tuning, teardrops, blind and
+buried vias, a design rule check, panelisation and fab-ready output. There is
+still no autorouter, and there is no 3D view; both remain desktop work.
 
 ## Scope
 
@@ -21,9 +21,10 @@ desktop work.
 * **Touch-first.** Fingers, not a stylus or mouse. Nothing interactive is
   smaller than 48dp.
 * **KiCad in and out.** `.kicad_sch`, `.kicad_pcb`, `.kicad_pro`, BOM CSV,
-  Gerbers and drill files go out. A desktop KiCad project (schematic, with
-  its board and project file) can be opened too; sub-sheets of a
-  hierarchical schematic are not brought in yet.
+  Gerbers, drill files, a pick-and-place CSV and a schematic PDF go out, plus
+  panel Gerbers for a whole array of boards. A desktop KiCad project —
+  schematic, board and project file, hierarchical sheets included — can be
+  opened too.
 
 ## Decisions
 
@@ -36,7 +37,9 @@ desktop work.
 | State management | Riverpod. |
 | Connectivity export | Routed wires, with labels as the fallback and the guarantee — see below. |
 | Footprint libraries | Same rule as symbols: nothing bundled. The user imports a zipped `.pretty` folder or loose `.kicad_mod` files, and they are packed into one container with byte spans, exactly as `.kicad_sym` libraries are. |
-| Board | Two copper layers, front and back. Manual routing with grid snapping and a 45°/90° constraint; no autorouter. |
+| Board | 2 to 8 copper layers. Manual routing with grid snapping and a 45°/90° constraint, walk-around past other nets, buses and differential pairs; no autorouter. |
+| Pours and keepouts | Stored as outlines, never as filled copper: the fill follows from the outline, the clearance and everything else on the layer, and is recomputed for the screen and for the Gerbers alike. A keepout is the same object with the fill turned off. |
+| Teardrops | Computed from the track, the pad and two ratios rather than stored, for the same reason. The exported project carries the parameters so KiCad regenerates the same shapes. |
 | Board export | `.kicad_pcb` (`version 20241229`) plus a `.kicad_pro`, because KiCad keeps the design rules in the project file. |
 | Timestamps | Stored as ISO-8601 text, not drift's default unix-seconds, because second resolution is too coarse to order recent activity. |
 
@@ -88,6 +91,29 @@ Added afterwards, outside the original plan:
       between schematic and board.
 - [x] **Schematic tools.** Label ranges (`D[0..7]`) that join parts by name,
       sheet notes and boxes, bulk field edit, and per-project ERC severities.
+- [x] **Hierarchical sheets.** Sub-sheets as real KiCad hierarchy, with the
+      schematic section becoming a drop-down of them, and a round trip
+      verified against real KiCad.
+- [x] **Real copper pours.** Trimmed to the board, cut back round other
+      nets, thermal reliefs on pads and on vias, pour priority, and a fill
+      that is the same steps on screen and in the Gerbers.
+- [x] **Keepout areas.** Drawn from the same chip as a pour; they refuse
+      tracks, vias, pours or parts, the routing walks round them and the
+      rule check reports what got in. Written as KiCad rule areas.
+- [x] **Teardrops.** Fillets where a track meets a pad or a via, with the
+      parameters carried into the project file so the desktop agrees.
+- [x] **Blind and buried vias.** A span chosen per via, checked against the
+      board it is on, and the project file's permission set to match.
+- [x] **Differential pairs.** Two nets named `+`/`-`, `_P`/`_N` or `_p`/`_n`
+      drawn together at a fixed gap, mirrored about the line you draw or
+      copied alongside it.
+- [x] **Locking.** Parts, tracks, vias, pours and whole nets held where they
+      are — not moved, not slid, not swept into a delete.
+- [x] **Board houses.** Preset rules for real fabricators and a
+      manufacturability check against what each of them will actually make.
+- [x] **Panelisation.** Its own section: an array of the board with mouse-bite
+      tabs or V-scoring, rails, fiducials and tooling holes, and its own set
+      of fab-ready Gerbers.
 
 ## How connectivity is exported
 
@@ -107,7 +133,10 @@ chose.
 
 The board works the same way round. Pads take their net from the schematic
 pin with the same number; tracks and vias only refer to nets. Nothing on the
-board can create a connection the schematic did not.
+board can create a connection the schematic did not — the one exception is
+deliberate and asked for: a track or a via can be put on a net by hand, so a
+grid of stitching vias dropped into an exposed pad reads as ground rather
+than as copper in everyone's way.
 
 Symbols are embedded in the file's `lib_symbols` block, so an exported
 schematic stands alone: it opens correctly on a machine that does not have
@@ -145,6 +174,19 @@ the awkward cases that only appear in libraries written by other people. The
 netlist` over it, and asserts that the netlist KiCad extracts matches the one
 that was drawn — which is the only check that really settles whether the
 exporter works.
+
+It does the same for the board, and that one matters more. A `.kicad_sch`
+KiCad merely opens is already useful; a `.kicad_pcb` whose layers, nets or
+footprints are wrong opens perfectly and describes the wrong board. So the
+board suite lays out a small design — two layers, a flipped part, a pour, a
+keepout, locked copper, teardrops, and on a six-layer board a blind via —
+writes it, and runs `kicad-cli pcb drc` over it. That is what proves the
+syntax written for each of those is the syntax KiCad reads.
+
+One gap worth knowing about: the `.kicad_pcb` path is checked against real
+KiCad, but the Gerber path is only checked against this app's own Gerber
+reader. Before ordering a board, open the exported zip in GerbView or a
+fabricator's online viewer once.
 
 ### Two things that will bite
 

@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'board_layer.dart';
 import 'board_outline.dart';
 import 'board_zone.dart';
+import 'teardrop.dart';
 import 'stackup.dart';
 
 /// The manufacturing constraints a board is drawn against.
@@ -132,6 +133,7 @@ class Board {
     this.viaSizes = const [],
     this.copperLayerCount = 2,
     this.thickness = 1.6,
+    this.teardrops = const TeardropRules(),
     Stackup? customStackup,
   }) : _stackup = customStackup;
 
@@ -143,6 +145,9 @@ class Board {
 
   /// Finished thickness, in millimetres.
   final double thickness;
+
+  /// The fillets drawn where a track meets a pad or a via.
+  final TeardropRules teardrops;
 
   final Stackup? _stackup;
 
@@ -266,6 +271,7 @@ class Board {
     double? gridMm,
     int? copperLayerCount,
     double? thickness,
+    TeardropRules? teardrops,
     Stackup? stackup,
     bool clearStackup = false,
   }) => Board(
@@ -284,6 +290,7 @@ class Board {
     modifiedAt: modifiedAt,
     copperLayerCount: copperLayerCount ?? this.copperLayerCount,
     thickness: thickness ?? this.thickness,
+    teardrops: teardrops ?? this.teardrops,
     customStackup: clearStackup ? null : (stackup ?? _stackup),
   );
 }
@@ -324,11 +331,17 @@ class PlacedFootprintRef {
     this.labelOffset,
     this.labelSize = 1.0,
     this.labelHidden = false,
+    this.locked = false,
   });
 
   final String id;
   final String projectId;
   final String partId;
+
+  /// Held where it is. A connector that has to line up with a hole in a
+  /// case gets locked once, and then stays put through every later pass of
+  /// nudging everything else around it.
+  final bool locked;
 
   /// Where the reference designator sits once moved, in the footprint's own
   /// frame. Null leaves it where the library put it.
@@ -369,6 +382,7 @@ class PlacedFootprintRef {
     bool clearLabelOffset = false,
     double? labelSize,
     bool? labelHidden,
+    bool? locked,
   }) => PlacedFootprintRef(
     id: id,
     projectId: projectId,
@@ -382,6 +396,7 @@ class PlacedFootprintRef {
     labelOffset: clearLabelOffset ? null : (labelOffset ?? this.labelOffset),
     labelSize: labelSize ?? this.labelSize,
     labelHidden: labelHidden ?? this.labelHidden,
+    locked: locked ?? this.locked,
   );
 }
 
@@ -397,6 +412,7 @@ class Track {
     required this.endY,
     required this.width,
     this.netId,
+    this.locked = false,
   });
 
   final String id;
@@ -413,6 +429,11 @@ class Track {
   final double endY;
   final double width;
 
+  /// Held where it is. A locked track is not picked up, not slid, and not
+  /// swept into a move or a delete — which is what makes a carefully
+  /// tuned run survive the next hour of layout.
+  final bool locked;
+
   /// The same segment with some of its numbers changed.
   ///
   /// Every one of them is editable on purpose: a board where one track can
@@ -427,6 +448,7 @@ class Track {
     double? width,
     String? netId,
     bool clearNet = false,
+    bool? locked,
   }) => Track(
     id: id,
     projectId: projectId,
@@ -437,6 +459,7 @@ class Track {
     endY: endY ?? this.endY,
     width: width ?? this.width,
     netId: clearNet ? null : (netId ?? this.netId),
+    locked: locked ?? this.locked,
   );
 
   Track withNet(String? netId) => Track(
@@ -449,6 +472,7 @@ class Track {
     endX: endX,
     endY: endY,
     width: width,
+    locked: locked,
   );
 
   double get lengthMm {
@@ -458,7 +482,29 @@ class Track {
   }
 }
 
-/// A plated hole joining front copper to back.
+/// How far through the board a via is drilled.
+enum ViaKind {
+  /// Top to bottom. The only kind that costs nothing extra, and the only
+  /// kind most boards should have.
+  through('Through', 'Top to bottom — no extra cost'),
+
+  /// From an outside layer to an inner one. Drilled before the board is
+  /// pressed together, so the fab charges for the extra lamination.
+  blind('Blind', 'Outside layer to an inner one'),
+
+  /// Between two inner layers, invisible from either face.
+  buried('Buried', 'Between two inner layers');
+
+  const ViaKind(this.label, this.note);
+
+  final String label;
+  final String note;
+
+  static ViaKind byName(String? name) =>
+      values.where((k) => k.name == name).firstOrNull ?? through;
+}
+
+/// A plated hole joining one copper layer to another.
 class Via {
   const Via({
     required this.id,
@@ -468,6 +514,10 @@ class Via {
     required this.diameter,
     required this.drill,
     this.netId,
+    this.kind = ViaKind.through,
+    this.fromLayer,
+    this.toLayer,
+    this.locked = false,
   });
 
   final String id;
@@ -478,6 +528,54 @@ class Via {
   final double diameter;
   final double drill;
 
+  final ViaKind kind;
+
+  /// The two layers a blind or buried via joins. Null on a through via,
+  /// which always runs the whole way.
+  final CopperLayer? fromLayer;
+  final CopperLayer? toLayer;
+
+  final bool locked;
+
+  /// The copper layers this via actually reaches on [board].
+  ///
+  /// A through via reaches every layer the board has. A blind or buried
+  /// one reaches the span it was drilled for — and a span that no longer
+  /// makes sense, because the board lost layers under it, falls back to
+  /// the whole way rather than to nothing.
+  List<CopperLayer> layersOn(Board board) {
+    final all = board.copperLayers;
+    if (kind == ViaKind.through) return all;
+    final a = all.indexOf(fromLayer ?? CopperLayer.front);
+    final b = all.indexOf(toLayer ?? CopperLayer.back);
+    if (a < 0 || b < 0) return all;
+    final low = math.min(a, b);
+    final high = math.max(a, b);
+    return all.sublist(low, high + 1);
+  }
+
+  /// Whether the span asked for can be drilled at all.
+  String? problemOn(Board board) {
+    if (kind == ViaKind.through) return null;
+    final all = board.copperLayers;
+    final from = fromLayer;
+    final to = toLayer;
+    if (from == null || to == null) return 'A span needs two layers';
+    if (from == to) return 'A via has to join two different layers';
+    if (!all.contains(from) || !all.contains(to)) {
+      return 'This board does not have those layers';
+    }
+    final outer = {CopperLayer.front, CopperLayer.back};
+    final touchesOutside = outer.contains(from) || outer.contains(to);
+    if (kind == ViaKind.blind && !touchesOutside) {
+      return 'A blind via has to start on the top or the bottom';
+    }
+    if (kind == ViaKind.buried && touchesOutside) {
+      return 'A buried via cannot reach the top or the bottom';
+    }
+    return null;
+  }
+
   Via copyWith({
     double? x,
     double? y,
@@ -485,6 +583,10 @@ class Via {
     double? drill,
     String? netId,
     bool clearNet = false,
+    ViaKind? kind,
+    CopperLayer? fromLayer,
+    CopperLayer? toLayer,
+    bool? locked,
   }) => Via(
     id: id,
     projectId: projectId,
@@ -493,6 +595,10 @@ class Via {
     diameter: diameter ?? this.diameter,
     drill: drill ?? this.drill,
     netId: clearNet ? null : (netId ?? this.netId),
+    kind: kind ?? this.kind,
+    fromLayer: fromLayer ?? this.fromLayer,
+    toLayer: toLayer ?? this.toLayer,
+    locked: locked ?? this.locked,
   );
 
   Via withNet(String? netId) => Via(
@@ -503,5 +609,9 @@ class Via {
     y: y,
     diameter: diameter,
     drill: drill,
+    kind: kind,
+    fromLayer: fromLayer,
+    toLayer: toLayer,
+    locked: locked,
   );
 }

@@ -20,6 +20,8 @@ export 'meander_engine.dart';
 export '../geometry/placement_finder.dart';
 export 'track_angles.dart';
 export 'track_router.dart';
+export 'diff_pair.dart';
+export 'teardrop.dart';
 export 'walkaround_router.dart';
 export 'bus_router.dart';
 export 'track_slide.dart';

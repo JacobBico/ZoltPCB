@@ -209,6 +209,39 @@ void main() {
         netId: mid.id,
       );
 
+      // A keepout, a locked track and a locked part, all of which KiCad
+      // states in its own way and none of which it will tolerate being
+      // stated wrongly. This is the only check that the syntax written for
+      // them is the syntax KiCad reads.
+      await boards.addZone(
+        projectId: project.id,
+        layer: BoardLayer.frontCopper,
+        points: const [
+          Offset(50, 40),
+          Offset(56, 40),
+          Offset(56, 46),
+          Offset(50, 46),
+        ],
+        keepout: true,
+        noParts: true,
+      );
+      for (final track in await boards.getTracks(project.id)) {
+        await boards.updateTrack(track.copyWith(locked: true));
+      }
+      for (final ref in await boards.getFootprints(project.id)) {
+        if (ref.partId == c1.part.id) {
+          await boards.updatePlacement(ref.copyWith(locked: true));
+        }
+      }
+
+      // Teardrops on, so the project file carries the parameters and the
+      // vias carry their own settings.
+      await boards.updateBoard(
+        (await boards.getBoard(project.id))!.copyWith(
+          teardrops: const TeardropRules(enabled: true),
+        ),
+      );
+
       // A mounting cutout, as a real circle on Edge.Cuts.
       //
       // Closed on purpose. KiCad judges the board outline as a whole, and an
@@ -377,11 +410,18 @@ void main() {
       expect(text, contains('(at 0 -2.5'));
       expect(text, contains('(size 1.2 1.2)'));
 
-      // And the pour, as an outline on a real net.
-      expect(RegExp(r'\(zone\b').allMatches(text).length, 2);
+      // And the pours, as outlines on a real net — plus the keepout, which
+      // is the same object with the fill off and a list of refusals.
+      expect(RegExp(r'\(zone\b').allMatches(text).length, 3);
       expect(text, contains('(priority 2)'));
       expect(text, contains('(connect_pads yes'));
       expect(text, contains('(thermal_gap 0.3)'));
+      expect(text, contains('(keepout'));
+      expect(text, contains('(tracks not_allowed)'));
+      expect(text, contains('(footprints not_allowed)'));
+      // Held where they are, in the words KiCad uses for each.
+      expect(text, contains('(locked yes)'));
+      expect(text, contains('(teardrops'));
       expect(text, contains('"HintPCB:MountingHole_3.2mm"'));
       expect(text, contains('"HintPCB:MountingHole_3.2mm_Pad"'));
       expect(text, contains('np_thru_hole'));
@@ -665,6 +705,19 @@ void main() {
           netId: net.id,
         );
       }
+      // Blind rather than through: drilled from the top only as far as the
+      // inner layer the run uses. KiCad states a via by the pair of layers
+      // it joins and refuses one whose project forbids blind vias, so this
+      // is the check that both halves are written.
+      for (final via in await boards.getVias(project.id)) {
+        await boards.updateVia(
+          via.copyWith(
+            kind: ViaKind.blind,
+            fromLayer: CopperLayer.front,
+            toLayer: CopperLayer.inner2,
+          ),
+        );
+      }
 
       scene = BoardScene.build(
         board: (await boards.getBoard(project.id))!,
@@ -721,6 +774,13 @@ void main() {
       final json = jsonDecode(report) as Map<String, Object?>;
       expect(json['unconnected_items'], isEmpty);
       expect(report, contains('on In2.Cu'));
+      // The span as written, and the project that permits it.
+      expect(text, contains('(via blind'));
+      expect(text, contains('(layers "F.Cu" "In2.Cu")'));
+      expect(
+        File('${workDir.path}/six.kicad_pro').readAsStringSync(),
+        contains('"allow_blind_buried_vias": true'),
+      );
 
       // KiCad plots In2 only if it agrees the board has an In2.
       final plot = await Process.run(

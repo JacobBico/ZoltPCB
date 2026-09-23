@@ -67,9 +67,39 @@ enum RouteStyle {
     'Meander',
     Icons.waves,
     'The run folds into loops as you draw it, to add length',
+  ),
+  pair(
+    'Pair',
+    Icons.drag_handle,
+    'Two nets named +/- or _P/_N, drawn together at a fixed gap',
   );
 
   const RouteStyle(this.label, this.icon, this.hint);
+
+  final String label;
+  final IconData icon;
+  final String hint;
+}
+
+/// What the Pour tool lays out.
+///
+/// Both are a polygon on one copper layer; one says "fill this with GND"
+/// and the other says "put nothing here". KiCad calls the second a rule
+/// area and stores it as the same object with the fill turned off, which
+/// is exactly what makes it belong behind the same chip.
+enum PourStyle {
+  copper(
+    'Pour',
+    Icons.format_color_fill_outlined,
+    'Place the corners of a copper pour',
+  ),
+  keepout(
+    'Keepout',
+    Icons.block_outlined,
+    'Place the corners of an area nothing may go in',
+  );
+
+  const PourStyle(this.label, this.icon, this.hint);
 
   final String label;
   final IconData icon;
@@ -240,11 +270,20 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   /// things, the two chips on the strip are currently set to.
   RouteStyle _routeStyle = RouteStyle.track;
   ViaStyle _viaStyle = ViaStyle.via;
+  PourStyle _pourStyle = PourStyle.copper;
 
   /// The loops a meander draws, while that is what the Route tool is set
   /// to. Kept between runs: the shape you want is a property of the board,
   /// not of one track.
   MeanderShape _meander = const MeanderShape();
+
+  /// The pair being drawn, the pad its partner leaves from, which way
+  /// round the two are, and the shape of the pair.
+  DiffPair? _pair;
+  Offset? _pairFrom;
+  double _pairSide = 1;
+  DiffPairStyle _pairStyle = DiffPairStyle.mirrored;
+  double? _pairGap;
 
   /// How many points each placed corner put into [_points], so Back takes
   /// a whole leg off. A meandered leg is a hundred points, and nobody is
@@ -385,14 +424,19 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                       selectedTextId: _carryingTextId ?? _selectedTextId,
                       selectedLabelId: _carryingLabelId ?? _selectedLabelId,
                       highlightedNetId: _highlightedNetId,
-                      pendingRoute: _pendingPath(snap.at),
+                      pendingRoute: _routeStyle == RouteStyle.pair
+                          ? const <Offset>[]
+                          : _pendingPath(snap.at),
                       pendingBus: [
                         for (final (_, points)
                             in _busPlan(committed, snap.at)?.tracks ??
                                 const <(BusLane, List<Offset>)>[])
                           points,
+                        ..._pairPreview(scene, snap.at),
                       ],
-                      pendingWidth: _tool == AimTool.route
+                      pendingWidth:
+                          _tool == AimTool.route &&
+                              _routeStyle != RouteStyle.pair
                           ? _widthFor(scene)
                           : null,
                       pendingClearance: _tool == AimTool.route
@@ -865,6 +909,17 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                               ? _chooseRouteStyle
                               : () => _pickRouteStyle(_routeStyle),
                         )
+                      else if (tool == AimTool.zone)
+                        _ToolChip(
+                          key: const ValueKey('tool-zone'),
+                          icon: _pourStyle.icon,
+                          label: _pourStyle.label,
+                          selected: _tool == AimTool.zone,
+                          hasMenu: true,
+                          onPressed: _tool == AimTool.zone
+                              ? _choosePourStyle
+                              : () => _pickPourStyle(_pourStyle),
+                        )
                       else if (tool == AimTool.via)
                         _ToolChip(
                           key: const ValueKey('tool-via'),
@@ -1108,6 +1163,8 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         _Chip(icon: Icons.undo, label: 'Back', onPressed: _undoPoint),
         if (_tool == AimTool.route && _routeStyle == RouteStyle.meander)
           _meanderChip(scene)
+        else if (_tool == AimTool.route && _routeStyle == RouteStyle.pair)
+          _pairChip(scene)
         else if (_tool == AimTool.route)
           _routeModeChip(),
         if (_tool == AimTool.route)
@@ -1135,13 +1192,17 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Text(
-              _routeStyle == RouteStyle.meander
-                  ? '+${_mm(_meanderAdded(_lastSnap))} mm'
-                  : _impedanceLabel(
-                      scene,
-                      _routeLayer ?? ref.read(activeLayerProvider),
-                      _widthFor(scene),
-                    ),
+              switch (_routeStyle) {
+                RouteStyle.meander => '+${_mm(_meanderAdded(_lastSnap))} mm',
+                RouteStyle.pair =>
+                  '${_pair?.label ?? 'Pair'} · '
+                      '${_mm(_gapFor(scene))} mm',
+                _ => _impedanceLabel(
+                  scene,
+                  _routeLayer ?? ref.read(activeLayerProvider),
+                  _widthFor(scene),
+                ),
+              },
               key: const ValueKey('route-impedance-readout'),
               style: TextStyle(fontSize: 12, color: KicadPalette.textSecondary),
             ),
@@ -1215,7 +1276,12 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         _Chip(
           icon: Icons.open_with,
           label: 'Move',
-          onPressed: () => _carry(footprint),
+          onPressed: footprint.ref.locked ? null : () => _carry(footprint),
+        ),
+        _lockChip(
+          key: 'feature-lock',
+          locked: footprint.ref.locked,
+          onPressed: () => _lockPart(footprint, !footprint.ref.locked),
         ),
         _Chip(
           icon: Icons.tune,
@@ -1241,7 +1307,12 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         _Chip(
           icon: Icons.open_with,
           label: 'Move',
-          onPressed: () => _carry(footprint),
+          onPressed: footprint.ref.locked ? null : () => _carry(footprint),
+        ),
+        _lockChip(
+          key: 'part-lock',
+          locked: footprint.ref.locked,
+          onPressed: () => _lockPart(footprint, !footprint.ref.locked),
         ),
         _Chip(
           icon: Icons.text_fields,
@@ -1290,13 +1361,25 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         _Chip(
           icon: Icons.swap_horiz,
           label: 'Slide',
-          onPressed: () => _slide(track),
+          onPressed: track.locked ? null : () => _slide(track),
         ),
         _Chip(
           icon: Icons.waves,
           label: 'Tune',
-          onPressed: () => _tune(scene, track),
+          onPressed: track.locked ? null : () => _tune(scene, track),
         ),
+        _lockChip(
+          key: 'track-lock',
+          locked: track.locked,
+          onPressed: () => _lockTrack(track, !track.locked),
+        ),
+        if (track.netId != null)
+          _Chip(
+            key: const ValueKey('net-lock'),
+            icon: Icons.lock_outline,
+            label: _netLocked(scene, track.netId!) ? 'Free net' : 'Lock net',
+            onPressed: () => _lockNet(scene, track.netId!),
+          ),
         _Chip(
           icon: Icons.tune,
           label: 'Properties',
@@ -1306,7 +1389,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           icon: Icons.delete_outline,
           label: 'Delete',
           danger: true,
-          onPressed: () => _deleteTrack(track),
+          onPressed: track.locked ? null : () => _deleteTrack(track),
         ),
         _Chip(
           icon: Icons.layers_clear_outlined,
@@ -1336,11 +1419,16 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           label: 'Properties',
           onPressed: () => _viaProperties(scene, via),
         ),
+        _lockChip(
+          key: 'via-lock',
+          locked: via.locked,
+          onPressed: () => _lockVia(via, !via.locked),
+        ),
         _Chip(
           icon: Icons.delete_outline,
           label: 'Delete',
           danger: true,
-          onPressed: () => _deleteVia(via),
+          onPressed: via.locked ? null : () => _deleteVia(via),
         ),
       ];
     }
@@ -1395,11 +1483,16 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           label: 'Properties',
           onPressed: () => _editZone(scene, zone),
         ),
+        _lockChip(
+          key: 'zone-lock',
+          locked: zone.locked,
+          onPressed: () => _lockZone(zone, !zone.locked),
+        ),
         _Chip(
           icon: Icons.delete_outline,
-          label: 'Delete pour',
+          label: zone.keepout ? 'Delete keepout' : 'Delete pour',
           danger: true,
-          onPressed: () => _deleteZone(zone),
+          onPressed: zone.locked ? null : () => _deleteZone(zone),
         ),
       ];
     }
@@ -1407,6 +1500,8 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     return [
       if (_tool == AimTool.route && _routeStyle == RouteStyle.meander)
         _meanderChip(scene)
+      else if (_tool == AimTool.route && _routeStyle == RouteStyle.pair)
+        _pairChip(scene)
       else if (_tool == AimTool.route)
         _routeModeChip(),
       if (_tool == AimTool.bus && (_busFrom != null || _busLanes.isNotEmpty))
@@ -1510,6 +1605,24 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     );
     if (chosen == null || !mounted) return;
     _pickRouteStyle(chosen);
+  }
+
+  void _pickPourStyle(PourStyle style) {
+    _pickTool(AimTool.zone);
+    setState(() => _pourStyle = style);
+    _notify(style.hint);
+  }
+
+  Future<void> _choosePourStyle() async {
+    final chosen = await _pickFrom(
+      PourStyle.values,
+      selected: _pourStyle,
+      icon: (s) => s.icon,
+      label: (s) => s.label,
+      hint: (s) => s.hint,
+    );
+    if (chosen == null || !mounted) return;
+    _pickPourStyle(chosen);
   }
 
   Future<void> _chooseViaStyle() async {
@@ -1921,16 +2034,45 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                     '${layer.shortLabel}',
         );
       }
+      // A pair needs both halves before anything is drawn: the net under
+      // the crosshair, its partner by name, and the partner's nearest pad.
+      DiffPair? pair;
+      Offset? partner;
+      if (_routeStyle == RouteStyle.pair) {
+        pair = DiffPairs.of(scene, pad?.netId ?? snap.netId);
+        if (pair == null) {
+          _notify('No partner: a pair is named +/-, _P/_N or _p/_n');
+          return;
+        }
+        final otherId = pair.partnerOf(pad?.netId ?? snap.netId ?? '');
+        final otherPad = otherId == null
+            ? null
+            : DiffPairs.padNear(
+                scene,
+                otherId,
+                pad?.position ?? at,
+                layer: layer,
+              );
+        if (otherPad == null) {
+          _notify('${pair.label}: the other half has no pad on this layer');
+          return;
+        }
+        partner = otherPad.position;
+      }
+
       setState(() {
         _clearSelection();
         if (classWidth != null) _trackWidth = classWidth;
         _routeNetId = pad?.netId ?? snap.netId;
         _routeLayer = layer;
+        _pair = pair;
+        _pairFrom = partner;
         _points.add(pad?.position ?? at);
         _legLengths
           ..clear()
           ..add(1);
       });
+      if (pair != null) _notify('${pair.label} at ${_mm(_gapFor(scene))} mm');
       return;
     }
 
@@ -1958,8 +2100,14 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     HapticFeedback.selectionClick();
     setState(() {
       final legs = _legsTo(at);
+      final wasStraight = _points.length < 2;
       _points.addAll(legs);
       _legLengths.add(legs.length);
+      // Which side each half of a pair runs on is decided once, by where
+      // the partner's own pad already is, and then kept for the whole run.
+      if (wasStraight && _pair != null && _pairFrom != null) {
+        _pairSide = DiffPairs.sideOf(_points, _pairFrom!);
+      }
     });
   }
 
@@ -1981,6 +2129,10 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     if (_tool != AimTool.route ||
         _routeMode != RouteMode.walkaround ||
         _routeStyle == RouteStyle.meander ||
+        // A pair is two tracks offset from the line drawn; walking that
+        // line round an obstacle puts one half inside whatever the other
+        // half went round.
+        _routeStyle == RouteStyle.pair ||
         scene == null) {
       return legalCorners(from, at, _angleLock);
     }
@@ -2049,10 +2201,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     if (_routeStyle != RouteStyle.meander || _points.isEmpty) return 0;
     final from = _points.last;
     final folded = MeanderEngine.polylineLength([from, ..._legsTo(at)]);
-    final straight = MeanderEngine.polylineLength([
-      from,
-      ..._legalTo(at),
-    ]);
+    final straight = MeanderEngine.polylineLength([from, ..._legalTo(at)]);
     return math.max(0, folded - straight);
   }
 
@@ -2075,6 +2224,45 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     );
     if (shape == null || !mounted) return;
     setState(() => _meander = shape);
+  }
+
+  /// The gap the pair runs at, and which way the second half follows.
+  Widget _pairChip(BoardScene scene) => _Chip(
+    key: const ValueKey('pair-shape'),
+    icon: Icons.drag_handle,
+    label: '${_pairStyle.label} ${_mm(_gapFor(scene))}',
+    onPressed: () => _choosePair(scene),
+  );
+
+  Future<void> _choosePair(BoardScene scene) async {
+    final style = await _pickFrom(
+      DiffPairStyle.values,
+      selected: _pairStyle,
+      icon: (s) => s == DiffPairStyle.mirrored
+          ? Icons.drag_handle
+          : Icons.content_copy_outlined,
+      label: (s) => s.label,
+      hint: (s) => s.note,
+    );
+    if (style == null || !mounted) return;
+    setState(() => _pairStyle = style);
+    final width = _widthFor(scene);
+    final gap = await _pickFrom(
+      // Centre to centre, so the narrowest offered still leaves a gap of
+      // the clearance between the two pieces of copper.
+      [
+        for (final multiple in const [1.5, 2.0, 2.5, 3.0, 4.0, 5.0])
+          (width * multiple * 100).roundToDouble() / 100,
+      ],
+      selected: _gapFor(scene),
+      icon: (_) => Icons.drag_handle,
+      label: (value) => '${_mm(value)} mm',
+      hint: (value) =>
+          'Edge to edge ${_mm(value - width)} mm — '
+          '${(value / width).toStringAsFixed(1)}× the track',
+    );
+    if (gap == null || !mounted) return;
+    setState(() => _pairGap = gap);
   }
 
   Widget _routeModeChip() => _Chip(
@@ -2105,6 +2293,9 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   void _clearDrawing() {
     _points.clear();
     _legLengths.clear();
+    _pair = null;
+    _pairFrom = null;
+    _pairSide = 1;
     _busFrom = null;
     _busLanes = const [];
     _routeNetId = null;
@@ -2133,36 +2324,61 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   }
 
   Future<void> _finishRoute(BoardScene scene) async {
-    final corners = _curveRadius > 0
-        ? roundCorners(List<Offset>.from(_points), radius: _curveRadius)
-        : List<Offset>.from(_points);
     final CopperLayer layer = _routeLayer ?? ref.read(activeLayerProvider);
     final netId = _routeNetId;
+    final width = _widthFor(scene);
+
+    // A pair is two runs on two nets; everything else is one run on one.
+    final pair = _pair;
+    final pairRuns = pair == null
+        ? null
+        : _pairRuns(scene, List<Offset>.from(_points));
+    final runs = pairRuns == null
+        ? [
+            (
+              netId,
+              _curveRadius > 0
+                  ? roundCorners(
+                      List<Offset>.from(_points),
+                      radius: _curveRadius,
+                    )
+                  : List<Offset>.from(_points),
+            ),
+          ]
+        : [(pair!.positiveId, pairRuns.$1), (pair.negativeId, pairRuns.$2)];
     setState(_clearDrawing);
-    if (corners.length < 2) return;
 
     final repository = ref.read(boardRepositoryProvider);
     final written = <String>[];
-    for (var i = 0; i < corners.length - 1; i++) {
-      if ((corners[i + 1] - corners[i]).distance < 1e-9) continue;
-      written.add(
-        await repository.addTrack(
-          projectId: widget.project.id,
-          layer: layer,
-          startX: corners[i].dx,
-          startY: corners[i].dy,
-          endX: corners[i + 1].dx,
-          endY: corners[i + 1].dy,
-          width: _widthFor(scene),
-          netId: netId,
-        ),
-      );
+    for (final (net, corners) in runs) {
+      if (corners.length < 2) continue;
+      for (var i = 0; i < corners.length - 1; i++) {
+        if ((corners[i + 1] - corners[i]).distance < 1e-9) continue;
+        written.add(
+          await repository.addTrack(
+            projectId: widget.project.id,
+            layer: layer,
+            startX: corners[i].dx,
+            startY: corners[i].dy,
+            endX: corners[i + 1].dx,
+            endY: corners[i + 1].dy,
+            width: width,
+            netId: net,
+          ),
+        );
+      }
     }
     if (written.isEmpty) return;
 
     HapticFeedback.lightImpact();
+    if (pairRuns != null) {
+      _notify(
+        '${pair!.label} at '
+        '${_mm(DiffPairs.gapBetween(pairRuns.$1, pairRuns.$2))} mm',
+      );
+    }
     _record(
-      'Route',
+      pairRuns == null ? 'Route' : 'Route a pair',
       undo: () => repository.deleteTracks(written),
       redo: () async {},
     );
@@ -2177,7 +2393,32 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     final points = List<Offset>.from(_points);
     setState(_clearDrawing);
     if (points.length < 3) {
-      _notify('A pour needs at least three corners');
+      _notify('An area needs at least three corners');
+      return;
+    }
+
+    final repository = ref.read(boardRepositoryProvider);
+    final layer = ref.read(activeLayerProvider).layer;
+    final rules = scene.board.rules;
+
+    // A keepout belongs to no net: it claims the area rather than filling
+    // it, so there is nothing to ask.
+    if (_pourStyle == PourStyle.keepout) {
+      final area = await repository.addZone(
+        projectId: widget.project.id,
+        layer: layer,
+        points: points,
+        clearance: math.max(rules.clearance, 0.2),
+        keepout: true,
+      );
+      if (!mounted) return;
+      setState(() => _selectedZoneId = area.id);
+      _notify('Keepout: no tracks, vias or pours');
+      _record(
+        'Add a keepout',
+        undo: () => repository.deleteZone(area.id),
+        redo: () => repository.restoreZone(area),
+      );
       return;
     }
 
@@ -2186,10 +2427,6 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     final net = await _chooseNet(nets);
     if (!mounted) return;
 
-    final repository = ref.read(boardRepositoryProvider);
-    final layer = ref.read(activeLayerProvider).layer;
-
-    final rules = scene.board.rules;
     final added = await repository.addZone(
       projectId: widget.project.id,
       layer: layer,
@@ -2301,10 +2538,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-                child: Text(
-                  title,
-                  style: Theme.of(sheet).textTheme.titleSmall,
-                ),
+                child: Text(title, style: Theme.of(sheet).textTheme.titleSmall),
               ),
               for (final net in ordered)
                 ListTile(
@@ -3478,6 +3712,11 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           .where((f) => f.ref.id == _selectedFootprintId)
           .firstOrNull;
       if (footprint != null) {
+        // The sight button says what it will do, and a held part says so
+        // rather than doing nothing when pressed.
+        if (footprint.ref.locked) {
+          return (label: 'LOCKED', onPressed: () => _notify('Held in place'));
+        }
         return (
           label: 'MOVE ${footprint.part.reference}',
           onPressed: () => _carry(footprint),
@@ -3487,6 +3726,9 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           .where((t) => t.id == _selectedTrackId)
           .firstOrNull;
       if (track != null) {
+        if (track.locked) {
+          return (label: 'LOCKED', onPressed: () => _notify('Held in place'));
+        }
         return (label: 'SLIDE', onPressed: () => _slide(track));
       }
       return (label: 'DESELECT', onPressed: () => setState(_clearSelection));
@@ -3545,6 +3787,52 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   }
 
   // --- sizes -----------------------------------------------------------
+
+  /// How far apart the two halves of a pair run, centre to centre.
+  ///
+  /// A default of three times the track width is the rule of thumb for a
+  /// loosely coupled pair on FR-4, and it is a starting point rather than
+  /// an answer: the number that matters is the differential impedance, and
+  /// that is what the gap chip is for.
+  double _gapFor(BoardScene scene) =>
+      _pairGap ?? math.max(_widthFor(scene) * 3, _widthFor(scene) + 0.2);
+
+  /// The two runs a pair lays for the path drawn so far, each landing on
+  /// its own pad at the start.
+  (List<Offset>, List<Offset>)? _pairRuns(BoardScene scene, List<Offset> path) {
+    final pair = _pair;
+    final from = _pairFrom;
+    if (pair == null || from == null || path.length < 2) return null;
+    final (positive, negative) = DiffPairs.runs(
+      path,
+      gap: _gapFor(scene),
+      style: _pairStyle,
+      side: _pairSide,
+    );
+    // Each half starts on its own pad, whatever the offset put its first
+    // corner at: the lead-in from the pad to the run is part of the track.
+    final leaving = _points.first;
+    final positivePad = _routeNetId == pair.positiveId ? leaving : from;
+    final negativePad = _routeNetId == pair.positiveId ? from : leaving;
+    return (
+      DiffPairs.landOn(positive, positivePad, atEnd: false),
+      DiffPairs.landOn(negative, negativePad, atEnd: false),
+    );
+  }
+
+  /// Both halves of a pair as they would be laid, for drawing.
+  ///
+  /// The centre line the finger is following is not copper and is not
+  /// drawn as copper — what is drawn is the two tracks it produces, which
+  /// is the only way to see the gap you are actually laying.
+  List<List<Offset>> _pairPreview(BoardScene scene, Offset at) {
+    if (_tool != AimTool.route || _routeStyle != RouteStyle.pair) {
+      return const [];
+    }
+    final runs = _pairRuns(scene, _pendingPath(at));
+    if (runs == null) return const [];
+    return [runs.$1, runs.$2];
+  }
 
   double _widthFor(BoardScene scene) =>
       _trackWidth ??
@@ -3953,6 +4241,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       context,
       via: via,
       netName: _netName(scene, via.netId) ?? '',
+      board: scene.board,
       nets: _netChoices(),
     );
     if (result == null || !mounted) return;
@@ -4040,6 +4329,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       outline: scene.outline,
       nets: nets,
       defaultClearance: scene.board.rules.clearance,
+      layers: [for (final l in scene.board.copperLayers) l.layer],
       zone: zone,
     );
     if (result == null || !mounted) return;
@@ -4057,6 +4347,123 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           redo: () => repository.updateZone(after),
         );
     }
+  }
+
+  /// The chip that holds something still, and lets it go again.
+  ///
+  /// Locking exists because layout is done in passes: the connector that
+  /// has to line up with a hole in a case, the run that was tuned to the
+  /// picosecond, the pour that took four goes to get right. All of them
+  /// have to survive the next hour of nudging everything else around them,
+  /// and the way they survive is by refusing to move.
+  Widget _lockChip({
+    required String key,
+    required bool locked,
+    required VoidCallback onPressed,
+  }) => _Chip(
+    key: ValueKey(key),
+    icon: locked ? Icons.lock : Icons.lock_open,
+    label: locked ? 'Unlock' : 'Lock',
+    onPressed: onPressed,
+  );
+
+  Future<void> _lockTrack(Track track, bool locked) async {
+    final repository = ref.read(boardRepositoryProvider);
+    await repository.updateTrack(track.copyWith(locked: locked));
+    _record(
+      locked ? 'Lock a track' : 'Unlock a track',
+      undo: () => repository.updateTrack(track),
+      redo: () => repository.updateTrack(track.copyWith(locked: locked)),
+    );
+  }
+
+  Future<void> _lockVia(Via via, bool locked) async {
+    final repository = ref.read(boardRepositoryProvider);
+    await repository.updateVia(via.copyWith(locked: locked));
+    _record(
+      locked ? 'Lock a via' : 'Unlock a via',
+      undo: () => repository.updateVia(via),
+      redo: () => repository.updateVia(via.copyWith(locked: locked)),
+    );
+  }
+
+  Future<void> _lockZone(BoardZone zone, bool locked) async {
+    final repository = ref.read(boardRepositoryProvider);
+    await repository.updateZone(zone.copyWith(locked: locked));
+    _record(
+      locked ? 'Lock a pour' : 'Unlock a pour',
+      undo: () => repository.updateZone(zone),
+      redo: () => repository.updateZone(zone.copyWith(locked: locked)),
+    );
+  }
+
+  Future<void> _lockPart(PlacedFootprint footprint, bool locked) async {
+    final repository = ref.read(boardRepositoryProvider);
+    final before = footprint.ref;
+    await repository.updatePlacement(before.copyWith(locked: locked));
+    _record(
+      locked ? 'Lock ${footprint.part.reference}' : 'Unlock',
+      undo: () => repository.updatePlacement(before),
+      redo: () => repository.updatePlacement(before.copyWith(locked: locked)),
+    );
+  }
+
+  /// Whether every piece of copper on [netId] is held.
+  bool _netLocked(BoardScene scene, String netId) {
+    final copper = [
+      for (final t in scene.tracks)
+        if (t.netId == netId) t.locked,
+      for (final v in scene.vias)
+        if (v.netId == netId) v.locked,
+    ];
+    return copper.isNotEmpty && copper.every((l) => l);
+  }
+
+  /// Holds, or frees, every track and via on one net at once.
+  ///
+  /// A net is the unit anyone thinks in: nobody locks the fourth segment
+  /// of a clock line, they lock the clock line.
+  Future<void> _lockNet(BoardScene scene, String netId) async {
+    final locked = !_netLocked(scene, netId);
+    final tracks = [
+      for (final t in scene.tracks)
+        if (t.netId == netId) t,
+    ];
+    final vias = [
+      for (final v in scene.vias)
+        if (v.netId == netId) v,
+    ];
+    if (tracks.isEmpty && vias.isEmpty) return;
+
+    final repository = ref.read(boardRepositoryProvider);
+    Future<void> apply(bool held) async {
+      for (final track in tracks) {
+        await repository.updateTrack(track.copyWith(locked: held));
+      }
+      for (final via in vias) {
+        await repository.updateVia(via.copyWith(locked: held));
+      }
+    }
+
+    await apply(locked);
+    if (!mounted) return;
+    final name = _netName(scene, netId) ?? 'net';
+    _notify(
+      '$name ${locked ? 'held' : 'free'}: '
+      '${tracks.length + vias.length} pieces of copper',
+    );
+    _record(
+      locked ? 'Lock $name' : 'Unlock $name',
+      undo: () async {
+        for (final track in tracks) {
+          await repository.updateTrack(track);
+        }
+        for (final via in vias) {
+          await repository.updateVia(via);
+        }
+      },
+      redo: () => apply(locked),
+    );
   }
 
   Future<void> _deleteZone(BoardZone zone) async {
@@ -4216,8 +4623,13 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     );
     final repository = ref.read(boardRepositoryProvider);
     final before = scene.board;
-    final after = before.copyWith(rules: result.rules, gridMm: result.gridMm);
+    final after = before.copyWith(
+      rules: result.rules,
+      gridMm: result.gridMm,
+      teardrops: result.teardrops,
+    );
     await repository.updateBoard(after);
+    if (mounted) setState(() => _grid = result.gridMm);
     _record(
       'Design rules',
       undo: () => repository.updateBoard(before),
@@ -4284,8 +4696,9 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   /// Every net on the project, for putting a stray piece of copper on one
   /// by hand.
   List<NetChoice> _netChoices() => [
-    for (final net in ref.read(projectNetsProvider(widget.project.id)).value ??
-        const <NetWithEndpoints>[])
+    for (final net
+        in ref.read(projectNetsProvider(widget.project.id)).value ??
+            const <NetWithEndpoints>[])
       (id: net.net.id, name: net.displayName),
   ];
 
@@ -4611,21 +5024,27 @@ class _Selection {
       math.max(area.left, area.right),
       math.max(area.top, area.bottom),
     ).inflate(1e-6);
+    // Anything held is left out of the sweep entirely, rather than caught
+    // and then quietly refusing to move. A box that grabs a locked
+    // connector and moves everything else is worse than one that never
+    // grabbed it.
     return _Selection(
       footprintIds: {
         for (final footprint in scene.footprints)
-          if (rect.contains(Offset(footprint.ref.x, footprint.ref.y)))
+          if (!footprint.ref.locked &&
+              rect.contains(Offset(footprint.ref.x, footprint.ref.y)))
             footprint.ref.id,
       },
       trackIds: {
         for (final track in scene.tracks)
-          if (rect.contains(Offset(track.startX, track.startY)) &&
+          if (!track.locked &&
+              rect.contains(Offset(track.startX, track.startY)) &&
               rect.contains(Offset(track.endX, track.endY)))
             track.id,
       },
       viaIds: {
         for (final via in scene.vias)
-          if (rect.contains(Offset(via.x, via.y))) via.id,
+          if (!via.locked && rect.contains(Offset(via.x, via.y))) via.id,
       },
       edgeIds: {
         for (final edge in scene.edges)
@@ -4633,7 +5052,8 @@ class _Selection {
       },
       zoneIds: {
         for (final zone in scene.zones)
-          if (zone.isValid && zone.points.every(rect.contains)) zone.id,
+          if (!zone.locked && zone.isValid && zone.points.every(rect.contains))
+            zone.id,
       },
     );
   }

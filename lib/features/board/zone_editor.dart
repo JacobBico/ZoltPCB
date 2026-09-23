@@ -27,6 +27,11 @@ class ZoneSaved extends ZoneResult {
     this.viaConnection = PadConnection.solid,
     this.thermalGap = 0.5,
     this.thermalSpoke = 0.5,
+    this.keepout = false,
+    this.noTracks = true,
+    this.noVias = true,
+    this.noPours = true,
+    this.noParts = false,
   });
 
   final BoardLayer layer;
@@ -40,6 +45,11 @@ class ZoneSaved extends ZoneResult {
   final PadConnection viaConnection;
   final double thermalGap;
   final double thermalSpoke;
+  final bool keepout;
+  final bool noTracks;
+  final bool noVias;
+  final bool noPours;
+  final bool noParts;
 
   /// [zone] with everything the editor sets.
   BoardZone applyTo(BoardZone zone) => zone.copyWith(
@@ -55,6 +65,11 @@ class ZoneSaved extends ZoneResult {
     viaConnection: viaConnection,
     thermalGap: thermalGap,
     thermalSpoke: thermalSpoke,
+    keepout: keepout,
+    noTracks: noTracks,
+    noVias: noVias,
+    noPours: noPours,
+    noParts: noParts,
   );
 }
 
@@ -73,6 +88,11 @@ Future<ZoneResult?> showZoneEditor(
   required BoardOutline outline,
   required List<NetWithEndpoints> nets,
   required double defaultClearance,
+  List<BoardLayer> layers = const [
+    BoardLayer.frontCopper,
+    BoardLayer.backCopper,
+  ],
+  bool keepout = false,
   BoardZone? zone,
 }) => showDialog<ZoneResult>(
   context: context,
@@ -80,6 +100,8 @@ Future<ZoneResult?> showZoneEditor(
     outline: outline,
     nets: nets,
     defaultClearance: defaultClearance,
+    layers: layers,
+    keepout: keepout,
     zone: zone,
   ),
 );
@@ -89,12 +111,23 @@ class _ZoneEditor extends StatefulWidget {
     required this.outline,
     required this.nets,
     required this.defaultClearance,
+    this.layers = const [BoardLayer.frontCopper, BoardLayer.backCopper],
+    this.keepout = false,
     this.zone,
   });
 
   final BoardOutline outline;
   final List<NetWithEndpoints> nets;
   final double defaultClearance;
+
+  /// The copper this board actually has. A four-layer board pours its
+  /// ground plane on an inner layer, and the editor that could only say
+  /// "front or back" moved that pour to the back the moment it was opened.
+  final List<BoardLayer> layers;
+
+  /// Whether a new area starts out as a keepout rather than a pour.
+  final bool keepout;
+
   final BoardZone? zone;
 
   @override
@@ -111,6 +144,11 @@ class _ZoneEditorState extends State<_ZoneEditor> {
   late final TextEditingController _thermalSpoke;
   late PadConnection _padConnection;
   late PadConnection _viaConnection;
+  late bool _keepout;
+  late bool _noTracks;
+  late bool _noVias;
+  late bool _noPours;
+  late bool _noParts;
   late int _priority;
 
   /// Whether the pour follows the board edge. Kept as a mode rather than as
@@ -122,7 +160,8 @@ class _ZoneEditorState extends State<_ZoneEditor> {
   void initState() {
     super.initState();
     final zone = widget.zone;
-    _layer = zone?.layer ?? BoardLayer.backCopper;
+    _layer = zone?.layer ?? widget.layers.last;
+    if (!widget.layers.contains(_layer)) _layer = widget.layers.last;
     _netId = zone?.netId ?? _likeliestGround()?.net.id;
     _clearance = TextEditingController(
       text: _mm(zone?.clearance ?? math.max(widget.defaultClearance * 2, 0.4)),
@@ -134,6 +173,11 @@ class _ZoneEditorState extends State<_ZoneEditor> {
     _thermalSpoke = TextEditingController(text: _mm(zone?.thermalSpoke ?? 0.5));
     _padConnection = zone?.padConnection ?? PadConnection.thermal;
     _viaConnection = zone?.viaConnection ?? PadConnection.solid;
+    _keepout = zone?.keepout ?? widget.keepout;
+    _noTracks = zone?.noTracks ?? true;
+    _noVias = zone?.noVias ?? true;
+    _noPours = zone?.noPours ?? true;
+    _noParts = zone?.noParts ?? false;
     _priority = zone?.priority ?? 0;
     _points = zone?.points ?? _boardShaped();
     _followsBoard = zone == null;
@@ -228,6 +272,15 @@ class _ZoneEditorState extends State<_ZoneEditor> {
     return null;
   }
 
+  /// A layer's name as a button can hold it.
+  static CopperLayer? _copper(BoardLayer layer) =>
+      CopperLayer.fromToken(layer.token);
+
+  static String _short(BoardLayer layer) =>
+      _copper(layer)?.shortLabel ?? layer.token;
+
+  static String _long(BoardLayer layer) => _copper(layer)?.label ?? layer.token;
+
   NetWithEndpoints? get _net =>
       widget.nets.where((n) => n.net.id == _netId).firstOrNull;
 
@@ -246,6 +299,11 @@ class _ZoneEditorState extends State<_ZoneEditor> {
         viaConnection: _viaConnection,
         thermalGap: _value(_thermalGap, 0.5),
         thermalSpoke: _value(_thermalSpoke, 0.5),
+        keepout: _keepout,
+        noTracks: _noTracks,
+        noVias: _noVias,
+        noPours: _noPours,
+        noParts: _noParts,
       ),
     );
   }
@@ -256,7 +314,11 @@ class _ZoneEditorState extends State<_ZoneEditor> {
     final problem = _problem;
 
     return AlertDialog(
-      title: Text(widget.zone == null ? 'Add a copper pour' : 'Copper pour'),
+      title: Text(
+        _keepout
+            ? (widget.zone == null ? 'Add a keepout' : 'Keepout')
+            : (widget.zone == null ? 'Add a copper pour' : 'Copper pour'),
+      ),
       contentPadding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
       content: SizedBox(
         width: 720,
@@ -270,35 +332,74 @@ class _ZoneEditorState extends State<_ZoneEditor> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      'NET',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: KicadPalette.textSecondary,
-                        letterSpacing: 1.2,
+                    SwitchListTile(
+                      key: const ValueKey('zone-keepout'),
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      value: _keepout,
+                      title: const Text('Keepout'),
+                      subtitle: Text(
+                        'Claims the area instead of filling it',
+                        style: TextStyle(color: KicadPalette.textSecondary),
                       ),
+                      onChanged: (value) => setState(() => _keepout = value),
                     ),
-                    const SizedBox(height: 6),
-                    DropdownButtonFormField<String?>(
-                      initialValue: _netId,
-                      isExpanded: true,
-                      dropdownColor: KicadPalette.surfaceRaised,
-                      decoration: const InputDecoration(isDense: true),
-                      items: [
-                        const DropdownMenuItem(
-                          child: Text('No net — unconnected copper'),
+                    if (_keepout) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'NOTHING IN HERE MAY BE',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: KicadPalette.textSecondary,
+                          letterSpacing: 1.2,
                         ),
-                        for (final net in widget.nets)
-                          DropdownMenuItem(
-                            value: net.net.id,
-                            child: Text(
-                              net.displayName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                      ),
+                      for (final (label, value, set) in [
+                        ('A track', _noTracks, (bool v) => _noTracks = v),
+                        ('A via', _noVias, (bool v) => _noVias = v),
+                        ('A pour', _noPours, (bool v) => _noPours = v),
+                        ('A part', _noParts, (bool v) => _noParts = v),
+                      ])
+                        CheckboxListTile(
+                          key: ValueKey('keeps-out-$label'),
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          value: value,
+                          title: Text(label),
+                          onChanged: (v) => setState(() => set(v ?? false)),
+                        ),
+                    ],
+                    if (!_keepout) ...[
+                      Text(
+                        'NET',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: KicadPalette.textSecondary,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String?>(
+                        initialValue: _netId,
+                        isExpanded: true,
+                        dropdownColor: KicadPalette.surfaceRaised,
+                        decoration: const InputDecoration(isDense: true),
+                        items: [
+                          const DropdownMenuItem(
+                            child: Text('No net — unconnected copper'),
                           ),
-                      ],
-                      onChanged: (value) => setState(() => _netId = value),
-                    ),
+                          for (final net in widget.nets)
+                            DropdownMenuItem(
+                              value: net.net.id,
+                              child: Text(
+                                net.displayName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                        onChanged: (value) => setState(() => _netId = value),
+                      ),
+                    ],
                     const SizedBox(height: 14),
                     Text(
                       'LAYER',
@@ -309,16 +410,20 @@ class _ZoneEditorState extends State<_ZoneEditor> {
                     ),
                     const SizedBox(height: 6),
                     SegmentedButton<BoardLayer>(
+                      key: const ValueKey('zone-layer'),
                       showSelectedIcon: false,
-                      segments: const [
-                        ButtonSegment(
-                          value: BoardLayer.frontCopper,
-                          label: Text('Front'),
-                        ),
-                        ButtonSegment(
-                          value: BoardLayer.backCopper,
-                          label: Text('Back'),
-                        ),
+                      segments: [
+                        for (final layer in widget.layers)
+                          ButtonSegment(
+                            value: layer,
+                            // Six names do not fit across a dialog; six
+                            // short ones do.
+                            label: Text(
+                              widget.layers.length > 2
+                                  ? _short(layer)
+                                  : _long(layer),
+                            ),
+                          ),
                       ],
                       selected: {_layer},
                       onSelectionChanged: (value) =>
@@ -339,82 +444,86 @@ class _ZoneEditorState extends State<_ZoneEditor> {
                       ],
                     ),
                     const SizedBox(height: 14),
-                    Text(
-                      'PADS ON THIS NET',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: KicadPalette.textSecondary,
-                        letterSpacing: 1.2,
+                    if (!_keepout) ...[
+                      Text(
+                        'PADS ON THIS NET',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: KicadPalette.textSecondary,
+                          letterSpacing: 1.2,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    ConnectionPicker(
-                      key: const ValueKey('zone-pad-connection'),
-                      value: _padConnection,
-                      onChanged: (value) =>
-                          setState(() => _padConnection = value),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'VIAS AND PLATED HOLES ON THIS NET',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: KicadPalette.textSecondary,
-                        letterSpacing: 1.2,
+                      const SizedBox(height: 6),
+                      ConnectionPicker(
+                        key: const ValueKey('zone-pad-connection'),
+                        value: _padConnection,
+                        onChanged: (value) =>
+                            setState(() => _padConnection = value),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    ConnectionPicker(
-                      key: const ValueKey('zone-via-connection'),
-                      via: true,
-                      value: _viaConnection,
-                      onChanged: (value) =>
-                          setState(() => _viaConnection = value),
-                    ),
-                    if (_padConnection == PadConnection.thermal ||
-                        _viaConnection == PadConnection.thermal) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        'VIAS AND PLATED HOLES ON THIS NET',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: KicadPalette.textSecondary,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      ConnectionPicker(
+                        key: const ValueKey('zone-via-connection'),
+                        via: true,
+                        value: _viaConnection,
+                        onChanged: (value) =>
+                            setState(() => _viaConnection = value),
+                      ),
+                      if (_padConnection == PadConnection.thermal ||
+                          _viaConnection == PadConnection.thermal) ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _number(
+                                _thermalGap,
+                                'Thermal gap mm',
+                                () {},
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _number(_thermalSpoke, 'Spoke mm', () {}),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                    if (!_keepout) ...[
                       const SizedBox(height: 10),
                       Row(
                         children: [
                           Expanded(
-                            child: _number(
-                              _thermalGap,
-                              'Thermal gap mm',
-                              () {},
+                            child: Text(
+                              'Priority $_priority — where pours overlap, the '
+                              'higher one is filled',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: KicadPalette.textSecondary,
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _number(_thermalSpoke, 'Spoke mm', () {}),
+                          IconButton(
+                            tooltip: 'Lower priority',
+                            icon: const Icon(Icons.remove, size: 18),
+                            onPressed: _priority == 0
+                                ? null
+                                : () => setState(() => _priority--),
+                          ),
+                          IconButton(
+                            key: const ValueKey('zone-priority-up'),
+                            tooltip: 'Higher priority',
+                            icon: const Icon(Icons.add, size: 18),
+                            onPressed: () => setState(() => _priority++),
                           ),
                         ],
                       ),
                     ],
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Priority $_priority — where pours overlap, the '
-                            'higher one is filled',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: KicadPalette.textSecondary,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Lower priority',
-                          icon: const Icon(Icons.remove, size: 18),
-                          onPressed: _priority == 0
-                              ? null
-                              : () => setState(() => _priority--),
-                        ),
-                        IconButton(
-                          key: const ValueKey('zone-priority-up'),
-                          tooltip: 'Higher priority',
-                          icon: const Icon(Icons.add, size: 18),
-                          onPressed: () => setState(() => _priority++),
-                        ),
-                      ],
-                    ),
                     const SizedBox(height: 6),
                     CheckboxListTile(
                       value: _followsBoard,
@@ -425,7 +534,11 @@ class _ZoneEditorState extends State<_ZoneEditor> {
                       controlAffinity: ListTileControlAffinity.leading,
                       contentPadding: EdgeInsets.zero,
                       dense: true,
-                      title: const Text('Fill the whole board'),
+                      title: Text(
+                        _keepout
+                            ? 'Cover the whole board'
+                            : 'Fill the whole board',
+                      ),
                       subtitle: Text(
                         'The board edge, pulled in by the clearance — '
                         '${_points.length} corners',
@@ -447,9 +560,15 @@ class _ZoneEditorState extends State<_ZoneEditor> {
                     Padding(
                       padding: const EdgeInsets.only(top: 8, bottom: 8),
                       child: Text(
-                        'The board shows the pour filled round everything '
-                        'else, exactly as it goes into the Gerbers; KiCad '
-                        'refills it the same way when it opens the board.',
+                        _keepout
+                            ? 'Nothing stops a track being drawn through a '
+                                  'keepout — the check says so afterwards, '
+                                  'because stopping a finger mid-route is '
+                                  'worse. KiCad calls this a rule area.'
+                            : 'The board shows the pour filled round '
+                                  'everything else, exactly as it goes into '
+                                  'the Gerbers; KiCad refills it the same '
+                                  'way when it opens the board.',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: KicadPalette.textSecondary,
                         ),

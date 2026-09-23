@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'board_layer.dart';
 import 'board_scene.dart';
+import 'board_zone.dart';
 import 'courtyard.dart';
 import 'fab_presets.dart';
 
@@ -36,7 +37,9 @@ enum DrcRule {
   edgeClearance('Copper at the edge'),
   silkscreen('Silkscreen'),
   boardSize('Board size'),
-  pourConnection('Pad not joined to its pour');
+  pourConnection('Pad not joined to its pour'),
+  keepout('Inside a keepout'),
+  viaSpan('Via span');
 
   const DrcRule(this.label);
 
@@ -209,6 +212,8 @@ List<DrcViolation> checkBoard(BoardScene scene, {FabPreset? fab}) {
     );
   }
 
+  violations.addAll(_keepoutViolations(scene));
+  violations.addAll(_viaSpanViolations(scene));
   violations.addAll(_clearanceViolations(scene));
   violations.addAll(courtyardViolations(scene));
   violations.addAll(pourViolations(scene));
@@ -278,6 +283,93 @@ List<DrcViolation> courtyardViolations(BoardScene scene) {
   }
   return violations;
 }
+
+/// Anything put inside an area that says it may not be.
+///
+/// A keepout is drawn to protect something the board cannot see: the gap an
+/// antenna needs, the plastic body of a connector that overhangs its pads,
+/// the swing of a screw's washer. Nothing stops copper being drawn there —
+/// stopping the finger mid-route is worse than saying so afterwards — so
+/// this is where it gets said.
+List<DrcViolation> _keepoutViolations(BoardScene scene) {
+  final areas = [
+    for (final zone in scene.zones)
+      if (zone.isValid && zone.keepout) zone,
+  ];
+  if (areas.isEmpty) return const [];
+  final violations = <DrcViolation>[];
+
+  void complain(BoardZone area, String what, Offset at, String? netId) {
+    violations.add(
+      DrcViolation(
+        rule: DrcRule.keepout,
+        severity: DrcSeverity.error,
+        message: '$what is inside a keepout that allows no ${_only(area)}',
+        position: at,
+        netId: netId,
+      ),
+    );
+  }
+
+  for (final area in areas) {
+    if (area.noTracks) {
+      for (final track in scene.tracks) {
+        if (track.layer.layer != area.layer) continue;
+        final a = Offset(track.startX, track.startY);
+        final b = Offset(track.endX, track.endY);
+        // Sampled along, so a run that crosses a corner of the area is
+        // caught as well as one that ends inside it.
+        final steps = math.max(2, ((b - a).distance / 0.5).ceil());
+        for (var i = 0; i <= steps; i++) {
+          final at = Offset.lerp(a, b, i / steps)!;
+          if (!area.contains(at)) continue;
+          complain(area, 'A track', at, track.netId);
+          break;
+        }
+      }
+    }
+    if (area.noVias) {
+      for (final via in scene.vias) {
+        final at = Offset(via.x, via.y);
+        if (!area.contains(at)) continue;
+        complain(area, 'A via', at, via.netId);
+      }
+    }
+    if (area.noParts) {
+      for (final footprint in scene.footprints) {
+        if (!footprint.ref.placed) continue;
+        if (!area.contains(footprint.bounds.center)) continue;
+        complain(
+          area,
+          footprint.part.reference,
+          footprint.bounds.center,
+          null,
+        );
+      }
+    }
+  }
+  return violations;
+}
+
+String _only(BoardZone area) {
+  final kept = area.keptOut;
+  if (kept.isEmpty) return 'nothing in particular';
+  if (kept.length == 1) return kept.single;
+  return '${kept.take(kept.length - 1).join(', ')} or ${kept.last}';
+}
+
+/// Blind and buried vias that cannot be drilled as asked.
+List<DrcViolation> _viaSpanViolations(BoardScene scene) => [
+  for (final via in scene.vias)
+    if (via.problemOn(scene.board) case final problem?)
+      DrcViolation(
+        rule: DrcRule.viaSpan,
+        severity: DrcSeverity.error,
+        message: '${via.kind.label} via: $problem',
+        position: Offset(via.x, via.y),
+        netId: via.netId,
+      ),
+];
 
 /// Copper of different nets that comes closer than the clearance rule.
 ///

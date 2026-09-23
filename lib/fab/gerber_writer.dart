@@ -251,7 +251,13 @@ abstract final class FabricationWriter {
         ], track.width);
       }
       for (final via in scene.vias) {
+        if (!via.layersOn(scene.board).contains(layer)) continue;
         g.flashCircle(Offset(via.x, via.y), via.diameter);
+      }
+      // Last, so a fillet is drawn over the track and the pad it joins
+      // rather than under either.
+      for (final drop in Teardrops.of(scene, layer)) {
+        g.region(drop.points);
       }
     }
     g.shift = Offset.zero;

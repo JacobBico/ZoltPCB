@@ -1414,6 +1414,136 @@ void main() {
     expect(resized.outlineHeight, closeTo(board.outlineHeight + 5, 0.51));
   });
 
+  // "Keepout Rules: This could be a drop down for the pour tool"
+  testAppWithStorage('the Pour chip can lay a keepout instead', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final footprintStorage = InMemoryLibraryStorageFor();
+    final (project, boards) = await _board(db, footprintStorage);
+    await pumpApp(
+      tester,
+      Scaffold(body: PrecisionBoardPanel(project: project)),
+      database: db,
+      footprintStorage: footprintStorage,
+    );
+
+    final tool = find.byKey(const ValueKey('tool-zone'));
+    await tester.ensureVisible(tool);
+    await tester.pump();
+    await tester.tap(tool);
+    await settleApp(tester);
+    await tester.ensureVisible(tool);
+    await tester.pump();
+    await tester.tap(tool);
+    await settleApp(tester);
+    await tester.tap(find.byKey(const ValueKey('pick-Keepout')));
+    await settleApp(tester);
+
+    for (final corner in const [
+      Offset(30, 30),
+      Offset(40, 30),
+      Offset(40, 40),
+    ]) {
+      await _aimAt(tester, corner);
+      await tester.tap(find.textContaining(RegExp('START|CORNER')));
+      await settleApp(tester);
+    }
+    await tester.tap(find.text('Close pour'));
+    await settleApp(tester);
+
+    // No net was asked for: a keepout claims the area rather than filling
+    // it, so there is nothing to fill it with.
+    final zone = (await boards.getZones(project.id)).single;
+    expect(zone.keepout, isTrue);
+    expect(zone.netId, isNull);
+    expect(zone.noTracks, isTrue);
+    expect(zone.noVias, isTrue);
+  });
+
+  // "Object locking: Can be great for pours, components, but also entire
+  // traced nets, not just the individual traces"
+  testAppWithStorage('a locked part stays put, and a whole net can be held', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final footprintStorage = InMemoryLibraryStorageFor();
+    final (project, boards) = await _board(db, footprintStorage);
+    final nets = await NetRepository(db).getNets(project.id);
+    for (final at in [const Offset(30, 30), const Offset(36, 30)]) {
+      await boards.addTrack(
+        projectId: project.id,
+        layer: CopperLayer.front,
+        startX: at.dx,
+        startY: at.dy,
+        endX: at.dx + 5,
+        endY: at.dy,
+        width: 0.25,
+        netId: nets.first.net.id,
+      );
+    }
+
+    await pumpApp(
+      tester,
+      Scaffold(body: PrecisionBoardPanel(project: project)),
+      database: db,
+      footprintStorage: footprintStorage,
+    );
+
+    final rect = tester.getRect(find.byType(PrecisionBoardPanel));
+    Future<void> tapAt(Offset board) async {
+      await tester.tapAt(
+        rect.topLeft + _painter(tester).viewport.toScreen(board),
+      );
+      await settleApp(tester);
+    }
+
+    // One track held, and then its whole net.
+    await tapAt(const Offset(32, 30));
+    expect(find.text('Slide'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('track-lock')));
+    await settleApp(tester);
+    expect(
+      (await boards.getTracks(project.id)).where((t) => t.locked),
+      hasLength(1),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('net-lock')));
+    await settleApp(tester);
+    expect(
+      (await boards.getTracks(project.id)).every((t) => t.locked),
+      isTrue,
+      reason: 'the whole net is held, not just the one segment',
+    );
+
+    // A held part cannot be picked up, and says so rather than doing
+    // nothing.
+    final part = _painter(tester).scene.footprints.first;
+    await tapAt(Offset(part.ref.x, part.ref.y));
+    await tester.tap(find.byKey(const ValueKey('part-lock')));
+    await settleApp(tester);
+    expect(
+      (await boards.getFootprints(project.id)).any((f) => f.locked),
+      isTrue,
+    );
+    expect(find.text('Unlock'), findsOneWidget);
+
+    // And a swept box leaves everything held behind rather than catching
+    // it and then refusing to move it.
+    await tester.tap(find.byIcon(Icons.crop_free).first);
+    await settleApp(tester);
+    for (final corner in [const Offset(20, 20), const Offset(60, 55)]) {
+      await _aimAt(tester, corner);
+      await tester.tap(find.textContaining(RegExp('CORNER|FINISH')));
+      await settleApp(tester);
+    }
+    // Two parts and two tracks are inside the box; one part and both
+    // tracks are held, so one thing is left to move.
+    expect(find.text('Move 1'), findsOneWidget);
+  });
+
   // "I wish VIAs AND traces to have properties where we can choose what net
   // they belong to ... when you have an exposed pad and you want to put
   // vias down for better temperature control, you ideally want to see these
