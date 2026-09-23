@@ -13,6 +13,51 @@ import 'package:hintpcb/domain/pcb/pcb.dart';
 
 import '../helpers/fixtures.dart';
 
+/// Every table's columns — name, type, whether it may be null, and its
+/// default — and every index, as SQLite describes them.
+///
+/// An upgraded database has to come out the same shape as a new one, or
+/// the code written against the new one is wrong on every phone that
+/// upgraded. CHECK constraints are left out on purpose: the v20 flags are
+/// added without one (see the migration), and nothing but this app writes
+/// them.
+Future<Map<String, List<String>>> _shape(AppDatabase db) async {
+  final shape = <String, List<String>>{};
+  final tables = await db
+      .customSelect(
+        "SELECT name FROM sqlite_master WHERE type = 'table' "
+        "AND name NOT LIKE 'sqlite_%' ORDER BY name",
+      )
+      .get();
+  for (final table in tables) {
+    final name = table.read<String>('name');
+    final columns = await db.customSelect('PRAGMA table_info($name)').get();
+    shape[name] = [
+      for (final c in columns)
+        '${c.read<String>('name')} ${c.read<String>('type')} '
+            'notnull=${c.read<int>('notnull')} '
+            'default=${c.data['dflt_value']}',
+    ]..sort();
+  }
+  final indexes = await db
+      .customSelect(
+        "SELECT name, tbl_name FROM sqlite_master WHERE type = 'index' "
+        "AND name NOT LIKE 'sqlite_%' ORDER BY name",
+      )
+      .get();
+  shape['(indexes)'] = [
+    for (final i in indexes)
+      '${i.read<String>('tbl_name')}.${i.read<String>('name')}',
+  ];
+  return shape;
+}
+
+Future<void> _expectSameShapeAsNew(AppDatabase upgraded) async {
+  final fresh = AppDatabase.memory();
+  addTearDown(fresh.close);
+  expect(await _shape(upgraded), await _shape(fresh));
+}
+
 void main() {
   // The phone already holds a v13 database with the user's designs in it.
   // Upgrading has to add the new pieces around them and lose nothing.
@@ -100,6 +145,7 @@ void main() {
         "VALUES ('${project.id}', 'erc.lonelyNet', 'ignore')",
       );
       expect(await SavedCircuitRepository(db).getAll(), isEmpty);
+      await _expectSameShapeAsNew(db);
     },
   );
 
@@ -170,5 +216,6 @@ void main() {
     expect(part.units.single.sheetId, isNull, reason: 'on the top sheet');
     expect(await SheetRepository(db).getAll(project.id), isEmpty);
     expect(await BoardRepository(db).getFeatures(project.id), isEmpty);
+    await _expectSameShapeAsNew(db);
   });
 }

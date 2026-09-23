@@ -103,21 +103,19 @@ class KicadProjectImporter {
     }
 
     final titleBlock = root.child('title_block');
-    final project = await projects.create(
-      name: name,
-      paper: PaperSize.fromKicadName(root.childAtom('paper') ?? 'A4'),
-      company: titleBlock?.childAtom('company') ?? '',
-      revision: titleBlock?.childAtom('rev') ?? '',
-    );
 
-    // From here on the project exists. Anything that goes wrong takes it
-    // away again, so a failed import never leaves half a design behind.
-    try {
-      return await _importInto(project, root, board, projectFile, sheetFiles);
-    } catch (_) {
-      await projects.delete(project.id);
-      rethrow;
-    }
+    // One transaction: anything that goes wrong takes the whole project
+    // away again, so a failed import never leaves half a design behind, and
+    // the project list never shows one half made.
+    return projects.transaction(() async {
+      final project = await projects.create(
+        name: name,
+        paper: PaperSize.fromKicadName(root.childAtom('paper') ?? 'A4'),
+        company: titleBlock?.childAtom('company') ?? '',
+        revision: titleBlock?.childAtom('rev') ?? '',
+      );
+      return _importInto(project, root, board, projectFile, sheetFiles);
+    });
   }
 
   Future<KicadImportResult> _importInto(

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../app/appearance.dart';
+import '../../app/error_log.dart';
 import '../../core/theme/kicad_palette.dart';
 import '../../core/widgets/panel.dart';
 import '../../rendering/resistor_zigzag.dart';
@@ -148,10 +150,75 @@ class SettingsPanel extends ConsumerWidget {
               ],
             ),
           ),
+          if (ref.watch(errorLogProvider).isEnabled) ...[
+            const SizedBox(height: 12),
+            const _ErrorLogCard(),
+          ],
         ],
       ),
     );
   }
+}
+
+/// The error log: shared with a bug report, or cleared.
+class _ErrorLogCard extends ConsumerWidget {
+  const _ErrorLogCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final log = ref.watch(errorLogProvider);
+    return Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const PanelHeading('Problems'),
+          const SizedBox(height: 4),
+          Text(
+            'Errors the app runs into are kept in a file on this phone. '
+            'Nothing is sent anywhere; share the log yourself with a bug '
+            'report.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: KicadPalette.textSecondary),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => _share(context, log),
+                icon: const Icon(Icons.ios_share, size: 16),
+                label: const Text('SHARE ERROR LOG'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  await log.clear();
+                  if (context.mounted) _say(context, 'Error log cleared');
+                },
+                child: const Text('CLEAR'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Future<void> _share(BuildContext context, ErrorLog log) async {
+    final file = log.file;
+    if (file == null || !await log.hasEntries()) {
+      if (context.mounted) _say(context, 'No errors recorded');
+      return;
+    }
+    await SharePlus.instance.share(
+      ShareParams(files: [XFile(file.path)], subject: 'HintPCB error log'),
+    );
+  }
+
+  static void _say(BuildContext context, String message) =>
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
 }
 
 /// A labelled choice with a radio dot, as a card you can pick.

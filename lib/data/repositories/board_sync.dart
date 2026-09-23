@@ -222,7 +222,7 @@ class BoardSync {
     BoardSyncPlan plan, {
     bool place = true,
     bool deleteOrphans = true,
-  }) async {
+  }) => boards.transaction(() async {
     final before = await boards.getFootprints(projectId);
     final board = await boards.ensureBoard(projectId);
 
@@ -292,17 +292,17 @@ class BoardSync {
       footprintsAfter: await boards.getFootprints(projectId),
       deletedTracks: deleted,
     );
-  }
+  });
 
-  Future<void> undo(BoardSyncUndo undo) async {
+  Future<void> undo(BoardSyncUndo undo) => boards.transaction(() async {
     await boards.replaceFootprints(undo.projectId, undo.footprintsBefore);
     await boards.restoreCopper(tracks: undo.deletedTracks, vias: const []);
-  }
+  });
 
-  Future<void> redo(BoardSyncUndo undo) async {
+  Future<void> redo(BoardSyncUndo undo) => boards.transaction(() async {
     await boards.replaceFootprints(undo.projectId, undo.footprintsAfter);
     await boards.deleteTracks(undo.deletedTracks.map((t) => t.id));
-  }
+  });
 
   static Rect _boardBounds(Rect local, double x, double y, double rotation) {
     final placement = FootprintPlacement(x: x, y: y, rotation: rotation);

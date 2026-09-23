@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hintpcb/data/libraries/library_file_storage.dart';
+import 'package:hintpcb/data/db/database.dart';
 import 'package:hintpcb/data/repositories/net_repository.dart';
 import 'package:hintpcb/data/repositories/part_repository.dart';
 import 'package:hintpcb/data/repositories/project_repository.dart';
@@ -169,8 +171,8 @@ void _runSheet(_Sheet sheet) {
 
 Future<void> _drag(
   WidgetTester tester,
-  dynamic db,
-  dynamic storage,
+  AppDatabase db,
+  LibraryFileStorage storage,
   _Sheet sheet,
   Offset grab,
   Offset to,

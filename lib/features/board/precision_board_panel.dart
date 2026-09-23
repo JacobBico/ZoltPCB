@@ -598,6 +598,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     }
 
     return BoardScene.build(
+      previewOf: committed,
       texts: committed.texts,
       netClasses: committed.netClasses,
       features: [
@@ -650,6 +651,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
     final sample = slide.moved.firstOrNull;
     return BoardScene.build(
+      previewOf: committed,
       texts: committed.texts,
       netClasses: committed.netClasses,
       features: committed.features,
@@ -706,6 +708,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     final edgeId = _carryingEdgeId;
 
     return BoardScene.build(
+      previewOf: committed,
       texts: committed.texts,
       netClasses: committed.netClasses,
       features: committed.features,
@@ -1724,7 +1727,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           ref.read(activeLayerProvider) == CopperLayer.back,
     );
     if (!mounted) return;
-    HapticFeedback.selectionClick();
+    unawaited(HapticFeedback.selectionClick());
     _record(
       'Add ${added.reference}',
       undo: () => repository.deleteFeature(added.id),
@@ -1886,7 +1889,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       for (final track in await repository.getTracks(widget.project.id))
         if (written.contains(track.id)) track,
     ];
-    HapticFeedback.lightImpact();
+    unawaited(HapticFeedback.lightImpact());
     _record(
       'Bus of ${plan.tracks.length}',
       undo: () => repository.deleteTracks(written),
@@ -1984,12 +1987,12 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
       case AimTool.zone:
       case AimTool.edge:
-        HapticFeedback.selectionClick();
+        unawaited(HapticFeedback.selectionClick());
         setState(() => _points.add(at));
         return;
 
       case AimTool.region:
-        HapticFeedback.selectionClick();
+        unawaited(HapticFeedback.selectionClick());
         setState(() {
           if (_regionFrom == null) {
             _regionFrom = at;
@@ -2370,17 +2373,22 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     }
     if (written.isEmpty) return;
 
-    HapticFeedback.lightImpact();
+    unawaited(HapticFeedback.lightImpact());
     if (pairRuns != null) {
       _notify(
         '${pair!.label} at '
         '${_mm(DiffPairs.gapBetween(pairRuns.$1, pairRuns.$2))} mm',
       );
     }
+    // The rows as laid, so a redo can put back exactly these.
+    final laid = [
+      for (final track in await repository.getTracks(widget.project.id))
+        if (written.contains(track.id)) track,
+    ];
     _record(
       pairRuns == null ? 'Route' : 'Route a pair',
       undo: () => repository.deleteTracks(written),
-      redo: () async {},
+      redo: () => repository.restoreCopper(tracks: laid, vias: const []),
     );
   }
 
@@ -2486,8 +2494,12 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         );
         ids.add(segment.id);
       }
+      final laid = [
+        for (final edge in await repository.getEdges(widget.project.id))
+          if (ids.contains(edge.id)) edge,
+      ];
       if (!mounted) return;
-      HapticFeedback.lightImpact();
+      unawaited(HapticFeedback.lightImpact());
       _record(
         'Add edge cuts',
         undo: () async {
@@ -2495,13 +2507,17 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
             await repository.deleteEdge(id);
           }
         },
-        redo: () async {},
+        redo: () async {
+          for (final edge in laid) {
+            await repository.restoreEdge(edge);
+          }
+        },
       );
       return;
     }
 
     if (!mounted) return;
-    HapticFeedback.lightImpact();
+    unawaited(HapticFeedback.lightImpact());
     setState(() => _selectedEdgeId = added.id);
     _record(
       'Add an edge cut',
@@ -2583,11 +2599,15 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       drill: size.drill,
       netId: under,
     );
-    HapticFeedback.lightImpact();
+    final laid = [
+      for (final via in await repository.getVias(widget.project.id))
+        if (via.id == id) via,
+    ];
+    unawaited(HapticFeedback.lightImpact());
     _record(
       'Add a via',
       undo: () => repository.deleteVias([id]),
-      redo: () async {},
+      redo: () => repository.restoreCopper(tracks: const [], vias: laid),
     );
   }
 
@@ -2756,7 +2776,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     }
 
     if (undos.isEmpty) return;
-    HapticFeedback.lightImpact();
+    unawaited(HapticFeedback.lightImpact());
     _record(
       outline ? 'Move the board outline' : 'Move',
       undo: () async {
@@ -2819,7 +2839,11 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       );
     }
 
-    HapticFeedback.lightImpact();
+    final laidTracks = [
+      for (final row in await repository.getTracks(widget.project.id))
+        if (laid.contains(row.id)) row,
+    ];
+    unawaited(HapticFeedback.lightImpact());
     _record(
       'Slide a track',
       undo: () async {
@@ -2836,7 +2860,13 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           await repository.updateTrack(original);
         }
       },
-      redo: () async {},
+      redo: () async {
+        for (final moved in slide.moved) {
+          await repository.updateTrack(moved);
+        }
+        await repository.deleteTracks(slide.removed);
+        await repository.restoreCopper(tracks: laidTracks, vias: const []);
+      },
     );
   }
 
@@ -2859,7 +2889,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
     final after = before.copyWith(x: at.dx, y: at.dy, placed: true);
     await repository.updatePlacement(after);
-    HapticFeedback.lightImpact();
+    unawaited(HapticFeedback.lightImpact());
     _record(
       footprint == null ? 'Place part' : 'Move ${footprint.part.reference}',
       undo: () => repository.updatePlacement(before),
@@ -2918,6 +2948,8 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     staleViaIds: committed.staleViaIds,
     netClasses: committed.netClasses,
     netClassByNet: committed.netClassByNet,
+    pourJoins: committed.pourJoins,
+    previewOf: committed.previewOf ?? committed,
   );
 
   Future<void> _dropSilk(BoardScene scene, Offset at) async {
@@ -2934,7 +2966,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       if (before == null) return;
       final after = before.copyWith(position: at);
       await repository.updateText(after);
-      HapticFeedback.lightImpact();
+      unawaited(HapticFeedback.lightImpact());
       _record(
         'Move text',
         undo: () => repository.updateText(before),
@@ -2952,7 +2984,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     final before = footprint.ref;
     final after = before.copyWith(labelOffset: footprint.placement.invert(at));
     await repository.updatePlacement(after);
-    HapticFeedback.lightImpact();
+    unawaited(HapticFeedback.lightImpact());
     _record(
       'Move ${footprint.part.reference} label',
       undo: () => repository.updatePlacement(before),
@@ -3223,7 +3255,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     final before = scene.board;
     final after = before.withOutline(_resizedOutline(scene, handle, at));
     await repository.updateBoard(after);
-    HapticFeedback.lightImpact();
+    unawaited(HapticFeedback.lightImpact());
     _record(
       'Resize board',
       undo: () => repository.updateBoard(before),
@@ -3249,6 +3281,8 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     staleViaIds: committed.staleViaIds,
     netClasses: committed.netClasses,
     netClassByNet: committed.netClassByNet,
+    pourJoins: committed.pourJoins,
+    previewOf: committed.previewOf ?? committed,
   );
 
   void _carryRegion() {
@@ -3284,28 +3318,33 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     ];
     final placements = [
       for (final placement
-          in ref.read(boardFootprintsProvider(widget.project.id)).value ?? [])
+          in ref.read(boardFootprintsProvider(widget.project.id)).value ??
+              const <PlacedFootprintRef>[])
         if (moving.footprintIds.contains(placement.id)) placement,
     ];
 
-    await repository.deleteTracks(tracks.map((t) => t.id));
-    await repository.deleteVias(vias.map((v) => v.id));
-    for (final edge in edges) {
-      await repository.deleteEdge(edge.id);
-    }
-    for (final zone in zones) {
-      await repository.deleteZone(zone.id);
-    }
-    // A part is taken off the board rather than deleted: it belongs to the
-    // schematic, and the board does not get to remove it from the design.
-    for (final placement in placements) {
-      await repository.updatePlacement(placement.copyWith(placed: false));
-    }
+    Future<void> remove() => ref.read(editTransactionProvider)(() async {
+      await repository.deleteTracks(tracks.map((t) => t.id));
+      await repository.deleteVias(vias.map((v) => v.id));
+      for (final edge in edges) {
+        await repository.deleteEdge(edge.id);
+      }
+      for (final zone in zones) {
+        await repository.deleteZone(zone.id);
+      }
+      // A part is taken off the board rather than deleted: it belongs to
+      // the schematic, and the board does not get to remove it from the
+      // design.
+      for (final placement in placements) {
+        await repository.updatePlacement(placement.copyWith(placed: false));
+      }
+    });
 
+    await remove();
     if (!mounted) return;
     final count = moving.count;
     setState(_clearSelection);
-    HapticFeedback.mediumImpact();
+    unawaited(HapticFeedback.mediumImpact());
     _record(
       'Delete $count',
       undo: () async {
@@ -3320,7 +3359,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           await repository.updatePlacement(placement);
         }
       },
-      redo: () async {},
+      redo: remove,
     );
   }
 
@@ -3363,7 +3402,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       default:
         return;
     }
-    HapticFeedback.mediumImpact();
+    unawaited(HapticFeedback.mediumImpact());
   }
 
   /// The parts that belong on the board but are not on it yet.
@@ -4711,12 +4750,28 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   }
 
   Future<void> _undo() async {
-    await ref.read(editHistoryProvider.notifier).undo();
+    await _stepHistory(backward: true);
     if (mounted) setState(_clearSelection);
   }
 
+  /// Takes a step through the undo history, saying so if it cannot.
+  ///
+  /// A step that fails has been dropped from the history, and the design
+  /// is as it was before the tap: the step ran in one transaction.
+  Future<void> _stepHistory({required bool backward}) async {
+    final history = ref.read(editHistoryProvider.notifier);
+    try {
+      await (backward ? history.undo() : history.redo());
+    } catch (error, stack) {
+      FlutterError.reportError(
+        FlutterErrorDetails(exception: error, stack: stack, library: 'undo'),
+      );
+      _notify(backward ? 'That edit could not be undone' : 'Could not redo');
+    }
+  }
+
   Future<void> _redo() async {
-    await ref.read(editHistoryProvider.notifier).redo();
+    await _stepHistory(backward: false);
     if (mounted) setState(_clearSelection);
   }
 

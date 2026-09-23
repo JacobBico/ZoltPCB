@@ -13,7 +13,9 @@ void main() {
   );
 
   setUp(() {
-    container = ProviderContainer.test();
+    container = ProviderContainer.test(
+      overrides: [editTransactionProvider.overrideWithValue(<T>(step) => step())],
+    );
     log = [];
   });
 
@@ -83,6 +85,47 @@ void main() {
     expect(await notifier().undo(), isNull);
     expect(await notifier().redo(), isNull);
     expect(log, isEmpty);
+  });
+
+  test('a step that fails is dropped, and the rest stays', () async {
+    notifier()
+      ..push('p1', action('a'))
+      ..push(
+        'p1',
+        EditAction(
+          label: 'broken',
+          undo: () async => throw StateError('gone'),
+          redo: () async {},
+        ),
+      );
+
+    await expectLater(notifier().undo(), throwsStateError);
+    expect(state().undoLabel, 'a');
+    expect(state().canRedo, isFalse);
+
+    await notifier().undo();
+    expect(log, ['undo a']);
+  });
+
+  test('a second undo while one is running is ignored', () async {
+    notifier()
+      ..push('p1', action('a'))
+      ..push('p1', action('b'));
+
+    final first = notifier().undo();
+    final second = notifier().undo();
+    expect(await second, isNull);
+    expect(await first, 'b');
+    expect(log, ['undo b']);
+    expect(state().undoLabel, 'a');
+  });
+
+  test('only the most recent edits are kept', () {
+    for (var i = 0; i < EditHistory.limit + 5; i++) {
+      notifier().push('p1', action('$i'));
+    }
+    expect(state().past, hasLength(EditHistory.limit));
+    expect(state().undoLabel, '${EditHistory.limit + 4}');
   });
 
   test('opening a different project starts a fresh history', () {

@@ -18,8 +18,9 @@ still no autorouter, and there is no 3D view; both remain desktop work.
 * **Fully offline and local-first.** Designs live in an on-device SQLite
   database. No account, no sync, no network dependency for anything in the
   core workflow.
-* **Touch-first.** Fingers, not a stylus or mouse. Nothing interactive is
-  smaller than 48dp.
+* **Touch-first.** Fingers, not a stylus or mouse. The section rail and the
+  canvas action bar are 44 dp — a deliberate step under the usual 48, so
+  every section still fits a landscape phone's 360 dp of height.
 * **KiCad in and out.** `.kicad_sch`, `.kicad_pcb`, `.kicad_pro`, BOM CSV,
   Gerbers, drill files, a pick-and-place CSV and a schematic PDF go out, plus
   panel Gerbers for a whole array of boards. A desktop KiCad project —
@@ -39,6 +40,7 @@ still no autorouter, and there is no 3D view; both remain desktop work.
 | Footprint libraries | Same rule as symbols: nothing bundled. The user imports a zipped `.pretty` folder or loose `.kicad_mod` files, and they are packed into one container with byte spans, exactly as `.kicad_sym` libraries are. |
 | Board | 2 to 8 copper layers. Manual routing with grid snapping and a 45°/90° constraint, walk-around past other nets, buses and differential pairs; no autorouter. |
 | Pours and keepouts | Stored as outlines, never as filled copper: the fill follows from the outline, the clearance and everything else on the layer, and is recomputed for the screen and for the Gerbers alike. A keepout is the same object with the fill turned off. |
+| Pour connectivity | The fill's steps are also traced line by line into real pieces of copper. A piece joins whatever pads, tracks and vias it touches, so a pour counts as routing in the ratsnest and the design check; a piece touching none of its net is an island, cleared from the screen and the Gerbers as KiCad clears it. |
 | Teardrops | Computed from the track, the pad and two ratios rather than stored, for the same reason. The exported project carries the parameters so KiCad regenerates the same shapes. |
 | Board export | `.kicad_pcb` (`version 20241229`) plus a `.kicad_pro`, because KiCad keeps the design rules in the project file. |
 | Timestamps | Stored as ISO-8601 text, not drift's default unix-seconds, because second resolution is too coarse to order recent activity. |
@@ -48,17 +50,21 @@ still no autorouter, and there is no 3D view; both remain desktop work.
 Deliberately separated, with the dependency arrows pointing one way:
 
 ```
-domain/          pure Dart models — no Flutter, no Drift, no KiCad syntax
+domain/          models and geometry — no widgets, no Drift, no KiCad syntax
   ↑
+kicad/  fab/     KiCad files in and out; Gerbers, drill and placement files
+rendering/       schematic scene and painters
 data/            Drift schema, row↔domain mappers, repositories
   ↑
 features/        screens and widgets
-core/            theme, shared widgets, small utilities
+app/  core/      providers, undo history, theme, shared widgets, utilities
 ```
 
-`domain/` is the shared vocabulary. The database maps into it and, later, the
-symbol parser and the exporter both work in terms of it — which is what makes
-the export layer testable without a database or a UI.
+`domain/` is the shared vocabulary. The database maps into it and the symbol
+parser and the exporters work in terms of it — which is what makes the export
+layer testable without a database or a UI. It does use `dart:ui`'s geometry
+types (`Offset`, `Rect`, and `Path` for curves), so its tests run under
+`flutter test` rather than plain `dart test`.
 
 ## Build order
 
@@ -160,8 +166,9 @@ device needed. `test/flutter_test_config.dart` points `package:sqlite3` at
 the system `libsqlite3.so.0`, since many Linux distributions ship the
 versioned library without the `-dev` symlink.
 
-Two tagged suites are excluded from the default run because they depend on a
-local KiCad install:
+Two tagged suites depend on a local KiCad install. They run as part of a
+plain `flutter test`, and skip themselves on a machine without KiCad; to run
+only them:
 
 ```bash
 flutter test --tags corpus   # parses all 222 stock symbol libraries
@@ -187,6 +194,24 @@ One gap worth knowing about: the `.kicad_pcb` path is checked against real
 KiCad, but the Gerber path is only checked against this app's own Gerber
 reader. Before ordering a board, open the exported zip in GerbView or a
 fabricator's online viewer once.
+
+### Edits, undo and transactions
+
+An edit that writes more than once — moving a group, reshaping a net's
+wires, deleting a selection, pasting a circuit, importing a project — runs
+in one database transaction, and so does every undo and redo. A failure part
+way leaves nothing half-done, and the canvas redraws once for the edit
+rather than once per write.
+
+Undo steps are closures, so they must not reach back into a widget: the
+schematic is gone from the tree once the board is showing, and the history
+is shared. Anything a step needs — a repository, the sheet it was made on —
+is captured when the edit is recorded. `SheetWires` exists for this: the
+wire-tidying rules, bound to one project and one sheet.
+
+Errors the app runs into, including ones from futures nobody awaited, are
+kept in `logs/errors.log` in application support, and can be shared from
+Settings. Nothing is sent anywhere.
 
 ### Two things that will bite
 

@@ -290,6 +290,7 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
 
     final id = _candidateFootprintId;
     return BoardScene.build(
+      previewOf: committed,
       texts: committed.texts,
       netClasses: committed.netClasses,
       features: [
@@ -2007,7 +2008,7 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
       );
     }
 
-    HapticFeedback.lightImpact();
+    unawaited(HapticFeedback.lightImpact());
 
     // The whole route is one action: undoing it should not leave three of
     // the five segments behind, or the schematic connection it made.
@@ -2194,9 +2195,25 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
         );
   }
 
-  Future<void> _undo() => ref.read(editHistoryProvider.notifier).undo();
+  Future<void> _undo() => _stepHistory(backward: true);
 
-  Future<void> _redo() => ref.read(editHistoryProvider.notifier).redo();
+  Future<void> _redo() => _stepHistory(backward: false);
+
+  /// Takes a step through the undo history, saying so if it cannot.
+  ///
+  /// A step that fails has been dropped from the history, and the design
+  /// is as it was before the tap: the step ran in one transaction.
+  Future<void> _stepHistory({required bool backward}) async {
+    final history = ref.read(editHistoryProvider.notifier);
+    try {
+      await (backward ? history.undo() : history.redo());
+    } catch (error, stack) {
+      FlutterError.reportError(
+        FlutterErrorDetails(exception: error, stack: stack, library: 'undo'),
+      );
+      _notify(backward ? 'That edit could not be undone' : 'Could not redo');
+    }
+  }
 
   /// Says something without interrupting.
   ///

@@ -108,10 +108,10 @@ class OpenSheet extends Notifier<String?> {
   final String projectId;
 
   @override
-  String? build() => ActiveSheet.of(projectId);
+  String? build() => ActiveSheet.of(ref.read(databaseProvider), projectId);
 
   void open(String? sheetId) {
-    ActiveSheet.set(projectId, sheetId);
+    ActiveSheet.set(ref.read(databaseProvider), projectId, sheetId);
     state = sheetId;
   }
 }
@@ -577,9 +577,11 @@ final exportPreviewProvider = FutureProvider.family<ExportPreview, String>((
   ref,
   projectId,
 ) async {
-  // Recompute whenever the design changes.
+  // Recompute whenever the design changes, or a library it draws on is
+  // added or taken away.
   ref.watch(projectPartsProvider(projectId));
   ref.watch(projectNetsProvider(projectId));
+  ref.watch(symbolLibrariesProvider);
 
   final document = await ref
       .watch(projectExporterProvider)

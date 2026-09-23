@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'app/app.dart';
 import 'app/appearance.dart';
+import 'app/error_log.dart';
 import 'app/providers.dart';
 import 'data/libraries/library_file_storage.dart';
 
@@ -50,8 +52,23 @@ Future<void> main() async {
   final documents = await getApplicationDocumentsDirectory();
   final exports = Directory(p.join(documents.path, 'exports'));
 
+  // Everything that goes wrong is kept, on the phone, so a bug report can
+  // say what happened. Flutter's own report still prints as before.
+  final errorLog = ErrorLog(File(p.join(support.path, 'logs', 'errors.log')));
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    errorLog.record(details.exception, details.stack, context: details.library);
+  };
+  // Errors in futures nobody awaited — an edit started from a tap, say.
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('Uncaught: $error\n$stack');
+    errorLog.record(error, stack, context: 'uncaught');
+    return true;
+  };
+
   final container = ProviderContainer(
     overrides: [
+      errorLogProvider.overrideWithValue(errorLog),
       symbolStorageProvider.overrideWithValue(storage),
       footprintStorageProvider.overrideWithValue(footprintStorage),
       exportDirectoryProvider.overrideWithValue(exports),

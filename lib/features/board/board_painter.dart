@@ -492,10 +492,8 @@ class BoardPainter extends CustomPainter {
 
   /// Pour fills worked out once per scene, not once per frame: panning
   /// repaints constantly, and the board does not change while it does.
-  static final _pourCache = Expando<Map<CopperLayer, PourPlan>>();
-
-  PourPlan _pourPlan(CopperLayer layer) => (_pourCache[scene] ??= {})
-      .putIfAbsent(layer, () => PourFill.plan(scene, layer));
+  /// [PourFill.plan] keeps them per scene.
+  PourPlan _pourPlan(CopperLayer layer) => PourFill.plan(scene, layer);
 
   /// Copper pours: the real fill, translucent, with the outline drawn over.
   ///

@@ -37,7 +37,103 @@ String _file(BoardScene scene, String suffix) => FabricationWriter.write(
   baseName: 'b',
 ).firstWhere((f) => f.name.endsWith(suffix)).content;
 
+/// Whether the image leaves copper at [p], drawing its shapes in order.
+bool _copperAt(GerberImage image, Offset p) {
+  var copper = false;
+  for (final shape in image.shapes) {
+    final covers = switch (shape) {
+      GerberRegion(:final points) => _inside(points, p),
+      GerberStroke(:final points, :final width) => [
+        for (var i = 0; i + 1 < points.length; i++)
+          _distance(p, points[i], points[i + 1]),
+      ].any((d) => d <= width / 2),
+      GerberFlash(:final at, :final aperture) =>
+        (p - at).distance <= aperture.width / 2,
+    };
+    if (covers) copper = !shape.clear;
+  }
+  return copper;
+}
+
+bool _inside(List<Offset> polygon, Offset p) {
+  var inside = false;
+  for (var i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    final a = polygon[i];
+    final b = polygon[j];
+    if ((a.dy > p.dy) != (b.dy > p.dy) &&
+        p.dx < (b.dx - a.dx) * (p.dy - a.dy) / (b.dy - a.dy) + a.dx) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+double _distance(Offset p, Offset a, Offset b) {
+  final ab = b - a;
+  final length2 = ab.dx * ab.dx + ab.dy * ab.dy;
+  if (length2 == 0) return (p - a).distance;
+  final t = (((p - a).dx * ab.dx + (p - a).dy * ab.dy) / length2).clamp(
+    0.0,
+    1.0,
+  );
+  return (p - (a + ab * t)).distance;
+}
+
 void main() {
+  test('a piece of pour cut off from its net is not in the Gerber', () {
+    final scene = _scene(
+      zones: const [
+        BoardZone(
+          id: 'z',
+          projectId: 'p',
+          layer: BoardLayer.frontCopper,
+          points: [Offset(0, 0), Offset(40, 0), Offset(40, 30), Offset(0, 30)],
+          netId: 'gnd',
+          netName: 'GND',
+        ),
+      ],
+      // Another net cuts the board in two, top to bottom...
+      tracks: const [
+        Track(
+          id: 's',
+          projectId: 'p',
+          netId: 'sig',
+          layer: CopperLayer.front,
+          startX: 20,
+          startY: -1,
+          endX: 20,
+          endY: 31,
+          width: 0.25,
+        ),
+      ],
+      // ...and ground reaches only the left half.
+      vias: const [
+        Via(
+          id: 'v',
+          projectId: 'p',
+          x: 10,
+          y: 15,
+          diameter: 0.8,
+          drill: 0.4,
+          netId: 'gnd',
+        ),
+      ],
+    );
+    final image = GerberReader.parse(_file(scene, '-F_Cu.gbr'));
+
+    expect(_copperAt(image, const Offset(5, 5)), isTrue);
+    expect(_copperAt(image, const Offset(19, 15)), isTrue);
+    expect(_copperAt(image, const Offset(20, 15)), isTrue, reason: 'track');
+    for (final p in const [
+      Offset(21, 15),
+      Offset(30, 5),
+      Offset(39, 29),
+      Offset(25, 0.5),
+    ]) {
+      expect(_copperAt(image, p), isFalse, reason: '$p');
+    }
+  });
+
   test('what is written reads back as the same shapes', () {
     final scene = _scene(
       tracks: const [

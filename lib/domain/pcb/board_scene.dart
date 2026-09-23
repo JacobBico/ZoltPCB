@@ -10,6 +10,8 @@ import 'board_outline.dart';
 import 'board_feature.dart';
 import 'board_text.dart';
 import 'board_zone.dart';
+import 'pour_copper.dart';
+import 'pour_fill.dart';
 import 'footprint.dart';
 import 'footprint_placement.dart';
 
@@ -179,7 +181,22 @@ class BoardScene {
     this.netClassByNet = const {},
     this.features = const [],
     this.dimensions = const [],
+    this.pourJoins = const [],
+    this.previewOf,
   });
+
+  /// What the pours join, on every layer — the part of [ratsnest]'s
+  /// working that is costly, kept so a preview can borrow it.
+  final List<PourJoin> pourJoins;
+
+  /// For a scene drawn for a moment while something is dragged, the board
+  /// as saved. A preview's pours borrow the saved board's islands rather
+  /// than finding their own, and its ratsnest counts the saved board's
+  /// pour connections: a drag redraws every frame, and neither is worth
+  /// working out that often.
+  final BoardScene? previewOf;
+
+  bool get isPreview => previewOf != null;
 
   /// Mounting holes, fiducials and test points, placed or not. The placed
   /// ones are also in [footprints], as the footprints they stand for.
@@ -229,6 +246,7 @@ class BoardScene {
     List<NetClass> netClasses = const [],
     List<BoardFeature> features = const [],
     List<BoardDimension> dimensions = const [],
+    BoardScene? previewOf,
   }) {
     final partsById = {for (final part in parts) part.part.id: part};
 
@@ -353,13 +371,18 @@ class BoardScene {
       for (final net in nets) net.net.id: ?classById[net.net.netClassId],
     };
 
-    return BoardScene(
+    BoardScene withRatsnest(
+      List<RatsnestLine> ratsnest, [
+      List<PourJoin> joins = const [],
+    ]) => BoardScene(
+      pourJoins: joins,
+      previewOf: previewOf?.previewOf ?? previewOf,
       board: board,
       footprints: placed,
       pads: allPads,
       tracks: resolved.tracks,
       vias: resolved.vias,
-      ratsnest: _ratsnest(allPads, resolved.tracks, resolved.vias),
+      ratsnest: ratsnest,
       unplaced: unplaced,
       edges: edges,
       zones: zones,
@@ -371,6 +394,32 @@ class BoardScene {
       staleTrackIds: resolved.staleTracks,
       staleViaIds: resolved.staleVias,
     );
+
+    if (!zones.any((z) => z.isValid && !z.keepout)) {
+      return withRatsnest(_ratsnest(allPads, resolved.tracks, resolved.vias));
+    }
+    if (previewOf != null) {
+      final joins = previewOf.pourJoins;
+      return withRatsnest(
+        _ratsnest(allPads, resolved.tracks, resolved.vias, joins),
+        joins,
+      );
+    }
+
+    // A pour is routing too: whatever one piece of its fill touches is
+    // joined. The fill depends on everything but the ratsnest, so it is
+    // worked out on the scene without one and handed on.
+    final unrouted = withRatsnest(const []);
+    final joins = [
+      for (final layer in board.copperLayers)
+        ...PourFill.plan(unrouted, layer).joins,
+    ];
+    final scene = withRatsnest(
+      _ratsnest(allPads, resolved.tracks, resolved.vias, joins),
+      joins,
+    );
+    PourFill.carry(unrouted, scene);
+    return scene;
   }
 
   final Board board;
@@ -495,8 +544,9 @@ class BoardScene {
   static List<RatsnestLine> _ratsnest(
     List<PlacedPad> pads,
     List<Track> tracks,
-    List<Via> vias,
-  ) {
+    List<Via> vias, [
+    List<PourJoin> joins = const [],
+  ]) {
     final byNet = <String, List<PlacedPad>>{};
     for (final pad in pads) {
       final netId = pad.netId;
@@ -509,7 +559,16 @@ class BoardScene {
       final netPads = entry.value;
       if (netPads.length < 2) continue;
 
-      final groups = _copperGroups(netPads, tracks, vias, entry.key);
+      final groups = _copperGroups(
+        netPads,
+        tracks,
+        vias,
+        entry.key,
+        [
+          for (final join in joins)
+            if (join.netId == entry.key) join,
+        ],
+      );
 
       // One group means the net is fully routed and owes nothing. Otherwise
       // the tree is built between groups, so a half-routed net shows only
@@ -541,8 +600,9 @@ class BoardScene {
     List<PlacedPad> pads,
     List<Track> tracks,
     List<Via> vias,
-    String netId,
-  ) {
+    String netId, [
+    List<PourJoin> joins = const [],
+  ]) {
     final parent = <String, String>{};
 
     String find(String node) {
@@ -623,6 +683,24 @@ class BoardScene {
             union(pointNode(end, track.layer), pointNode(at, track.layer));
           }
         }
+      }
+    }
+
+    // A piece of pour joins everything it touches.
+    for (final (index, join) in joins.indexed) {
+      final node = 'pour:$index';
+      for (final pad in join.pads) {
+        final i = pads.indexWhere((p) => identical(p, pad) || p.id == pad.id);
+        if (i >= 0) union(node, padNode(i));
+      }
+      for (final track in join.tracks) {
+        union(
+          node,
+          pointNode(Offset(track.startX, track.startY), track.layer),
+        );
+      }
+      for (final via in join.vias) {
+        union(node, pointNode(Offset(via.x, via.y), CopperLayer.front));
       }
     }
 

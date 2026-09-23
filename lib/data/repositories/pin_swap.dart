@@ -77,7 +77,7 @@ class PinSwapper {
     PartWithDetails part,
     int a,
     int b,
-  ) async {
+  ) => nets.transaction(() async {
     final pairs = gatePairs(part, a, b);
     if (pairs == null) {
       throw ArgumentError('Gates $a and $b are not drawn alike');
@@ -94,14 +94,14 @@ class PinSwapper {
     await parts.updateUnitPlacement(_placedLike(unitA, unitB));
     await parts.updateUnitPlacement(_placedLike(unitB, unitA));
     return SwapUndo(snapshot, [unitA, unitB]);
-  }
+  });
 
   Future<SwapUndo> swapPins(
     String projectId,
     PartWithDetails part,
     PartPin a,
     PartPin b,
-  ) async {
+  ) => nets.transaction(() async {
     final snapshot = await nets.capture(projectId, [a.id, b.id]);
     // A pin swapped onto a net shows that net's name as a label, so a net
     // with no name is given the one KiCad would have.
@@ -118,14 +118,14 @@ class PinSwapper {
     }
     await nets.swapConnections({a.id: b.id}, keepWires: false);
     return SwapUndo(snapshot, const []);
-  }
+  });
 
-  Future<void> undo(SwapUndo swap) async {
+  Future<void> undo(SwapUndo swap) => nets.transaction(() async {
     await nets.restore(swap.connections);
     for (final unit in swap.units) {
       await parts.updateUnitPlacement(unit);
     }
-  }
+  });
 
   static PartUnit _placedLike(PartUnit unit, PartUnit where) => unit.copyWith(
     x: where.x,

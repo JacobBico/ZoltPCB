@@ -19,6 +19,10 @@ class BoardRepository {
 
   final AppDatabase _db;
 
+  /// Runs [body] as one change: every write in it lands, or none does, and
+  /// anything watching sees the result once rather than write by write.
+  Future<T> transaction<T>(Future<T> Function() body) => _db.transaction(body);
+
   // --- the board itself ------------------------------------------------
 
   /// The project's board, created on first use.

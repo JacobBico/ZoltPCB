@@ -39,7 +39,7 @@ class NoteRepository {
     final note = SchematicNote(
       id: newId(),
       projectId: projectId,
-      sheetId: sheetId ?? ActiveSheet.of(projectId),
+      sheetId: sheetId ?? ActiveSheet.of(_db, projectId),
       kind: kind,
       content: content,
       position: position,

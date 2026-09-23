@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hintpcb/data/libraries/library_file_storage.dart';
+import 'package:hintpcb/data/db/database.dart';
 import 'package:hintpcb/data/repositories/net_repository.dart';
 import 'package:hintpcb/data/repositories/part_repository.dart';
 import 'package:hintpcb/data/repositories/project_repository.dart';
@@ -25,8 +27,8 @@ void main() {
 
   Future<(String, PlacedPin, PlacedPin)> setUpSheet(
     WidgetTester tester,
-    dynamic db,
-    dynamic storage,
+    AppDatabase db,
+    LibraryFileStorage storage,
   ) async {
     final project = await ProjectRepository(db).create(name: 'Drag');
     parts = PartRepository(db);

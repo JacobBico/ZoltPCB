@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hintpcb/data/db/database.dart';
 import 'package:hintpcb/data/repositories/net_repository.dart';
 import 'package:hintpcb/data/repositories/part_repository.dart';
 import 'package:hintpcb/data/repositories/project_repository.dart';
@@ -131,7 +132,7 @@ void main() {
 
   group('tap-to-connect', () {
     Future<(Project, PartRepository, NetRepository)> setUpProject(
-      dynamic db,
+      AppDatabase db,
     ) async {
       final project = await ProjectRepository(db).create(name: 'P');
       final parts = PartRepository(db);

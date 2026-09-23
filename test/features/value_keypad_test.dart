@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hintpcb/data/db/database.dart';
 import 'package:hintpcb/features/project/value_keypad.dart';
 
 import '../helpers/pump_app.dart';
@@ -10,7 +11,7 @@ void main() {
   setUp(() => controller = TextEditingController());
   tearDown(() => controller.dispose());
 
-  Future<void> pump(WidgetTester tester, dynamic db) => pumpApp(
+  Future<void> pump(WidgetTester tester, AppDatabase db) => pumpApp(
     tester,
     Scaffold(body: ValueKeypad(controller: controller)),
     database: db,

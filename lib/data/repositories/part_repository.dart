@@ -198,7 +198,7 @@ class PartRepository {
       // Units are given a position on the sheet as they are created, so a
       // part is visible on the canvas the moment it is added rather than
       // waiting somewhere off-sheet to be found.
-      final sheetId = ActiveSheet.of(projectId);
+      final sheetId = ActiveSheet.of(_db, projectId);
       final spots = await _freeSpots(projectId, sheetId, unitCount);
 
       await _db.batch((batch) {
@@ -341,7 +341,7 @@ class PartRepository {
         final part = await (_db.select(
           _db.parts,
         )..where((t) => t.id.equals(unit.partId))).getSingleOrNull();
-        if (part != null) sheetId = ActiveSheet.of(part.projectId);
+        if (part != null) sheetId = ActiveSheet.of(_db, part.projectId);
       }
     }
     await (_db.update(_db.partUnits)..where((t) => t.id.equals(unit.id))).write(
@@ -623,11 +623,9 @@ class PartRepository {
     )..where((t) => t.id.equals(projectId))).getSingleOrNull();
     final paper = project?.paper ?? PaperSize.a4;
 
-    final query =
-        _db.select(_db.partUnits).join([
-            innerJoin(_db.parts, _db.parts.id.equalsExp(_db.partUnits.partId)),
-          ])
-          ..where(_db.parts.projectId.equals(projectId));
+    final query = _db.select(_db.partUnits).join([
+      innerJoin(_db.parts, _db.parts.id.equalsExp(_db.partUnits.partId)),
+    ])..where(_db.parts.projectId.equals(projectId));
     final taken = [
       for (final row in await query.get())
         if (row.readTable(_db.partUnits) case final unit
@@ -670,7 +668,6 @@ class PartRepository {
     }
     return out;
   }
-
 
   Future<void> _touchProject(String projectId) async {
     await (_db.update(_db.projects)..where((t) => t.id.equals(projectId)))

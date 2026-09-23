@@ -76,6 +76,10 @@ class NetRepository {
 
   final AppDatabase _db;
 
+  /// Runs [body] as one change: every write in it lands, or none does, and
+  /// anything watching sees the result once rather than write by write.
+  Future<T> transaction<T>(Future<T> Function() body) => _db.transaction(body);
+
   Stream<List<NetWithEndpoints>> watchNets(String projectId) {
     return _db.watchAggregate({
       _db.nets,
@@ -564,24 +568,33 @@ class NetRepository {
     return query.watch().map((rows) => [for (final r in rows) _toWire(r)]);
   }
 
-  /// The project's drawn wires. With [openSheetOnly], only those on the
-  /// sheet open in the schematic ([ActiveSheet]) — which is what anything
-  /// reshaping a net's drawing must work on, so it never reaches into a
-  /// sheet it is not showing.
-  Future<List<SchematicWire>> getWires(
-    String projectId, {
-    bool openSheetOnly = false,
-  }) async {
+  /// The project's drawn wires, on every sheet.
+  Future<List<SchematicWire>> getWires(String projectId) async {
     final rows =
         await (_db.select(_db.schematicWires)
               ..where((t) => t.projectId.equals(projectId))
               ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
             .get();
-    final sheet = ActiveSheet.of(projectId);
-    return [
-      for (final r in rows)
-        if (!openSheetOnly || r.sheetId == sheet) _toWire(r),
-    ];
+    return [for (final r in rows) _toWire(r)];
+  }
+
+  /// The wires drawn on one sheet: [sheetId], or the top sheet for null.
+  Future<List<SchematicWire>> getSheetWires(
+    String projectId,
+    String? sheetId,
+  ) async {
+    final rows =
+        await (_db.select(_db.schematicWires)
+              ..where(
+                (t) =>
+                    t.projectId.equals(projectId) &
+                    (sheetId == null
+                        ? t.sheetId.isNull()
+                        : t.sheetId.equals(sheetId)),
+              )
+              ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+            .get();
+    return [for (final r in rows) _toWire(r)];
   }
 
   Future<List<SchematicWire>> getWiresOfNet(String netId) async {
@@ -613,7 +626,7 @@ class NetRepository {
       netId: net,
       pinAId: pinAId,
       pinBId: pinBId,
-      sheetId: sheetId ?? ActiveSheet.of(projectId),
+      sheetId: sheetId ?? ActiveSheet.of(_db, projectId),
       points: points,
     );
     await _db.into(_db.schematicWires).insert(_wireCompanion(wire));

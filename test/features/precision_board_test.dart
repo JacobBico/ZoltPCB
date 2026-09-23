@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hintpcb/data/libraries/library_file_storage.dart';
+import 'package:hintpcb/data/db/database.dart';
+import 'package:hintpcb/app/edit_history.dart';
 import 'package:hintpcb/data/repositories/board_repository.dart';
 import 'package:hintpcb/data/repositories/footprint_library_repository.dart';
 import 'package:hintpcb/data/repositories/net_repository.dart';
@@ -22,7 +26,7 @@ BoardPainter _painter(WidgetTester tester) => tester
     .whereType<BoardPainter>()
     .first;
 
-Future<(Project, BoardRepository)> _board(dynamic db, dynamic storage) async {
+Future<(Project, BoardRepository)> _board(AppDatabase db, LibraryFileStorage storage) async {
   final project = await ProjectRepository(db).create(name: 'Aim');
   final parts = PartRepository(db);
   final nets = NetRepository(db);
@@ -268,6 +272,22 @@ void main() {
       // Two segments from three corners, line to line.
       expect(edges, hasLength(2));
       expect(edges.every((e) => e.kind == BoardEdgeKind.line), isTrue);
+
+      // Undone and done again, the same cuts come back — redo used to do
+      // nothing at all here.
+      final history = ProviderScope.containerOf(
+        tester.element(find.byType(PrecisionBoardPanel)),
+      ).read(editHistoryProvider.notifier);
+      await history.undo();
+      await settleApp(tester);
+      expect(await boards.getEdges(project.id), isEmpty);
+      await history.redo();
+      await settleApp(tester);
+      final redone = await boards.getEdges(project.id);
+      expect(
+        redone.map((e) => e.id).toSet(),
+        edges.map((e) => e.id).toSet(),
+      );
     });
 
     testAppWithStorage('a chain back to its start is a closed cutout', (
@@ -974,7 +994,7 @@ void main() {
   group('getting parts onto the board in the first place', () {
     /// A project whose parts name a footprint but have never been near the
     /// board — which is every project, the first time you open it.
-    Future<Project> fresh(dynamic db, dynamic storage) async {
+    Future<Project> fresh(AppDatabase db, LibraryFileStorage storage) async {
       final project = await ProjectRepository(db).create(name: 'Fresh');
       final parts = PartRepository(db);
       await FootprintLibraryRepository(

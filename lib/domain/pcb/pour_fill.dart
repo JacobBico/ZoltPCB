@@ -8,6 +8,7 @@ import 'board_edge.dart';
 import 'board_scene.dart';
 import 'board_zone.dart';
 import 'footprint.dart';
+import 'pour_copper.dart';
 
 /// One shape a pour is built from.
 sealed class PourShape {
@@ -52,22 +53,52 @@ class PourDisc extends PourShape {
 
 /// A shape, and whether it adds copper or takes it away.
 class PourStep {
-  const PourStep.dark(this.shape) : clear = false;
-  const PourStep.clear(this.shape) : clear = true;
+  const PourStep.dark(this.shape, {this.netId}) : clear = false;
+  const PourStep.clear(this.shape) : clear = true, netId = null;
 
   final PourShape shape;
   final bool clear;
+
+  /// The net copper laid by a dark step is on; null for a net-less pour.
+  final String? netId;
+}
+
+/// Something about a layer's pours worth telling the user, and where.
+class PourWarning {
+  const PourWarning(this.message, this.position, {this.island = false});
+
+  final String message;
+  final Offset position;
+
+  /// Fill taken away because it reached none of its net's copper, rather
+  /// than a pad or via the pour could not join.
+  final bool island;
+
+  @override
+  String toString() => message;
 }
 
 /// What a layer's pours come to: the steps that draw them, in order, and
 /// anything worth telling the user.
 class PourPlan {
-  const PourPlan(this.steps, this.warnings);
+  const PourPlan(
+    this.steps,
+    this.warnings, {
+    this.joins = const [],
+    this.islandClears = const [],
+  });
 
   static const empty = PourPlan([], []);
 
   final List<PourStep> steps;
-  final List<String> warnings;
+  final List<PourWarning> warnings;
+
+  /// The pads, tracks and vias each connected piece of fill joins: what
+  /// lets a pour count as routing.
+  final List<PourJoin> joins;
+
+  /// The steps at the end of [steps] that take the islands away.
+  final List<PourStep> islandClears;
 
   bool get isEmpty => steps.isEmpty;
 }
@@ -87,7 +118,9 @@ class PourPlan {
 ///     cleared — no copper at the milled edge;
 ///  3. every other net's pad, track and via cut out with its clearance;
 ///  4. each same-net pad on a thermal pour ringed with its thermal gap, and
-///  5. joined back by spokes that land inside the pour.
+///  5. joined back by spokes that land inside the pour;
+///  6. any piece of fill left touching none of its own net's copper —
+///     cut off by a track, say — cleared, as KiCad removes islands.
 ///
 /// The pads, tracks and vias themselves are drawn after, by the caller.
 abstract final class PourFill {
@@ -96,7 +129,21 @@ abstract final class PourFill {
   /// board in the panel.
   static const minEdgeClearance = 0.3;
 
-  static PourPlan plan(BoardScene scene, CopperLayer layer) {
+  /// Plans already made, per scene: the canvas, the design check and the
+  /// Gerbers all ask for the same ones, and a plan is not cheap.
+  static final _plans = Expando<Map<CopperLayer, PourPlan>>();
+
+  static PourPlan plan(BoardScene scene, CopperLayer layer) =>
+      (_plans[scene] ??= {}).putIfAbsent(layer, () => _plan(scene, layer));
+
+  /// Hands the plans made for [from] to [to], a scene that differs from it
+  /// only in what a plan does not read.
+  static void carry(BoardScene from, BoardScene to) {
+    final plans = _plans[from];
+    if (plans != null) _plans[to] = {...?_plans[to], ...plans};
+  }
+
+  static PourPlan _plan(BoardScene scene, CopperLayer layer) {
     final indexed = [
       for (final (i, zone) in scene.zones.indexed)
         if (zone.isValid && zone.layer == layer.layer && !zone.keepout)
@@ -120,7 +167,7 @@ abstract final class PourFill {
     final zones = [for (final (_, zone) in indexed) zone];
 
     final steps = <PourStep>[];
-    final warnings = <String>[];
+    final warnings = <PourWarning>[];
     // Nothing is poured past the board's bounding box, so the clear round
     // the outline never has to reach further than that — which is what
     // lets copies of the board sit side by side in a panel.
@@ -148,7 +195,7 @@ abstract final class PourFill {
           ..add(PourStep.clear(PourRegion(points)))
           ..add(PourStep.clear(PourStroke(points, gap * 2, closed: true)));
       }
-      steps.add(PourStep.dark(PourRegion(points)));
+      steps.add(PourStep.dark(PourRegion(points), netId: zone.netId));
     }
 
     // 1b. Keepouts, cut out of everything poured so far.
@@ -305,14 +352,22 @@ abstract final class PourFill {
             _nearPolygon(outline, end, edgeGap + zone.thermalSpoke)) {
           continue;
         }
-        steps.add(PourStep.dark(PourStroke([at, end], zone.thermalSpoke)));
+        steps.add(
+          PourStep.dark(
+            PourStroke([at, end], zone.thermalSpoke),
+            netId: zone.netId,
+          ),
+        );
         landed++;
       }
       if (landed == 0) {
         warnings.add(
-          'A via at ${at.dx.toStringAsFixed(1)}, ${at.dy.toStringAsFixed(1)} '
-          'is inside the ${zone.label} pour but no thermal spoke reaches '
-          'it, so it is not connected',
+          PourWarning(
+            'A via at ${at.dx.toStringAsFixed(1)}, '
+            '${at.dy.toStringAsFixed(1)} is inside the ${zone.label} pour '
+            'but no thermal spoke reaches it, so it is not connected',
+            at,
+          ),
         );
       }
     }
@@ -338,19 +393,81 @@ abstract final class PourFill {
           continue;
         }
         steps.add(
-          PourStep.dark(PourStroke([pad.position, end], zone.thermalSpoke)),
+          PourStep.dark(
+            PourStroke([pad.position, end], zone.thermalSpoke),
+            netId: zone.netId,
+          ),
         );
         landed++;
       }
       if (landed == 0) {
         warnings.add(
-          '${pad.label} is inside the ${zone.label} pour but no thermal '
-          'spoke reaches it, so it is not connected',
+          PourWarning(
+            '${pad.label} is inside the ${zone.label} pour but no thermal '
+            'spoke reaches it, so it is not connected',
+            pad.position,
+          ),
         );
       }
     }
 
-    return PourPlan(steps, warnings);
+    if (scene.previewOf case final saved?) {
+      final islands = plan(saved, layer).islandClears;
+      return PourPlan([...steps, ...islands], warnings, islandClears: islands);
+    }
+
+    // 6. Islands. The narrowest gap or spoke anything above could have
+    // made sets how finely the fill is examined.
+    final narrowest = [
+      scene.board.rules.clearance,
+      edgeGap,
+      for (final zone in zones) ...[
+        zone.clearance,
+        if (zone.padConnection == PadConnection.thermal ||
+            zone.viaConnection == PadConnection.thermal) ...[
+          zone.thermalGap,
+          zone.thermalSpoke,
+        ],
+      ],
+      for (final keepout in keepouts) keepout.clearance,
+      for (final netClass in scene.netClasses) ?netClass.clearance,
+    ].where((gap) => gap > 0).fold(double.infinity, math.min);
+    final copper = PourAnalysis.analyse(
+      scene: scene,
+      layer: layer,
+      steps: steps,
+      narrowest: narrowest.isFinite ? narrowest : 0.2,
+    );
+    final byNet = <String, List<PourIsland>>{};
+    final islandClears = <PourStep>[];
+    for (final island in copper.islands) {
+      islandClears.addAll(island.clears);
+      (byNet[island.netId] ??= []).add(island);
+    }
+    steps.addAll(islandClears);
+    for (final MapEntry(key: netId, value: islands) in byNet.entries) {
+      final name =
+          zones.where((z) => z.netId == netId).firstOrNull?.label ?? netId;
+      warnings.add(
+        PourWarning(
+          islands.length == 1
+              ? 'A piece of the $name pour on ${layer.label} reaches none of '
+                    'its net\'s copper, so it is left unfilled'
+              : '${islands.length} pieces of the $name pour on '
+                    '${layer.label} reach none of its net\'s copper, so they '
+                    'are left unfilled',
+          islands.first.position,
+          island: true,
+        ),
+      );
+    }
+
+    return PourPlan(
+      steps,
+      warnings,
+      joins: copper.joins,
+      islandClears: islandClears,
+    );
   }
 
   /// A pad's outline grown by [grow], for drawing a pad-shaped cut on a

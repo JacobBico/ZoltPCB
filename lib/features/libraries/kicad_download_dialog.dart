@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../core/theme/kicad_palette.dart';
 import '../../data/libraries/kicad_library_source.dart';
+import '../../data/repositories/footprint_library_repository.dart';
+import '../../domain/symbols/symbols.dart';
 import 'kicad_library_downloader.dart';
 
 /// Opens the KiCad library download: pick libraries, fetch them.
@@ -89,9 +91,13 @@ class _KicadDownloadPanelState extends ConsumerState<KicadDownloadPanel> {
 
   /// What is already imported, as the libraries KiCad would call it.
   Set<RemoteLibrary> _installed() => {
-    for (final info in ref.read(symbolLibrariesProvider).value ?? const [])
+    for (final info
+        in ref.read(symbolLibrariesProvider).value ??
+            const <SymbolLibraryInfo>[])
       RemoteLibrary(kind: RemoteLibraryKind.symbols, name: info.nickname),
-    for (final info in ref.read(footprintLibrariesProvider).value ?? const [])
+    for (final info
+        in ref.read(footprintLibrariesProvider).value ??
+            const <FootprintLibraryInfo>[])
       RemoteLibrary(kind: RemoteLibraryKind.footprints, name: info.nickname),
   };
 

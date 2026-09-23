@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hintpcb/data/libraries/library_file_storage.dart';
+import 'package:hintpcb/data/db/database.dart';
 import 'package:hintpcb/data/repositories/board_repository.dart';
 import 'package:hintpcb/data/repositories/footprint_library_repository.dart';
 import 'package:hintpcb/data/repositories/net_repository.dart';
@@ -26,8 +28,8 @@ BoardPainter _painter(WidgetTester tester) => tester
 /// Two resistors on one net, placed, with a straight 15 mm track on that
 /// net running between them below their pads.
 Future<(Project, BoardRepository, String)> _board(
-  dynamic db,
-  dynamic storage, {
+  AppDatabase db,
+  LibraryFileStorage storage, {
   bool track = true,
 }) async {
   final project = await ProjectRepository(db).create(name: 'Tools');

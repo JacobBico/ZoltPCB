@@ -29,7 +29,7 @@ class CircuitPaster {
     String projectId,
     CircuitClip clip, {
     required Offset at,
-  }) async {
+  }) => nets.transaction(() async {
     final added = <PartWithDetails>[];
     for (final copied in clip.parts) {
       final part = await parts.addPart(projectId, copied.spec);
@@ -104,5 +104,5 @@ class CircuitPaster {
       },
       wires: wires,
     );
-  }
+  });
 }

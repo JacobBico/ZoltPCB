@@ -444,15 +444,16 @@ List<DrcViolation> fabViolations(BoardScene scene, FabPreset preset) {
   return out;
 }
 
-/// Pads a pour surrounds but cannot join, from every copper layer.
+/// Pads a pour surrounds but cannot join, and fill left unconnected, from
+/// every copper layer.
 List<DrcViolation> pourViolations(BoardScene scene) => [
   for (final layer in scene.board.copperLayers)
     for (final warning in PourFill.plan(scene, layer).warnings)
       DrcViolation(
-        rule: DrcRule.pourConnection,
+        rule: warning.island ? DrcRule.pourIsland : DrcRule.pourConnection,
         severity: DrcSeverity.warning,
-        message: warning,
-        position: scene.outlineBounds.center,
+        message: warning.message,
+        position: warning.position,
       ),
 ];
 

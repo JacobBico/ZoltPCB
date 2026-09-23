@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hintpcb/data/db/database.dart';
 import 'package:hintpcb/domain/pcb/pcb.dart';
 import 'package:hintpcb/features/board/board_shape_editor.dart';
 
@@ -10,7 +11,7 @@ void main() {
   // is slow and never lands on an exact size.
   Future<BoardOutline?> edit(
     WidgetTester tester,
-    db,
+    AppDatabase db,
     BoardOutline start,
     Future<void> Function() interact,
   ) async {

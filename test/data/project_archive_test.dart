@@ -179,6 +179,21 @@ void main() {
     expect(board!.copperLayerCount, 2);
   });
 
+  test('a backup from a newer database is refused, not half-read', () async {
+    final id = await divider();
+    final archive = await ProjectArchiver(db).capture(id);
+    final newer = ProjectArchive(
+      schemaVersion: db.schemaVersion + 1,
+      createdAt: archive.createdAt,
+      tables: archive.tables,
+    );
+    expect(
+      () => ProjectArchiver(db).restoreAsNew(newer),
+      throwsFormatException,
+    );
+    expect(await projects.getAll(), hasLength(1));
+  });
+
   group('snapshots', () {
     test(
       'restoring one puts the design back and keeps a way forward',

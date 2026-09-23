@@ -11,6 +11,10 @@ class ProjectRepository {
 
   final AppDatabase _db;
 
+  /// Runs [body] as one change: every write in it lands, or none does, and
+  /// anything watching sees the result once rather than write by write.
+  Future<T> transaction<T>(Future<T> Function() body) => _db.transaction(body);
+
   /// All projects, most recently modified first.
   Stream<List<Project>> watchAll() {
     final query = _db.select(_db.projects)

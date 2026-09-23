@@ -127,7 +127,8 @@ class _SearchBarState extends ConsumerState<_SearchBar> {
     final mcu = widget.microcontrollersOnly;
     final libraries = [
       for (final library
-          in ref.watch(symbolLibrariesProvider).value ?? const [])
+          in ref.watch(symbolLibrariesProvider).value ??
+              const <SymbolLibraryInfo>[])
         if (!mcu || isMcuLibrary(library.nickname)) library,
     ];
     final filterProvider = mcu

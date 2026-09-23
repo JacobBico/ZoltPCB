@@ -8,6 +8,7 @@ export 'courtyard.dart';
 export 'board_text.dart';
 export 'board_zone.dart';
 export 'panel.dart';
+export 'pour_copper.dart';
 export 'pour_fill.dart';
 export 'drc.dart';
 export 'fab_presets.dart';

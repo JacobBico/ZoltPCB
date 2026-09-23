@@ -281,8 +281,187 @@ void main() {
         footprints: [_pad(const Offset(20, 15), 'gnd')],
       ),
     );
-    expect(plan.warnings.single, contains('R1.1'));
-    expect(plan.warnings.single, contains('GND'));
+    expect(plan.warnings.single.message, contains('R1.1'));
+    expect(plan.warnings.single.message, contains('GND'));
+    // Pointed at the pad, not at the middle of the board.
+    expect(plan.warnings.single.position, const Offset(20, 15));
+  });
+
+  _islandTests();
+}
+
+Track _track(
+  String id,
+  String net,
+  Offset a,
+  Offset b, {
+  double width = 0.25,
+}) => Track(
+  id: id,
+  projectId: 'p',
+  netId: net,
+  layer: CopperLayer.front,
+  startX: a.dx,
+  startY: a.dy,
+  endX: b.dx,
+  endY: b.dy,
+  width: width,
+);
+
+void _islandTests() {
+  group('connectivity and islands', () {
+    test('two pads in one pour are joined by it', () {
+      final plan = _plan(
+        _scene(
+          zones: [_zone('gnd', net: 'gnd')],
+          footprints: [
+            _pad(const Offset(8, 8), 'gnd'),
+            _pad(const Offset(32, 22), 'gnd', reference: 'R2'),
+          ],
+        ),
+      );
+      expect(plan.joins, hasLength(1));
+      expect(
+        plan.joins.single.pads.map((p) => p.reference).toSet(),
+        {'R1', 'R2'},
+      );
+      expect(plan.warnings, isEmpty);
+    });
+
+    test('a pour split by another net joins each side on its own', () {
+      final plan = _plan(
+        _scene(
+          zones: [_zone('gnd', net: 'gnd')],
+          footprints: [
+            _pad(const Offset(8, 15), 'gnd'),
+            _pad(const Offset(32, 15), 'gnd', reference: 'R2'),
+          ],
+          // Top to bottom, clean through the pour.
+          tracks: [
+            _track('t', 'sig', const Offset(20, -1), const Offset(20, 31)),
+          ],
+        ),
+      );
+      final gnd = [
+        for (final join in plan.joins)
+          if (join.netId == 'gnd') join,
+      ];
+      // Each half touches one pad only, so neither joins anything.
+      expect(gnd, isEmpty);
+      expect(plan.warnings, isEmpty);
+    });
+
+    test('a same-net track through the pour joins it too', () {
+      final plan = _plan(
+        _scene(
+          zones: [
+            _zone(
+              'gnd',
+              net: 'gnd',
+              points: const [
+                Offset(0, 0),
+                Offset(20, 0),
+                Offset(20, 30),
+                Offset(0, 30),
+              ],
+            ),
+          ],
+          footprints: [_pad(const Offset(5, 15), 'gnd')],
+          tracks: [
+            _track('t', 'gnd', const Offset(15, 15), const Offset(35, 15)),
+          ],
+        ),
+      );
+      expect(plan.joins.single.pads.single.reference, 'R1');
+      expect(plan.joins.single.tracks.single.id, 't');
+    });
+
+    test('fill that reaches none of its net is cleared and reported', () {
+      final scene = _scene(
+        zones: [_zone('gnd', net: 'gnd')],
+        footprints: [_pad(const Offset(8, 15), 'gnd')],
+        tracks: [
+          _track('t', 'sig', const Offset(20, -1), const Offset(20, 31)),
+        ],
+      );
+      final plan = _plan(scene);
+
+      // The right half has no ground on it: one island, reported where it
+      // is rather than in the middle of the board.
+      final island = plan.warnings.single;
+      expect(island.island, isTrue);
+      expect(island.message, contains('GND'));
+      expect(island.position.dx, greaterThan(20));
+
+      // Drawing the plan leaves no island behind...
+      final again = PourAnalysis.analyse(
+        scene: scene,
+        layer: CopperLayer.front,
+        steps: plan.steps,
+        narrowest: 0.2,
+      );
+      expect(again.islands, isEmpty);
+
+      // ...and the clears never reach the track's own copper: its right
+      // edge is at 20.125, and the pour kept 0.5 mm off it.
+      final firstIsland = plan.steps.indexWhere(
+        (s) =>
+            s.clear &&
+            s.shape is PourRegion &&
+            (s.shape as PourRegion).hole == null &&
+            (s.shape as PourRegion).points.first.dx > 20,
+      );
+      expect(firstIsland, greaterThan(0));
+      for (final step in plan.steps.skip(firstIsland)) {
+        final points = (step.shape as PourRegion).points;
+        for (final p in points) {
+          expect(p.dx, greaterThan(20.125));
+        }
+      }
+    });
+
+    test('a pour with nothing of its net on it is left unfilled', () {
+      final plan = _plan(_scene(zones: [_zone('gnd', net: 'gnd')]));
+      expect(plan.warnings.single.island, isTrue);
+      expect(plan.joins, isEmpty);
+    });
+
+    test('thermal spokes are what join a pad to its pour', () {
+      final plan = _plan(
+        _scene(
+          zones: [_zone('gnd', net: 'gnd')],
+          footprints: [
+            _pad(const Offset(8, 8), 'gnd'),
+            _pad(const Offset(30, 20), 'gnd', reference: 'R2'),
+          ],
+        ),
+      );
+      // The default connection is thermal: a ring and spokes.
+      expect(plan.steps.any((s) => s.clear && s.shape is PourPad), isTrue);
+      expect(plan.joins.single.pads, hasLength(2));
+    });
+
+    test('a pad the spokes miss is not counted as joined', () {
+      final plan = _plan(
+        _scene(
+          zones: [
+            _zone('gnd', net: 'gnd'),
+          ],
+          footprints: [
+            _pad(const Offset(8, 8), 'gnd'),
+            // Right against the board's edge: no spoke lands inside it,
+            // since every one would end in the edge margin or off the
+            // board.
+            _pad(const Offset(0.2, 0.2), 'gnd', reference: 'R2'),
+          ],
+        ),
+      );
+      final joined = {
+        for (final join in plan.joins)
+          for (final pad in join.pads) pad.reference,
+      };
+      expect(joined, isNot(contains('R2')));
+    });
   });
 }
 

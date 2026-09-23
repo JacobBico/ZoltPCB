@@ -241,6 +241,63 @@ void main() {
       expect(scene.isFullyRouted, isTrue);
     });
 
+    test('a pour on the net settles the debt as a track would', () async {
+      final d = await divider();
+      final netName = d.scene().pads.firstWhere((p) => p.isConnected).netName;
+      BoardZone pour(List<Offset> points) => BoardZone(
+        id: 'z',
+        projectId: 'p',
+        layer: BoardLayer.frontCopper,
+        points: points,
+        netId: d.netId,
+        netName: netName ?? '',
+      );
+
+      // The fixture's board starts at (20, 20); these pads need one under
+      // them for anything to be poured.
+      final board = (await boards.ensureBoard(
+        project.id,
+      )).copyWith(outlineX: 0, outlineY: 0);
+      final partList = await parts.getPartsWithDetails(project.id);
+      final netList = await nets.getNets(project.id);
+      final placements = await boards.getFootprints(project.id);
+      BoardScene scene({required List<BoardZone> zones}) => BoardScene.build(
+        board: board,
+        parts: partList,
+        nets: netList,
+        placements: placements,
+        definitions: {twoPadSmd().libId: twoPadSmd()},
+        zones: zones,
+      );
+
+      // Round both pads.
+      final covered = scene(
+        zones: [
+          pour(const [
+            Offset(5, 5),
+            Offset(25, 5),
+            Offset(25, 15),
+            Offset(5, 15),
+          ]),
+        ],
+      );
+      expect(covered.ratsnest, isEmpty);
+      expect(covered.isFullyRouted, isTrue);
+
+      // Round only one of them.
+      final half = scene(
+        zones: [
+          pour(const [
+            Offset(5, 5),
+            Offset(14, 5),
+            Offset(14, 15),
+            Offset(5, 15),
+          ]),
+        ],
+      );
+      expect(half.ratsnest, hasLength(1));
+    });
+
     test('a track that stops short of a pad settles nothing', () async {
       final d = await divider();
       // Ends 2 mm shy of R2's pad, which is 1 mm wide.

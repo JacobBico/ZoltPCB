@@ -187,6 +187,7 @@ class ProjectArchiver {
   /// ids throughout so it can sit beside the one it was taken from, and
   /// returns the new project's id.
   Future<String> restoreAsNew(ProjectArchive archive, {String? name}) async {
+    _checkReadable(archive);
     // Every id in the archive gets a replacement, and every column that
     // refers to one follows it. Ids are UUIDs, so a value that happens to
     // match one is one.
@@ -231,6 +232,7 @@ class ProjectArchiver {
     if (archive.project['id'] != projectId) {
       throw ArgumentError('The archive belongs to another project');
     }
+    _checkReadable(archive);
     await _db.transaction(() async {
       // Children first. Deleting parts and nets takes their units, pins and
       // memberships with them by cascade.
@@ -264,6 +266,20 @@ class ProjectArchiver {
       }
     });
     _markAllUpdated();
+  }
+
+  /// Refuses an archive from a newer database than this one.
+  ///
+  /// Its rows may carry columns this version does not know, and dropping
+  /// them is not harmless: a keepout from a newer version would come back
+  /// as a copper pour, its flag silently lost. Better to say so.
+  void _checkReadable(ProjectArchive archive) {
+    if (archive.schemaVersion > _db.schemaVersion) {
+      throw const FormatException(
+        'This backup was made by a newer version of HintPCB. Update the app '
+        'to open it.',
+      );
+    }
   }
 
   static bool _isIdColumn(String column) =>

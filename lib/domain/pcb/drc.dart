@@ -38,6 +38,7 @@ enum DrcRule {
   silkscreen('Silkscreen'),
   boardSize('Board size'),
   pourConnection('Pad not joined to its pour'),
+  pourIsland('Unconnected pour removed'),
   keepout('Inside a keepout'),
   viaSpan('Via span');
 
