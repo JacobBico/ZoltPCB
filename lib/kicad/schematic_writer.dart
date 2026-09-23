@@ -656,6 +656,13 @@ class _Connectivity {
         for (final e in net.endpoints)
           if (e.node.labelled) e.pin.id,
     };
+    // Same rule as the canvas, or the file would carry wires the sheet
+    // never showed.
+    final powerPins = {
+      for (final net in document.nets)
+        for (final e in net.endpoints)
+          if (e.part.isPowerSymbol) e.pin.id,
+    };
     final routed = [
       for (final entry in pinsByNet.entries)
         ...NetRouting.routeNetWithDrawn(
@@ -665,6 +672,7 @@ class _Connectivity {
           obstacles: obstacles,
           hints: document.routeHints,
           labelledPins: labelledPins,
+          powerPins: powerPins,
         ),
     ];
 

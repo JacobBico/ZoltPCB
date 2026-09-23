@@ -130,14 +130,57 @@ void main() {
     });
 
     test('placement wraps onto a second row', () async {
-      // Six columns, so the seventh unit starts a new row.
-      for (var i = 0; i < 6; i++) {
+      // Seven columns fit inside an A4 sheet, so the eighth unit starts a
+      // new row rather than walking off the right-hand edge.
+      for (var i = 0; i < 7; i++) {
         await parts.addPart(project.id, resistorSpec());
       }
-      final seventh = await parts.addPart(project.id, resistorSpec());
+      final eighth = await parts.addPart(project.id, resistorSpec());
 
-      expect(seventh.units.single.x, 25.4);
-      expect(seventh.units.single.y, 25.4 + 38.1);
+      expect(eighth.units.single.x, 25.4);
+      expect(eighth.units.single.y, 25.4 + 38.1);
+    });
+
+    test('nothing is ever put down off the paper', () async {
+      // The old grid was a fixed six columns counted from every unit in the
+      // project, so the thirty-first landed below an A4 sheet and had to be
+      // found and dragged back on.
+      const pageWidth = 297.0;
+      const pageHeight = 210.0;
+      for (var i = 0; i < 60; i++) {
+        final added = await parts.addPart(project.id, resistorSpec());
+        final unit = added.units.single;
+        expect(
+          unit.x >= 0 && unit.x <= pageWidth,
+          isTrue,
+          reason: 'part $i landed at x ${unit.x}',
+        );
+        expect(
+          unit.y >= 0 && unit.y <= pageHeight,
+          isTrue,
+          reason: 'part $i landed at y ${unit.y}',
+        );
+      }
+    });
+
+    test('a spot already taken is skipped, not landed on', () async {
+      final first = await parts.addPart(project.id, resistorSpec());
+      // Moved out of the way by hand; the next part may now use that spot.
+      await parts.updateUnitPlacement(
+        first.units.single.copyWith(x: 200, y: 150, placed: true),
+      );
+      final second = await parts.addPart(project.id, resistorSpec());
+      expect(second.units.single.x, 25.4);
+      expect(second.units.single.y, 25.4);
+
+      // And with the first left where it was, the next goes elsewhere.
+      final third = await parts.addPart(project.id, resistorSpec());
+      expect(
+        (Offset(third.units.single.x, third.units.single.y) -
+                Offset(second.units.single.x, second.units.single.y))
+            .distance,
+        greaterThan(1),
+      );
     });
 
     test('supply pins marked unit 0 belong to every unit', () async {

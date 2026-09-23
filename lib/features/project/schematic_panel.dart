@@ -2397,7 +2397,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       PinTapMissed() => null,
     };
     if (pin == null || !mounted) return;
-    await _tapPin(scene, pin);
+    _tapPin(scene, pin);
   }
 
   /// How much closer the nearest pin must be than the next for a tap to be
@@ -2521,62 +2521,77 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     }
   }
 
-  Future<void> _tapPin(SchematicScene scene, PlacedPin pin) async {
+  /// Picks a pin up: highlights its net and puts its own actions on the bar.
+  ///
+  /// Tapping a second pin used to connect the two. It has been taken out:
+  /// on a canvas where every tap answers, two taps a few seconds apart
+  /// joined things nobody meant to join, and the mistake is invisible until
+  /// the netlist reaches the desktop. Wiring is a drag out of a pin, which
+  /// cannot happen by accident.
+  void _tapPin(SchematicScene scene, PlacedPin pin) {
     final notifier = ref.read(pendingPinProvider.notifier);
-    final pending = ref.read(pendingPinProvider);
 
     // A wire was picked first: the tap finishes the connection onto its net,
-    // the mirror of tapping the wire second.
+    // the mirror of tapping the wire second. That one stays — it takes a
+    // deliberate wire selection to get into.
     final selectedWire = scene.wires
         .where((w) => w.key == _selectedWireKey)
         .firstOrNull;
-    if (pending == null && selectedWire != null) {
-      await _joinPinToNet(scene, pin.id, selectedWire.netId);
+    if (selectedWire != null) {
+      unawaited(_joinPinToNet(scene, pin.id, selectedWire.netId));
       return;
     }
 
-    if (pending == null) {
-      notifier.set(pin.id);
-      setState(() {
-        _wireCorners = const [];
-        _selectedWireKey = null;
-        _selectedWireRun = null;
-        _highlightedNetId = pin.netId;
-      });
-      return;
-    }
-    if (pending == pin.id) {
+    if (ref.read(pendingPinProvider) == pin.id) {
       notifier.set(null);
       setState(() => _wireCorners = const []);
       return;
     }
 
+    notifier.set(pin.id);
+    setState(() {
+      _wireCorners = const [];
+      _selectedWireKey = null;
+      _selectedWireRun = null;
+      _highlightedNetId = pin.netId;
+    });
+  }
+
+  /// Joins two pins, and draws the wire the drag took to get there.
+  ///
+  /// Only reachable by dragging a wire out of one pin and letting go on
+  /// another. That is deliberate: it is the one gesture that cannot be
+  /// mistaken for looking at something.
+  Future<void> _connectPins(
+    SchematicScene scene,
+    String fromId,
+    PlacedPin pin,
+  ) async {
+    if (fromId == pin.id) return;
     final fromLabel = scene.pins
-        .where((p) => p.id == pending)
+        .where((p) => p.id == fromId)
         .map((p) => p.label)
         .firstOrNull;
 
-    notifier.set(null);
+    ref.read(pendingPinProvider.notifier).set(null);
     final repository = ref.read(netRepositoryProvider);
     try {
       // Taken before the edit: connecting can merge two nets, and afterwards
       // there is no way to reconstruct which pins came from where.
       final snapshot = await repository.capture(widget.project.id, [
-        pending,
+        fromId,
         pin.id,
       ]);
-      final net = await repository.connectPins(pending, pin.id);
-      final drawn = await _storeDrawnWire(scene, pending, pin);
+      final net = await repository.connectPins(fromId, pin.id);
+      final drawn = await _storeDrawnWire(scene, fromId, pin);
       if (!mounted) return;
-      // Felt as well as seen: the second pin is under the finger that
-      // tapped it.
       HapticFeedback.lightImpact();
       setState(() => _highlightedNetId = net.id);
       _record(
         'Connect ${fromLabel ?? "pin"} to ${pin.label}',
         undo: () => repository.restore(snapshot),
         redo: () async {
-          final redone = await repository.connectPins(pending, pin.id);
+          final redone = await repository.connectPins(fromId, pin.id);
           if (drawn != null) {
             await repository.restoreWire(drawn.copyWith(netId: redone.net.id));
           }
@@ -4741,7 +4756,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
         .where((p) => (p.sheetPosition - at).distance < 1e-6)
         .firstOrNull;
     if (pin != null && pin.id != pendingId) {
-      await _tapPin(scene, pin);
+      await _connectPins(scene, pendingId, pin);
       return;
     }
 

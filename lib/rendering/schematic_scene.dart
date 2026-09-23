@@ -225,6 +225,12 @@ class SchematicScene {
         for (final e in net.endpoints)
           if (e.node.labelled) e.pin.id,
     };
+    // A power symbol is a label that happens to have a shape, so its pin
+    // anchors a piece of the net exactly as a label does.
+    final powerPins = {
+      for (final pin in allPins)
+        if (isPowerReference(pin.reference)) pin.pin.id,
+    };
     for (final entry in byNet.entries) {
       wires.addAll(
         _routeNet(
@@ -234,6 +240,7 @@ class SchematicScene {
           routeHints,
           drawnByNet[entry.key] ?? const [],
           labelledPins: labelledPins,
+          powerPins: powerPins,
         ),
       );
     }
@@ -408,7 +415,7 @@ class SchematicScene {
 
   /// KiCad marks power and ground symbols with a `#PWR` designator.
   static bool isPowerReference(String reference) =>
-      reference.startsWith('#PWR') || reference.startsWith('#FLG');
+      Part.isPowerReference(reference);
 
   final PaperSize paper;
   final List<PlacedUnit> units;
@@ -587,6 +594,7 @@ class SchematicScene {
     Map<String, List<double>> routeHints,
     List<SchematicWire> drawn, {
     Set<String> labelledPins = const {},
+    Set<String> powerPins = const {},
   }) {
     final routable = [for (final pin in pins) pin.routable];
 
@@ -638,6 +646,7 @@ class SchematicScene {
     }
     for (final pin in routable) {
       if (labelledPins.contains(pin.id)) signature.write('L${pin.id}');
+      if (powerPins.contains(pin.id)) signature.write('P${pin.id}');
     }
     final key = signature.toString();
 
@@ -651,6 +660,7 @@ class SchematicScene {
       obstacles: nearby,
       hints: routeHints,
       labelledPins: labelledPins,
+      powerPins: powerPins,
     );
     if (_routeCache.length > 4000) _routeCache.clear();
     _routeCache[netId] = (key, routed);

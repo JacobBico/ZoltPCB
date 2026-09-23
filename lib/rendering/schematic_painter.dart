@@ -7,7 +7,6 @@ import '../core/theme/kicad_palette.dart';
 import 'schematic_painter_support.dart';
 import 'schematic_scene.dart';
 import '../domain/geometry/drawn_wire_geometry.dart';
-import '../domain/geometry/wire_router.dart';
 import '../domain/models/schematic_note.dart';
 import '../domain/models/sheet_views.dart';
 import 'schematic_viewport.dart';
@@ -390,7 +389,6 @@ class SchematicPainter extends CustomPainter {
     _paintSelectedRun(canvas);
     _paintJunctions(canvas);
 
-    _paintWireHandles(canvas);
   }
 
   /// Where each wire hops over another, by segment.
@@ -537,38 +535,6 @@ class SchematicPainter extends CustomPainter {
         ..strokeWidth = 5
         ..strokeCap = StrokeCap.round,
     );
-  }
-
-  /// Marks the runs of the selected wire that can be dragged.
-  void _paintWireHandles(Canvas canvas) {
-    final key = selectedWireKey;
-    if (key == null) return;
-
-    final wire = scene.wires.where((w) => w.key == key).firstOrNull;
-    if (wire == null) return;
-
-    final fill = Paint()..color = colors.canvas;
-    final ring = Paint()
-      ..color = colors.highlight
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-
-    for (final handle in wire.handles) {
-      final middle = viewport.toScreen(
-        Offset(
-          (handle.start.dx + handle.end.dx) / 2,
-          (handle.start.dy + handle.end.dy) / 2,
-        ),
-      );
-      canvas.drawCircle(middle, 7, fill);
-      canvas.drawCircle(middle, 7, ring);
-
-      // A short bar through the dot shows which way that run travels.
-      final along = handle.moveAxis == WireAxis.horizontal
-          ? const Offset(4, 0)
-          : const Offset(0, 4);
-      canvas.drawLine(middle - along, middle + along, ring);
-    }
   }
 
   void _paintUnits(Canvas canvas) {

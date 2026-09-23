@@ -451,7 +451,7 @@ class NetRepository {
   /// KiCad marks power and ground symbols with a `#PWR` designator, which is
   /// also how they are kept out of the BOM.
   static bool isPowerReference(String reference) =>
-      reference.startsWith('#PWR') || reference.startsWith('#FLG');
+      Part.isPowerReference(reference);
 
   /// Captures the connectivity of [pinIds] and of every net they belong
   /// to, so a later [restore] can put it back exactly.

@@ -56,6 +56,17 @@ class Part {
 
   bool get isMultiUnit => unitCount > 1;
 
+  /// Whether this is a power or ground symbol rather than a component.
+  ///
+  /// KiCad marks them with a `#PWR` or `#FLG` designator, which is also how
+  /// they stay out of the BOM. They are labels that happen to have a shape:
+  /// what joins two of them is their name, not a wire.
+  bool get isPowerSymbol => isPowerReference(reference);
+
+  /// The same question, for somewhere that has only the designator.
+  static bool isPowerReference(String reference) =>
+      reference.startsWith('#PWR') || reference.startsWith('#FLG');
+
   /// The library nickname half of [libId] (`Device` in `Device:R`).
   String get libraryNickname {
     final i = libId.indexOf(':');

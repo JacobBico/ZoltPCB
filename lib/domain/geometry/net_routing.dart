@@ -132,10 +132,13 @@ abstract final class NetRouting {
   /// so a net drawn by hand shows no extra wires, and one joined in a hurry
   /// still shows how it is joined.
   ///
-  /// A piece holding one of [labelledPins] is joined by its name, the way
-  /// a KiCad label joins it, and is never bridged to another such piece by
-  /// a wire routed across the sheet. With no labelled pins the routing is
-  /// exactly what it always was.
+  /// A piece holding one of [labelledPins] or [powerPins] is joined by its
+  /// name, the way a KiCad label joins it, and is never bridged to another
+  /// such piece by a wire routed across the sheet. Two `+5V` symbols are
+  /// connected because they are both called `+5V`, not because a wire runs
+  /// between them — drawing that wire across the whole sheet is what the
+  /// symbol exists to avoid. With neither set the routing is exactly what
+  /// it always was.
   static List<RoutedWire> routeNetWithDrawn(
     String netId,
     List<RoutablePin> pins, {
@@ -143,6 +146,7 @@ abstract final class NetRouting {
     List<Rect> obstacles = const [],
     Map<String, List<double>> hints = const {},
     Set<String> labelledPins = const {},
+    Set<String> powerPins = const {},
   }) {
     final byId = {for (final pin in pins) pin.id: pin};
     final wires = <RoutedWire>[];
@@ -261,12 +265,17 @@ abstract final class NetRouting {
       );
     }
 
-    // Only pieces with a pin labelled by the Labels action are joined by
-    // name. Without one, this is the routing the drag rules were built and
-    // tested against, unchanged.
+    // Only pieces anchored by their own name — a pin labelled by the
+    // Labels action, or a power symbol, which is a label with a shape — are
+    // joined by name. Without one, this is the routing the drag rules were
+    // built and tested against, unchanged.
     final anchored = <int>{
       for (var i = 0; i < pieces.length; i++)
-        if (pieces[i].any((pin) => labelledPins.contains(pin.id))) i,
+        if (pieces[i].any(
+          (pin) =>
+              labelledPins.contains(pin.id) || powerPins.contains(pin.id),
+        ))
+          i,
     };
     if (anchored.isNotEmpty) {
       (RoutablePin, RoutablePin, double)? closest(

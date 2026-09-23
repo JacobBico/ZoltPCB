@@ -68,13 +68,84 @@ void main() {
       );
       await settleApp(tester);
 
-      final corner = wire.points[wire.points.length ~/ 2];
-      await tester.tapAt(canvas.topLeft + viewport.toScreen(corner));
+      // Somewhere along the wire and well away from either end: a tap
+      // within reach of a pin is a tap on that pin, and tapping a second
+      // pin no longer connects anything.
+      Offset farthestFromPins() {
+        var best = wire.points.first;
+        var bestGap = -1.0;
+        for (var i = 0; i < wire.points.length - 1; i++) {
+          for (var t = 1; t < 8; t++) {
+            final at = Offset.lerp(wire.points[i], wire.points[i + 1], t / 8)!;
+            final gap = scene.pins
+                .map((p) => (p.sheetPosition - at).distance)
+                .reduce((a, b) => a < b ? a : b);
+            if (gap > bestGap) {
+              bestGap = gap;
+              best = at;
+            }
+          }
+        }
+        return best;
+      }
+
+      await tester.tapAt(
+        canvas.topLeft + viewport.toScreen(farthestFromPins()),
+      );
       await settleApp(tester);
 
       final after = await nets.getNets(project.id);
       expect(after, hasLength(1), reason: 'the pin should have joined the net');
       expect(after.single.endpoints.map((e) => e.pin.id), contains(free.id));
+    });
+
+    // "I want the pin to pin tapping to be removed, it only causes issues in
+    // my experience."
+    testAppWithStorage('tapping two pins picks each up and connects neither', (
+      tester,
+      db,
+      storage,
+    ) async {
+      final project = await ProjectRepository(db).create(name: 'Taps');
+      final parts = PartRepository(db);
+      final nets = NetRepository(db);
+      final r1 = await parts.addPart(project.id, resistorSpec());
+      final r2 = await parts.addPart(project.id, resistorSpec());
+      await parts.updateUnitPlacement(
+        r1.units.first.copyWith(x: 50.8, y: 50.8, placed: true),
+      );
+      await parts.updateUnitPlacement(
+        r2.units.first.copyWith(x: 76.2, y: 50.8, placed: true),
+      );
+
+      await pumpApp(
+        tester,
+        Scaffold(body: SchematicPanel(project: project)),
+        database: db,
+        storage: storage,
+      );
+
+      final painter = _painter(tester);
+      final canvas = tester.getRect(find.byType(SchematicPanel));
+      final a = painter.scene.pins.firstWhere((p) => p.partId == r1.part.id);
+      final b = painter.scene.pins.firstWhere((p) => p.partId == r2.part.id);
+
+      await tester.tapAt(
+        canvas.topLeft + painter.viewport.toScreen(a.sheetPosition),
+      );
+      await settleApp(tester);
+      await tester.tapAt(
+        canvas.topLeft + painter.viewport.toScreen(b.sheetPosition),
+      );
+      await settleApp(tester);
+
+      expect(await nets.getNets(project.id), isEmpty);
+      expect(await nets.getWires(project.id), isEmpty);
+      // The second tap moved the selection rather than doing nothing at all.
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(SchematicPanel)),
+      );
+      expect(container.read(pendingPinProvider), b.id);
     });
 
     // "I feel like it is better to have them work in a similar way to how
@@ -121,7 +192,7 @@ void main() {
       expect(_painter(tester).pendingWire, isNull);
     });
 
-    testAppWithStorage('pin, corner, pin: the wire is kept as drawn', (
+    testAppWithStorage('pin, corner, pin: the wire is kept as drawn, dragged', (
       tester,
       db,
       storage,
@@ -163,12 +234,21 @@ void main() {
         from.sheetPosition.dy - 5.08,
       );
 
-      await tester.tapAt(screen(from.sheetPosition));
-      await settleApp(tester);
-      await tester.tapAt(screen(corner));
-      await settleApp(tester);
-      await tester.tapAt(screen(to.sheetPosition));
-      await settleApp(tester);
+      // Dragged, not tapped: a tap on a pin picks it up and nothing more.
+      Future<void> drag(Offset fromSheet, Offset toSheet) async {
+        final a = screen(fromSheet);
+        final b = screen(toSheet);
+        final gesture = await tester.startGesture(a);
+        for (var i = 1; i <= 10; i++) {
+          await gesture.moveTo(Offset.lerp(a, b, i / 10)!);
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        await gesture.up();
+        await settleApp(tester);
+      }
+
+      await drag(from.sheetPosition, corner);
+      await drag(corner, to.sheetPosition);
 
       final wires = await nets.getWires(project.id);
       expect(wires, hasLength(1));

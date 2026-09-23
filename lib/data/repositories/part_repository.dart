@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:drift/drift.dart';
@@ -197,22 +198,21 @@ class PartRepository {
       // Units are given a position on the sheet as they are created, so a
       // part is visible on the canvas the moment it is added rather than
       // waiting somewhere off-sheet to be found.
-      final placedSoFar = await _placedUnitCount(projectId);
+      final sheetId = ActiveSheet.of(projectId);
+      final spots = await _freeSpots(projectId, sheetId, unitCount);
 
       await _db.batch((batch) {
         batch.insertAll(_db.partUnits, [
           for (var unit = 1; unit <= unitCount; unit++)
-            () {
-              final slot = placedSoFar + unit - 1;
-              return PartUnitsCompanion.insert(
-                id: newId(),
-                partId: partId,
-                unitNumber: unit,
-                x: Value(_gridOriginMm + (slot % _gridColumns) * _gridStepMm),
-                y: Value(_gridOriginMm + (slot ~/ _gridColumns) * _gridStepMm),
-                placed: const Value(true),
-              );
-            }(),
+            PartUnitsCompanion.insert(
+              id: newId(),
+              partId: partId,
+              unitNumber: unit,
+              x: Value(spots[unit - 1].dx),
+              y: Value(spots[unit - 1].dy),
+              placed: const Value(true),
+              sheetId: Value(sheetId),
+            ),
         ]);
         batch.insertAll(_db.partPins, [
           for (final pin in spec.pins)
@@ -599,19 +599,78 @@ class PartRepository {
   /// cell without overlapping its neighbour.
   static const _gridOriginMm = 25.4;
   static const _gridStepMm = 38.1;
-  static const _gridColumns = 6;
 
-  Future<int> _placedUnitCount(String projectId) async {
-    final count = _db.partUnits.id.count();
+  /// Room left round the edge of the sheet, so a symbol dropped in the last
+  /// column is not half off the paper.
+  static const _marginMm = 12.7;
+
+  /// Where the next [count] units go: free spots on a grid that fits inside
+  /// the sheet, on the sheet being drawn on.
+  ///
+  /// It used to be a fixed six-column grid counted from every unit in the
+  /// project, which walked off the bottom of an A4 page at the thirty-first
+  /// unit and off any page at all once a project had sub-sheets — so parts
+  /// arrived somewhere off the paper and had to be found and dragged back.
+  /// The grid is now sized to the paper, and a spot already occupied is
+  /// skipped rather than landed on.
+  Future<List<Offset>> _freeSpots(
+    String projectId,
+    String? sheetId,
+    int count,
+  ) async {
+    final project = await (_db.select(
+      _db.projects,
+    )..where((t) => t.id.equals(projectId))).getSingleOrNull();
+    final paper = project?.paper ?? PaperSize.a4;
+
     final query =
-        _db.selectOnly(_db.partUnits).join([
+        _db.select(_db.partUnits).join([
             innerJoin(_db.parts, _db.parts.id.equalsExp(_db.partUnits.partId)),
           ])
-          ..addColumns([count])
           ..where(_db.parts.projectId.equals(projectId));
-    final row = await query.getSingle();
-    return row.read(count) ?? 0;
+    final taken = [
+      for (final row in await query.get())
+        if (row.readTable(_db.partUnits) case final unit
+            when unit.placed && unit.sheetId == sheetId)
+          Offset(unit.x, unit.y),
+    ];
+
+    // The last column's own position has to be a margin inside the paper,
+    // not just its left edge: a symbol dropped at 292 mm on a 297 mm sheet
+    // is off the page as surely as one dropped at 320.
+    final columns = math.max(
+      1,
+      ((paper.widthMm - _marginMm - _gridOriginMm) / _gridStepMm).floor() + 1,
+    );
+    final rows = math.max(
+      1,
+      ((paper.heightMm - _marginMm - _gridOriginMm) / _gridStepMm).floor() + 1,
+    );
+
+    Offset spotAt(int slot) => Offset(
+      _gridOriginMm + (slot % columns) * _gridStepMm,
+      _gridOriginMm + ((slot ~/ columns) % rows) * _gridStepMm,
+    );
+
+    final out = <Offset>[];
+    var slot = 0;
+    while (out.length < count) {
+      // Past the last row everything is occupied as far as this can tell;
+      // wrapping and overlapping is still better than landing off the page,
+      // where a part cannot be seen at all.
+      if (slot >= columns * rows) {
+        out.add(spotAt(out.length));
+        continue;
+      }
+      final at = spotAt(slot++);
+      final free =
+          taken.every((p) => (p - at).distance > _gridStepMm / 2) &&
+          out.every((p) => (p - at).distance > _gridStepMm / 2);
+      if (free) out.add(at);
+    }
+    return out;
   }
+
 
   Future<void> _touchProject(String projectId) async {
     await (_db.update(_db.projects)..where((t) => t.id.equals(projectId)))
