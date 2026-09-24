@@ -1,7 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/pcb/pcb.dart';
+import 'package:zolt/domain/pcb/pcb.dart';
 
 void main() {
   final board = BoardOutline.rectangle(const Rect.fromLTWH(0, 0, 40, 30));

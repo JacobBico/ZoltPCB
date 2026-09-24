@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/libraries/library_file_storage.dart';
-import 'package:hintpcb/data/db/database.dart';
-import 'package:hintpcb/data/repositories/net_repository.dart';
-import 'package:hintpcb/data/repositories/part_repository.dart';
-import 'package:hintpcb/data/repositories/project_repository.dart';
-import 'package:hintpcb/features/project/schematic_panel.dart';
-import 'package:hintpcb/rendering/schematic_painter.dart';
-import 'package:hintpcb/rendering/schematic_scene.dart';
+import 'package:zolt/data/libraries/library_file_storage.dart';
+import 'package:zolt/data/db/database.dart';
+import 'package:zolt/data/repositories/net_repository.dart';
+import 'package:zolt/data/repositories/part_repository.dart';
+import 'package:zolt/data/repositories/project_repository.dart';
+import 'package:zolt/features/project/schematic_panel.dart';
+import 'package:zolt/rendering/schematic_painter.dart';
+import 'package:zolt/rendering/schematic_scene.dart';
 
 import '../helpers/fixtures.dart';
 import '../helpers/pump_app.dart';

@@ -2,7 +2,7 @@
     <!-- Only to download KiCad's libraries when the user asks. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="HintPCB"
+        android:label="Zolt"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

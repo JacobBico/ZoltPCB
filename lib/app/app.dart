@@ -6,14 +6,14 @@ import '../core/theme/app_theme.dart';
 import '../features/home/home_screen.dart';
 import 'appearance.dart';
 
-class HintPcbApp extends ConsumerStatefulWidget {
-  const HintPcbApp({super.key});
+class ZoltApp extends ConsumerStatefulWidget {
+  const ZoltApp({super.key});
 
   @override
-  ConsumerState<HintPcbApp> createState() => _HintPcbAppState();
+  ConsumerState<ZoltApp> createState() => _ZoltAppState();
 }
 
-class _HintPcbAppState extends ConsumerState<HintPcbApp> {
+class _ZoltAppState extends ConsumerState<ZoltApp> {
   @override
   Widget build(BuildContext context) {
     final appearance = ref.watch(appearanceProvider);
@@ -38,7 +38,7 @@ class _HintPcbAppState extends ConsumerState<HintPcbApp> {
     });
 
     return MaterialApp(
-      title: 'HintPCB',
+      title: 'Zolt',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.build(appearance.palette),
       home: const HomeScreen(),

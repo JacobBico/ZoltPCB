@@ -117,7 +117,7 @@ class _SilkscreenTextDialogState extends State<_SilkscreenTextDialog> {
                 autofocus: !widget.existing,
                 decoration: const InputDecoration(
                   labelText: 'Text',
-                  hintText: 'e.g. HintPCB v1.0',
+                  hintText: 'e.g. Zolt v1.0',
                 ),
                 onChanged: (_) => setState(() {}),
               ),

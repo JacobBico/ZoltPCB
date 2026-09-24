@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/db/database.dart';
-import 'package:hintpcb/data/repositories/net_repository.dart';
-import 'package:hintpcb/data/repositories/part_repository.dart';
-import 'package:hintpcb/data/repositories/project_repository.dart';
-import 'package:hintpcb/domain/models/models.dart';
-import 'package:hintpcb/features/project/components_panel.dart';
-import 'package:hintpcb/features/project/nets_panel.dart';
-import 'package:hintpcb/features/project/value_keypad.dart';
+import 'package:zolt/data/db/database.dart';
+import 'package:zolt/data/repositories/net_repository.dart';
+import 'package:zolt/data/repositories/part_repository.dart';
+import 'package:zolt/data/repositories/project_repository.dart';
+import 'package:zolt/domain/models/models.dart';
+import 'package:zolt/features/project/components_panel.dart';
+import 'package:zolt/features/project/nets_panel.dart';
+import 'package:zolt/features/project/value_keypad.dart';
 
 import '../helpers/fixtures.dart';
 import '../helpers/pump_app.dart';

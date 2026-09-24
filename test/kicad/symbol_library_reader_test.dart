@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/kicad/symbol_library_reader.dart';
+import 'package:zolt/kicad/symbol_library_reader.dart';
 
 Uint8List bytes(String source) => Uint8List.fromList(utf8.encode(source));
 

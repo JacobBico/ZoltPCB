@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:hintpcb/data/libraries/library_file_storage.dart';
+import 'package:zolt/data/libraries/library_file_storage.dart';
 
 /// A minimal but complete two-pad surface-mount footprint.
 ///
@@ -10,7 +10,7 @@ import 'package:hintpcb/data/libraries/library_file_storage.dart';
 const twoPadFootprintSource = '''
 (footprint "TwoPad"
   (version 20240108)
-  (generator "hintpcb-test")
+  (generator "zolt-test")
   (layer "F.Cu")
   (descr "Test footprint, two pads 2mm apart")
   (tags "test")

@@ -1,11 +1,11 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/app/error_log.dart';
+import 'package:zolt/app/error_log.dart';
 
 void main() {
   late Directory dir;
-  setUp(() async => dir = await Directory.systemTemp.createTemp('hintpcb_log'));
+  setUp(() async => dir = await Directory.systemTemp.createTemp('zolt_log'));
   tearDown(() => dir.delete(recursive: true));
 
   test('records errors with their stack, and clears', () async {

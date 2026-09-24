@@ -111,11 +111,25 @@ class GerberPainter extends CustomPainter {
       }
 
       for (final hole in layer.holes) {
-        canvas.drawCircle(
-          _screen(hole.at),
-          math.max(1, hole.diameter * pixelsPerMm / 2),
-          Paint()..color = layer.color,
-        );
+        final width = math.max(2.0, hole.diameter * pixelsPerMm);
+        final to = hole.to;
+        if (to == null) {
+          canvas.drawCircle(
+            _screen(hole.at),
+            width / 2,
+            Paint()..color = layer.color,
+          );
+        } else {
+          // A slot: the tool's path, as wide as the tool, round at the ends.
+          canvas.drawLine(
+            _screen(hole.at),
+            _screen(to),
+            Paint()
+              ..color = layer.color
+              ..strokeWidth = width
+              ..strokeCap = StrokeCap.round,
+          );
+        }
       }
     }
   }

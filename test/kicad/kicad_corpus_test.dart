@@ -4,8 +4,8 @@ library;
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/models/pin.dart';
-import 'package:hintpcb/kicad/symbol_library_reader.dart';
+import 'package:zolt/domain/models/pin.dart';
+import 'package:zolt/kicad/symbol_library_reader.dart';
 
 /// Parses every stock KiCad symbol library installed on this machine.
 ///

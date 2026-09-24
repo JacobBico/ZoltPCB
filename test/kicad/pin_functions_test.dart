@@ -4,8 +4,8 @@ library;
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/symbols/symbols.dart';
-import 'package:hintpcb/kicad/symbol_library_reader.dart';
+import 'package:zolt/domain/symbols/symbols.dart';
+import 'package:zolt/kicad/symbol_library_reader.dart';
 
 /// Checks the CubeMX-style pin helper against real STM32 symbols.
 ///

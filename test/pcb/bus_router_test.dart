@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/pcb/pcb.dart';
+import 'package:zolt/domain/pcb/pcb.dart';
 
 double _distanceToSegment(Offset p, Offset a, Offset b) {
   final ab = b - a;

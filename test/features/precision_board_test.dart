@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/libraries/library_file_storage.dart';
-import 'package:hintpcb/data/db/database.dart';
-import 'package:hintpcb/app/edit_history.dart';
-import 'package:hintpcb/data/repositories/board_repository.dart';
-import 'package:hintpcb/data/repositories/footprint_library_repository.dart';
-import 'package:hintpcb/data/repositories/net_repository.dart';
-import 'package:hintpcb/data/repositories/part_repository.dart';
-import 'package:hintpcb/data/repositories/project_repository.dart';
-import 'package:hintpcb/domain/models/models.dart';
-import 'package:hintpcb/domain/pcb/pcb.dart';
-import 'package:hintpcb/features/board/board_painter.dart';
-import 'package:hintpcb/features/board/crosshair.dart';
-import 'package:hintpcb/features/board/footprint_sidebar.dart';
-import 'package:hintpcb/features/board/precision_board_panel.dart';
+import 'package:zolt/data/libraries/library_file_storage.dart';
+import 'package:zolt/data/db/database.dart';
+import 'package:zolt/app/edit_history.dart';
+import 'package:zolt/data/repositories/board_repository.dart';
+import 'package:zolt/data/repositories/footprint_library_repository.dart';
+import 'package:zolt/data/repositories/net_repository.dart';
+import 'package:zolt/data/repositories/part_repository.dart';
+import 'package:zolt/data/repositories/project_repository.dart';
+import 'package:zolt/domain/models/models.dart';
+import 'package:zolt/domain/pcb/pcb.dart';
+import 'package:zolt/features/board/board_painter.dart';
+import 'package:zolt/features/board/crosshair.dart';
+import 'package:zolt/features/board/footprint_sidebar.dart';
+import 'package:zolt/features/board/precision_board_panel.dart';
 
 import '../helpers/fixtures.dart';
 import '../helpers/footprint_fixture.dart';
@@ -1429,14 +1429,14 @@ void main() {
       await settleApp(tester);
       expect(find.text('Add silkscreen text'), findsOneWidget);
 
-      await tester.enterText(find.widgetWithText(TextField, 'Text'), 'HINTPCB');
+      await tester.enterText(find.widgetWithText(TextField, 'Text'), 'ZOLT');
       await tester.pump();
       await tester.tap(find.text('SAVE'));
       await settleApp(tester);
       expect(find.text('Add silkscreen text'), findsNothing);
 
       var texts = await boards.getTexts(project.id);
-      expect(texts.single.content, 'HINTPCB');
+      expect(texts.single.content, 'ZOLT');
       expect(
         (texts.single.position - const Offset(33, 45)).distance,
         lessThanOrEqualTo(0.5),

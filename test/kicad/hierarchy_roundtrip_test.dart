@@ -4,21 +4,21 @@ library;
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/db/database.dart';
-import 'package:hintpcb/data/import/kicad_project_importer.dart';
-import 'package:hintpcb/data/libraries/library_file_storage.dart';
-import 'package:hintpcb/data/repositories/board_repository.dart';
-import 'package:hintpcb/data/repositories/footprint_library_repository.dart';
-import 'package:hintpcb/data/repositories/net_repository.dart';
-import 'package:hintpcb/data/repositories/part_repository.dart';
-import 'package:hintpcb/data/repositories/project_repository.dart';
-import 'package:hintpcb/data/repositories/sheet_repository.dart';
-import 'package:hintpcb/data/repositories/symbol_library_repository.dart';
-import 'package:hintpcb/domain/export/schematic_document.dart';
-import 'package:hintpcb/domain/models/models.dart';
-import 'package:hintpcb/domain/symbols/symbols.dart';
-import 'package:hintpcb/kicad/schematic_writer.dart';
-import 'package:hintpcb/kicad/symbol_library_reader.dart';
+import 'package:zolt/data/db/database.dart';
+import 'package:zolt/data/import/kicad_project_importer.dart';
+import 'package:zolt/data/libraries/library_file_storage.dart';
+import 'package:zolt/data/repositories/board_repository.dart';
+import 'package:zolt/data/repositories/footprint_library_repository.dart';
+import 'package:zolt/data/repositories/net_repository.dart';
+import 'package:zolt/data/repositories/part_repository.dart';
+import 'package:zolt/data/repositories/project_repository.dart';
+import 'package:zolt/data/repositories/sheet_repository.dart';
+import 'package:zolt/data/repositories/symbol_library_repository.dart';
+import 'package:zolt/domain/export/schematic_document.dart';
+import 'package:zolt/domain/models/models.dart';
+import 'package:zolt/domain/symbols/symbols.dart';
+import 'package:zolt/kicad/schematic_writer.dart';
+import 'package:zolt/kicad/symbol_library_reader.dart';
 
 /// A schematic of three sheets, one inside another, written out and handed
 /// to the real KiCad: it has to load every file, and its netlist has to be
@@ -38,7 +38,7 @@ void main() {
   late Directory workDir;
   setUp(() async {
     db = AppDatabase.memory();
-    workDir = await Directory.systemTemp.createTemp('hintpcb_hierarchy');
+    workDir = await Directory.systemTemp.createTemp('zolt_hierarchy');
   });
   tearDown(() async {
     await db.close();

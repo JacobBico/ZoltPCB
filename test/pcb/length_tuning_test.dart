@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/pcb/pcb.dart';
+import 'package:zolt/domain/pcb/pcb.dart';
 
 // The meander itself is tested in meander_engine_test.dart.
 void main() {

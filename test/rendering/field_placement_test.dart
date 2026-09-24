@@ -1,7 +1,7 @@
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/rendering/schematic_painter.dart';
-import 'package:hintpcb/rendering/schematic_viewport.dart';
+import 'package:zolt/rendering/schematic_painter.dart';
+import 'package:zolt/rendering/schematic_viewport.dart';
 
 void main() {
   // "the power label kinda jumps/glitches/moves weirdly around the power

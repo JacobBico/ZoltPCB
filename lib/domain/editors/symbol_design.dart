@@ -429,7 +429,7 @@ class SymbolDesign {
         if (description.isNotEmpty) 'Description': description,
         if (keywords.isNotEmpty) 'ki_keywords': keywords,
         // Remembered so the editor reopens the body it was saved with.
-        'ki_hintpcb_body':
+        'ki_zolt_body':
             '${shape.name},$polygonSides,${_n(bodyWidth)},${_n(bodyHeight)}',
       },
       unitDrawings: [
@@ -450,7 +450,13 @@ class SymbolDesign {
   /// Every pin comes back placed exactly where it was, so reopening a symbol
   /// never rearranges it.
   static SymbolDesign from(SymbolDefinition symbol) {
-    final body = (symbol.properties['ki_hintpcb_body'] ?? '').split(',');
+    // Symbols saved before the app was called Zolt keep their body under
+    // the old name.
+    final body =
+        (symbol.properties['ki_zolt_body'] ??
+                symbol.properties['ki_hintpcb_body'] ??
+                '')
+            .split(',');
     final shape =
         BodyShape.values
             .where((s) => s.name == (body.isEmpty ? '' : body[0]))

@@ -74,7 +74,7 @@ abstract final class RasterPdf {
       text('<< /Type /Pages /Kids [$kids] /Count ${pages.length} >>');
     });
     object(3, () {
-      text('<< /Title (${_escape(title)}) /Producer (HintPCB) >>');
+      text('<< /Title (${_escape(title)}) /Producer (Zolt) >>');
     });
     for (var i = 0; i < pages.length; i++) {
       final page = pages[i];

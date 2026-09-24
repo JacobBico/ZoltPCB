@@ -4,9 +4,9 @@ library;
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/pcb/pcb.dart';
-import 'package:hintpcb/kicad/footprint_parser.dart';
-import 'package:hintpcb/kicad/sexpr/sexpr_parser.dart';
+import 'package:zolt/domain/pcb/pcb.dart';
+import 'package:zolt/kicad/footprint_parser.dart';
+import 'package:zolt/kicad/sexpr/sexpr_parser.dart';
 
 /// Parses every stock KiCad footprint installed on this machine.
 ///

@@ -1,11 +1,11 @@
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/archive/project_archive.dart';
-import 'package:hintpcb/data/db/database.dart';
-import 'package:hintpcb/data/repositories/note_repository.dart';
-import 'package:hintpcb/data/repositories/project_repository.dart';
-import 'package:hintpcb/domain/models/models.dart';
+import 'package:zolt/data/archive/project_archive.dart';
+import 'package:zolt/data/db/database.dart';
+import 'package:zolt/data/repositories/note_repository.dart';
+import 'package:zolt/data/repositories/project_repository.dart';
+import 'package:zolt/domain/models/models.dart';
 
 void main() {
   late AppDatabase db;

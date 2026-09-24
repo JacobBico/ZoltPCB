@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/geometry/net_routing.dart';
-import 'package:hintpcb/rendering/schematic_painter.dart';
+import 'package:zolt/domain/geometry/net_routing.dart';
+import 'package:zolt/rendering/schematic_painter.dart';
 
 RoutedWire _wire(String net, List<Offset> points) => RoutedWire(
   netId: net,

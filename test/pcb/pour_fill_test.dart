@@ -1,8 +1,8 @@
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/models/models.dart';
-import 'package:hintpcb/domain/pcb/pcb.dart';
+import 'package:zolt/domain/models/models.dart';
+import 'package:zolt/domain/pcb/pcb.dart';
 
 const _board = Rect.fromLTWH(0, 0, 40, 30);
 

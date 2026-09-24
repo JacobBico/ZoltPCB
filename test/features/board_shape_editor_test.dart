@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/db/database.dart';
-import 'package:hintpcb/domain/pcb/pcb.dart';
-import 'package:hintpcb/features/board/board_shape_editor.dart';
+import 'package:zolt/data/db/database.dart';
+import 'package:zolt/domain/pcb/pcb.dart';
+import 'package:zolt/features/board/board_shape_editor.dart';
 
 import '../helpers/pump_app.dart';
 

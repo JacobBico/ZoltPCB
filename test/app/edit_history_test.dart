@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/app/edit_history.dart';
+import 'package:zolt/app/edit_history.dart';
 
 void main() {
   late ProviderContainer container;

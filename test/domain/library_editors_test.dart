@@ -1,18 +1,18 @@
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/db/database.dart';
-import 'package:hintpcb/data/editors/own_library_store.dart';
-import 'package:hintpcb/data/libraries/library_file_storage.dart';
-import 'package:hintpcb/data/repositories/footprint_library_repository.dart';
-import 'package:hintpcb/data/repositories/symbol_library_repository.dart';
-import 'package:hintpcb/domain/editors/footprint_design.dart';
-import 'package:hintpcb/domain/editors/symbol_design.dart';
-import 'package:hintpcb/domain/models/models.dart';
-import 'package:hintpcb/domain/pcb/pcb.dart';
-import 'package:hintpcb/kicad/footprint_parser.dart';
-import 'package:hintpcb/kicad/footprint_writer.dart';
-import 'package:hintpcb/kicad/sexpr/sexpr_parser.dart';
+import 'package:zolt/data/db/database.dart';
+import 'package:zolt/data/editors/own_library_store.dart';
+import 'package:zolt/data/libraries/library_file_storage.dart';
+import 'package:zolt/data/repositories/footprint_library_repository.dart';
+import 'package:zolt/data/repositories/symbol_library_repository.dart';
+import 'package:zolt/domain/editors/footprint_design.dart';
+import 'package:zolt/domain/editors/symbol_design.dart';
+import 'package:zolt/domain/models/models.dart';
+import 'package:zolt/domain/pcb/pcb.dart';
+import 'package:zolt/kicad/footprint_parser.dart';
+import 'package:zolt/kicad/footprint_writer.dart';
+import 'package:zolt/kicad/sexpr/sexpr_parser.dart';
 
 void main() {
   group('symbols', () {

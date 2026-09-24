@@ -12,7 +12,7 @@ class BoardDocument {
     required this.scene,
     required this.nets,
     this.footprintSources = const {},
-    this.generator = 'hintpcb',
+    this.generator = 'zolt',
     this.generatorVersion = '1.0',
   });
 

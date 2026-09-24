@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/core/util/formatting.dart';
+import 'package:zolt/core/util/formatting.dart';
 
 void main() {
   final now = DateTime(2026, 3, 9, 14, 32);

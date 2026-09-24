@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/geometry/net_routing.dart';
-import 'package:hintpcb/domain/models/models.dart';
+import 'package:zolt/domain/geometry/net_routing.dart';
+import 'package:zolt/domain/models/models.dart';
 
 RoutablePin _pin(String id, double x, double y) => RoutablePin(
   id: id,

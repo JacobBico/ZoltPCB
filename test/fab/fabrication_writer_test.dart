@@ -2,10 +2,12 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/export/pdf_writer.dart';
-import 'package:hintpcb/domain/pcb/pcb.dart';
-import 'package:hintpcb/fab/gerber_writer.dart';
-import 'package:hintpcb/fab/stroke_font.dart';
+import 'package:zolt/data/export/pdf_writer.dart';
+import 'package:zolt/domain/models/models.dart';
+import 'package:zolt/domain/pcb/pcb.dart';
+import 'package:zolt/fab/gerber_reader.dart';
+import 'package:zolt/fab/gerber_writer.dart';
+import 'package:zolt/fab/stroke_font.dart';
 
 Board _board() => Board(
   id: 'b',
@@ -19,14 +21,63 @@ Board _board() => Board(
   modifiedAt: DateTime(2026),
 );
 
+/// A connector leg with an oval hole — the kind a USB-C shell or a DC jack
+/// has — at [at], turned by [angle] degrees.
+PlacedFootprint _slotted(Offset at, double angle, {bool plated = true}) {
+  final pad = Pad(
+    number: '1',
+    type: plated ? PadType.thruHole : PadType.npth,
+    shape: PadShape.oval,
+    at: const FootprintPoint(0, 0),
+    sizeX: 2.4,
+    sizeY: 1.2,
+    drill: 1.8,
+    drillY: 0.6,
+    layers: const [BoardLayer.frontCopper, BoardLayer.backCopper],
+  );
+  return PlacedFootprint(
+    ref: PlacedFootprintRef(
+      id: 'J1',
+      projectId: 'p',
+      partId: 'J1',
+      libId: 'Test:Jack',
+      x: at.dx,
+      y: at.dy,
+      rotation: angle,
+      placed: true,
+    ),
+    part: Part(
+      id: 'J1',
+      projectId: 'p',
+      libId: 'Connector:Jack',
+      reference: 'J1',
+      value: '',
+      createdAt: DateTime(2026),
+    ),
+    placement: FootprintPlacement(x: at.dx, y: at.dy, rotation: angle),
+    pads: [
+      PlacedPad(
+        pad: pad,
+        partId: 'J1',
+        reference: 'J1',
+        footprintId: 'J1',
+        position: at,
+        angle: angle,
+        layers: const [BoardLayer.frontCopper, BoardLayer.backCopper],
+      ),
+    ],
+  );
+}
+
 BoardScene _scene({
+  List<PlacedFootprint> footprints = const [],
   List<Track> tracks = const [],
   List<Via> vias = const [],
   List<BoardZone> zones = const [],
   List<BoardText> texts = const [],
 }) => BoardScene(
   board: _board(),
-  footprints: const [],
+  footprints: footprints,
   pads: const [],
   tracks: tracks,
   vias: vias,
@@ -192,6 +243,41 @@ void main() {
     expect(drill, contains('X12.500Y-7.000'));
     expect(drill.trimRight(), endsWith('M30'));
     expect(_files(_scene())['NPTH.drl'], isNot(contains('X')));
+  });
+
+  group('an oval hole is routed as a slot, not drilled round', () {
+    test('along its long side, with a tool its short side wide', () {
+      final drill = _files(
+        _scene(footprints: [_slotted(const Offset(10, 5), 0)]),
+      )['PTH.drl']!;
+      // 1.8 × 0.6: a 0.6 mm tool routed 1.2 mm, centred on the pad.
+      expect(drill, contains('T1C0.600'));
+      expect(drill, contains('X9.400Y-5.000G85X10.600Y-5.000'));
+      expect(drill, isNot(contains('C1.800')));
+
+      // And it reads back as a slot, for the preview.
+      final holes = GerberReader.parseDrill(drill);
+      expect(holes.single.isSlot, isTrue);
+      expect(holes.single.at.dx, closeTo(9.4, 1e-9));
+      expect(holes.single.to!.dx, closeTo(10.6, 1e-9));
+      expect(holes.single.diameter, closeTo(0.6, 1e-9));
+    });
+
+    test('turned with its part', () {
+      final drill = _files(
+        _scene(footprints: [_slotted(const Offset(10, 5), 90)]),
+      )['PTH.drl']!;
+      // Turned a quarter, the slot runs up and down the board.
+      expect(drill, contains('X10.000Y-5.600G85X10.000Y-4.400'));
+    });
+
+    test('an unplated slot goes in the unplated file', () {
+      final files = _files(
+        _scene(footprints: [_slotted(const Offset(10, 5), 0, plated: false)]),
+      );
+      expect(files['NPTH.drl'], contains('G85'));
+      expect(files['PTH.drl'], isNot(contains('G85')));
+    });
   });
 
   test('text lands on the side it was written on', () {

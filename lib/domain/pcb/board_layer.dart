@@ -1,4 +1,4 @@
-/// The layers HintPCB draws and routes on.
+/// The layers Zolt draws and routes on.
 ///
 /// KiCad defines about sixty; a board laid out on a phone needs these.
 /// Anything else in an imported footprint is parsed and kept as its raw

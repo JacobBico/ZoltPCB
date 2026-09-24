@@ -2,15 +2,15 @@ import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/db/database.dart';
-import 'package:hintpcb/data/export/project_exporter.dart';
-import 'package:hintpcb/data/libraries/library_file_storage.dart';
-import 'package:hintpcb/data/repositories/board_repository.dart';
-import 'package:hintpcb/data/repositories/footprint_library_repository.dart';
-import 'package:hintpcb/data/repositories/net_repository.dart';
-import 'package:hintpcb/data/repositories/part_repository.dart';
-import 'package:hintpcb/data/repositories/project_repository.dart';
-import 'package:hintpcb/data/repositories/symbol_library_repository.dart';
+import 'package:zolt/data/db/database.dart';
+import 'package:zolt/data/export/project_exporter.dart';
+import 'package:zolt/data/libraries/library_file_storage.dart';
+import 'package:zolt/data/repositories/board_repository.dart';
+import 'package:zolt/data/repositories/footprint_library_repository.dart';
+import 'package:zolt/data/repositories/net_repository.dart';
+import 'package:zolt/data/repositories/part_repository.dart';
+import 'package:zolt/data/repositories/project_repository.dart';
+import 'package:zolt/data/repositories/symbol_library_repository.dart';
 
 import '../helpers/fixtures.dart';
 
@@ -20,7 +20,7 @@ void main() {
   test('the export goes out as one zip holding every file', () async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    final directory = await Directory.systemTemp.createTemp('hintpcb_export');
+    final directory = await Directory.systemTemp.createTemp('zolt_export');
     addTearDown(() => directory.delete(recursive: true));
 
     final projects = ProjectRepository(db);

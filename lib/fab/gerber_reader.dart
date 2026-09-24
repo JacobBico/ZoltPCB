@@ -80,10 +80,15 @@ class GerberImage {
 
 /// A drill hole read back from an Excellon file.
 class DrillHole {
-  const DrillHole(this.at, this.diameter);
+  const DrillHole(this.at, this.diameter, {this.to});
 
   final Offset at;
   final double diameter;
+
+  /// For a routed slot, where the tool stops. Null for a plain hole.
+  final Offset? to;
+
+  bool get isSlot => to != null;
 }
 
 /// Reads the Gerber and Excellon files this app writes, to show them.
@@ -296,6 +301,22 @@ abstract final class GerberReader {
       final select = RegExp(r'^T(\d+)$').firstMatch(line);
       if (select != null) {
         diameter = tools[select.group(1)!];
+        continue;
+      }
+      final slot = RegExp(
+        r'^X(-?[\d.]+)Y(-?[\d.]+)G85X(-?[\d.]+)Y(-?[\d.]+)$',
+      ).firstMatch(line);
+      if (slot != null && diameter != null) {
+        holes.add(
+          DrillHole(
+            Offset(double.parse(slot.group(1)!), -double.parse(slot.group(2)!)),
+            diameter,
+            to: Offset(
+              double.parse(slot.group(3)!),
+              -double.parse(slot.group(4)!),
+            ),
+          ),
+        );
         continue;
       }
       final hole = RegExp(r'^X(-?[\d.]+)Y(-?[\d.]+)$').firstMatch(line);

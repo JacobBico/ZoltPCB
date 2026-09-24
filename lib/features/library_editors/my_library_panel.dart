@@ -120,7 +120,7 @@ class _MyLibraryPanelState extends ConsumerState<MyLibraryPanel> {
       final library = SList([
         SAtom('kicad_symbol_lib'),
         S.of('version', [20241209]),
-        SList([SAtom('generator'), S.text('hintpcb')]),
+        SList([SAtom('generator'), S.text('zolt')]),
         for (final s in _symbols) SymbolWriter.libSymbol(s, libId: s.name),
       ]);
       final file = File('${directory.path}/My_Symbols.kicad_sym');

@@ -2,9 +2,9 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/models/pin.dart';
-import 'package:hintpcb/domain/symbols/symbols.dart';
-import 'package:hintpcb/rendering/schematic_geometry.dart';
+import 'package:zolt/domain/models/pin.dart';
+import 'package:zolt/domain/symbols/symbols.dart';
+import 'package:zolt/rendering/schematic_geometry.dart';
 
 void expectOffset(Offset actual, Offset expected, {double tolerance = 1e-6}) {
   expect(actual.dx, closeTo(expected.dx, tolerance));

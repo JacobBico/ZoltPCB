@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/models/models.dart';
-import 'package:hintpcb/domain/pcb/pcb.dart';
-import 'package:hintpcb/domain/symbols/symbols.dart' show StrokeStyle;
+import 'package:zolt/domain/models/models.dart';
+import 'package:zolt/domain/pcb/pcb.dart';
+import 'package:zolt/domain/symbols/symbols.dart' show StrokeStyle;
 
 /// A 3.4 × 1.8 mm courtyard, like an 0805's, drawn in one of the ways
 /// footprint authors actually draw them.

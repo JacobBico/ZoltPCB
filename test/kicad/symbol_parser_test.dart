@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/models/pin.dart';
-import 'package:hintpcb/domain/symbols/symbols.dart';
-import 'package:hintpcb/kicad/sexpr/sexpr_parser.dart';
-import 'package:hintpcb/kicad/symbol_parser.dart';
+import 'package:zolt/domain/models/pin.dart';
+import 'package:zolt/domain/symbols/symbols.dart';
+import 'package:zolt/kicad/sexpr/sexpr_parser.dart';
+import 'package:zolt/kicad/symbol_parser.dart';
 
 SymbolDefinition parse(String source, {String nickname = 'Test'}) =>
     SymbolParser.parseSymbol(SExprParser.parseDocument(source), nickname);

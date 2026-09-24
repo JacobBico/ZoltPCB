@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/models/models.dart';
-import 'package:hintpcb/domain/pcb/pcb.dart';
+import 'package:zolt/domain/models/models.dart';
+import 'package:zolt/domain/pcb/pcb.dart';
 
 /// A 2 x 2 mm pad on [net] at [at].
 PlacedFootprint _part(String reference, Offset at, String net) {

@@ -5,16 +5,16 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/db/database.dart';
-import 'package:hintpcb/data/repositories/net_repository.dart';
-import 'package:hintpcb/data/repositories/part_repository.dart';
-import 'package:hintpcb/data/repositories/project_repository.dart';
-import 'package:hintpcb/domain/export/schematic_document.dart';
-import 'package:hintpcb/domain/models/models.dart';
-import 'package:hintpcb/domain/symbols/symbols.dart';
-import 'package:hintpcb/kicad/schematic_writer.dart';
-import 'package:hintpcb/kicad/sexpr/sexpr_parser.dart';
-import 'package:hintpcb/kicad/symbol_library_reader.dart';
+import 'package:zolt/data/db/database.dart';
+import 'package:zolt/data/repositories/net_repository.dart';
+import 'package:zolt/data/repositories/part_repository.dart';
+import 'package:zolt/data/repositories/project_repository.dart';
+import 'package:zolt/domain/export/schematic_document.dart';
+import 'package:zolt/domain/models/models.dart';
+import 'package:zolt/domain/symbols/symbols.dart';
+import 'package:zolt/kicad/schematic_writer.dart';
+import 'package:zolt/kicad/sexpr/sexpr_parser.dart';
+import 'package:zolt/kicad/symbol_library_reader.dart';
 
 /// Exports a design and hands it to the real KiCad.
 ///
@@ -36,7 +36,7 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.memory();
-    workDir = await Directory.systemTemp.createTemp('hintpcb_export');
+    workDir = await Directory.systemTemp.createTemp('zolt_export');
   });
 
   tearDown(() async {
@@ -60,7 +60,7 @@ void main() {
       final parts = PartRepository(db);
       final nets = NetRepository(db);
 
-      final project = await projects.create(name: 'HintPCB Export Test');
+      final project = await projects.create(name: 'Zolt Export Test');
 
       // A resistor divider into one half of a dual opamp, with the supply
       // pins that live in the opamp's third unit tied to power symbols. That

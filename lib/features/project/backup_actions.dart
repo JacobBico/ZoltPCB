@@ -39,14 +39,14 @@ Future<void> backUpProject(
     final bytes = archive.toBytes();
     final name = backupFileName(project);
     if (share) {
-      final directory = Directory('${Directory.systemTemp.path}/hintpcb_share');
+      final directory = Directory('${Directory.systemTemp.path}/zolt_share');
       if (!directory.existsSync()) await directory.create(recursive: true);
       final file = File('${directory.path}/$name');
       await file.writeAsBytes(bytes);
       await SharePlus.instance.share(
         ShareParams(
           files: [XFile(file.path, mimeType: 'application/octet-stream')],
-          subject: '${project.name} — HintPCB backup',
+          subject: '${project.name} — Zolt backup',
         ),
       );
       return;

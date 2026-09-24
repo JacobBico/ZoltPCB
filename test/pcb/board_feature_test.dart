@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/models/models.dart';
-import 'package:hintpcb/domain/pcb/pcb.dart';
-import 'package:hintpcb/fab/gerber_reader.dart';
-import 'package:hintpcb/fab/gerber_writer.dart';
+import 'package:zolt/domain/models/models.dart';
+import 'package:zolt/domain/pcb/pcb.dart';
+import 'package:zolt/fab/gerber_reader.dart';
+import 'package:zolt/fab/gerber_writer.dart';
 
 final _gnd = NetWithEndpoints(
   net: Net(id: 'gnd', projectId: 'p', name: 'GND', createdAt: DateTime(2026)),
@@ -70,11 +70,11 @@ void main() {
     // Removed ones stay stored for undo but are not on the board.
     expect(scene.footprints, hasLength(2));
     final hole = scene.footprints.first;
-    expect(hole.ref.libId, 'HintPCB:MountingHole_3.2mm');
+    expect(hole.ref.libId, 'Zolt:MountingHole_3.2mm');
     expect(hole.part.inBom, isFalse);
     expect(hole.pads.single.pad.type, PadType.npth);
     expect(scene.featureOf(hole.ref.id)?.reference, 'H1');
-    expect(scene.footprints.last.ref.libId, 'HintPCB:Fiducial_1mm_Mask2mm');
+    expect(scene.footprints.last.ref.libId, 'Zolt:Fiducial_1mm_Mask2mm');
   });
 
   test('a test point and a plated hole take their net, by id or by name', () {

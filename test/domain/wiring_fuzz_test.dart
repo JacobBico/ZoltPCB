@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/geometry/polyline_wiring.dart';
+import 'package:zolt/domain/geometry/polyline_wiring.dart';
 
 PolylineWire _w(String id, List<Offset> points, {String? pinA, String? pinB}) =>
     PolylineWire(id: id, points: points, pinA: pinA, pinB: pinB);

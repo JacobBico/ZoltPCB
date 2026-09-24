@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/editors/own_library_store.dart';
-import 'package:hintpcb/data/libraries/library_file_storage.dart';
-import 'package:hintpcb/data/repositories/footprint_library_repository.dart';
-import 'package:hintpcb/data/repositories/symbol_library_repository.dart';
-import 'package:hintpcb/features/library_editors/footprint_editor_panel.dart';
-import 'package:hintpcb/features/library_editors/symbol_editor_panel.dart';
+import 'package:zolt/data/editors/own_library_store.dart';
+import 'package:zolt/data/libraries/library_file_storage.dart';
+import 'package:zolt/data/repositories/footprint_library_repository.dart';
+import 'package:zolt/data/repositories/symbol_library_repository.dart';
+import 'package:zolt/features/library_editors/footprint_editor_panel.dart';
+import 'package:zolt/features/library_editors/symbol_editor_panel.dart';
 
 import '../helpers/pump_app.dart';
 

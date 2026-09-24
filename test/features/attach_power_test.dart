@@ -1,12 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/db/database.dart';
-import 'package:hintpcb/data/repositories/net_repository.dart';
-import 'package:hintpcb/data/repositories/part_repository.dart';
-import 'package:hintpcb/data/repositories/project_repository.dart';
-import 'package:hintpcb/data/repositories/symbol_library_repository.dart';
-import 'package:hintpcb/data/libraries/library_file_storage.dart';
-import 'package:hintpcb/domain/models/models.dart';
-import 'package:hintpcb/features/project/attach_power.dart';
+import 'package:zolt/data/db/database.dart';
+import 'package:zolt/data/repositories/net_repository.dart';
+import 'package:zolt/data/repositories/part_repository.dart';
+import 'package:zolt/data/repositories/project_repository.dart';
+import 'package:zolt/data/repositories/symbol_library_repository.dart';
+import 'package:zolt/data/libraries/library_file_storage.dart';
+import 'package:zolt/domain/models/models.dart';
+import 'package:zolt/features/project/attach_power.dart';
 
 import '../helpers/fixtures.dart';
 import '../helpers/library_fixture.dart';

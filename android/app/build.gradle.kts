@@ -24,7 +24,7 @@ val keyProperties = Properties().apply {
 val hasReleaseKey = keyProperties.getProperty("storeFile") != null
 
 android {
-    namespace = "com.hintpcb.hintpcb"
+    namespace = "com.zolt.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -38,10 +38,10 @@ android {
     }
 
     defaultConfig {
-        // Changing this makes Android treat the app as a different one: the
-        // installed copy, and every design in its database, would be left
-        // behind.
-        applicationId = "com.hintpcb.hintpcb"
+        // Permanent once published. Changing it makes Android treat the app
+        // as a different one: the installed copy, and every design in its
+        // database, would be left behind.
+        applicationId = "com.zolt.app"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

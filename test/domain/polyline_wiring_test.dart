@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/geometry/polyline_wiring.dart';
+import 'package:zolt/domain/geometry/polyline_wiring.dart';
 
 /// A net to drag about, with a name for the failure message.
 class _Case {

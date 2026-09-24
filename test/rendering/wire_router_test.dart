@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/geometry/wire_router.dart';
+import 'package:zolt/domain/geometry/wire_router.dart';
 
 /// Every segment of a route must be horizontal or vertical.
 void expectOrthogonal(List<Offset> path) {

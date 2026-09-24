@@ -1,12 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/db/database.dart';
-import 'package:hintpcb/data/repositories/board_repository.dart';
-import 'package:hintpcb/data/repositories/board_sync.dart';
-import 'package:hintpcb/data/repositories/footprint_library_repository.dart';
-import 'package:hintpcb/data/repositories/net_repository.dart';
-import 'package:hintpcb/data/repositories/part_repository.dart';
-import 'package:hintpcb/data/repositories/project_repository.dart';
-import 'package:hintpcb/domain/pcb/pcb.dart';
+import 'package:zolt/data/db/database.dart';
+import 'package:zolt/data/repositories/board_repository.dart';
+import 'package:zolt/data/repositories/board_sync.dart';
+import 'package:zolt/data/repositories/footprint_library_repository.dart';
+import 'package:zolt/data/repositories/net_repository.dart';
+import 'package:zolt/data/repositories/part_repository.dart';
+import 'package:zolt/data/repositories/project_repository.dart';
+import 'package:zolt/domain/pcb/pcb.dart';
 
 import '../helpers/fixtures.dart';
 import '../helpers/footprint_fixture.dart';

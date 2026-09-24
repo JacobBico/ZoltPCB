@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/models/pin.dart';
-import 'package:hintpcb/domain/symbols/symbols.dart';
-import 'package:hintpcb/features/pinout/package_diagram.dart';
-import 'package:hintpcb/features/pinout/pinout_explorer.dart';
+import 'package:zolt/domain/models/pin.dart';
+import 'package:zolt/domain/symbols/symbols.dart';
+import 'package:zolt/features/pinout/package_diagram.dart';
+import 'package:zolt/features/pinout/pinout_explorer.dart';
 
 import '../helpers/pump_app.dart';
 

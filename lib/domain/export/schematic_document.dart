@@ -16,7 +16,7 @@ class SchematicDocument {
     this.drawnWires = const [],
     this.notes = const [],
     this.sheets = const [],
-    this.generator = 'hintpcb',
+    this.generator = 'zolt',
     this.generatorVersion = '1.0',
   });
 

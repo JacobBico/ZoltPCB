@@ -6,10 +6,10 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/db/database.dart';
-import 'package:hintpcb/data/libraries/library_file_storage.dart';
-import 'package:hintpcb/data/repositories/footprint_library_repository.dart';
-import 'package:hintpcb/kicad/footprint_library_reader.dart';
+import 'package:zolt/data/db/database.dart';
+import 'package:zolt/data/libraries/library_file_storage.dart';
+import 'package:zolt/data/repositories/footprint_library_repository.dart';
+import 'package:zolt/kicad/footprint_library_reader.dart';
 
 /// Imports a zipped `.pretty` directory, the way the app expects a user to
 /// move one off a desktop.

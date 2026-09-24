@@ -89,7 +89,7 @@ class _ExportPanelState extends ConsumerState<ExportPanel> {
   /// from; the app's own documents folder is private to it, and a file
   /// left there can be reached by nothing else on the phone.
   Directory get _shareDirectory =>
-      Directory('${Directory.systemTemp.path}/hintpcb_share');
+      Directory('${Directory.systemTemp.path}/zolt_share');
 
   /// Hands one file to another app, with its type spelled out.
   ///
@@ -174,7 +174,7 @@ class _ExportPanelState extends ConsumerState<ExportPanel> {
       await SharePlus.instance.share(
         ShareParams(
           files: [XFile(bundle.path, mimeType: 'application/zip')],
-          subject: '${widget.project.name} — HintPCB export',
+          subject: '${widget.project.name} — Zolt export',
         ),
       );
     } catch (error) {
@@ -437,7 +437,7 @@ class _ExportBody extends StatelessWidget {
             ],
           ),
           Text(
-            'A backup is the whole project in one .hintpcb file — restore '
+            'A backup is the whole project in one .zolt file — restore '
             'it from the project list, on this phone or another.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: KicadPalette.textSecondary,

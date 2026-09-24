@@ -3,18 +3,18 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/db/database.dart';
-import 'package:hintpcb/data/export/project_exporter.dart';
-import 'package:hintpcb/data/repositories/board_repository.dart';
-import 'package:hintpcb/data/repositories/footprint_library_repository.dart';
-import 'package:hintpcb/data/repositories/net_repository.dart';
-import 'package:hintpcb/data/repositories/part_repository.dart';
-import 'package:hintpcb/data/repositories/project_repository.dart';
-import 'package:hintpcb/data/repositories/symbol_library_repository.dart';
-import 'package:hintpcb/data/libraries/library_file_storage.dart';
-import 'package:hintpcb/domain/export/export_preview.dart';
-import 'package:hintpcb/domain/models/models.dart';
-import 'package:hintpcb/domain/symbols/symbols.dart';
+import 'package:zolt/data/db/database.dart';
+import 'package:zolt/data/export/project_exporter.dart';
+import 'package:zolt/data/repositories/board_repository.dart';
+import 'package:zolt/data/repositories/footprint_library_repository.dart';
+import 'package:zolt/data/repositories/net_repository.dart';
+import 'package:zolt/data/repositories/part_repository.dart';
+import 'package:zolt/data/repositories/project_repository.dart';
+import 'package:zolt/data/repositories/symbol_library_repository.dart';
+import 'package:zolt/data/libraries/library_file_storage.dart';
+import 'package:zolt/domain/export/export_preview.dart';
+import 'package:zolt/domain/models/models.dart';
+import 'package:zolt/domain/symbols/symbols.dart';
 
 import '../helpers/fixtures.dart';
 import '../helpers/library_fixture.dart';
@@ -31,7 +31,7 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.memory();
-    output = await Directory.systemTemp.createTemp('hintpcb_export_test');
+    output = await Directory.systemTemp.createTemp('zolt_export_test');
     libraries = SymbolLibraryRepository(db, InMemoryLibraryStorage());
     projects = ProjectRepository(db);
     parts = PartRepository(db);

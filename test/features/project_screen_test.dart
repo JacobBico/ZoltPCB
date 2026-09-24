@@ -1,12 +1,12 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/features/production/production_panel.dart';
-import 'package:hintpcb/data/repositories/net_repository.dart';
-import 'package:hintpcb/data/repositories/part_repository.dart';
-import 'package:hintpcb/data/repositories/project_repository.dart';
-import 'package:hintpcb/domain/models/models.dart';
-import 'package:hintpcb/core/widgets/panel.dart';
-import 'package:hintpcb/features/project/project_screen.dart';
+import 'package:zolt/features/production/production_panel.dart';
+import 'package:zolt/data/repositories/net_repository.dart';
+import 'package:zolt/data/repositories/part_repository.dart';
+import 'package:zolt/data/repositories/project_repository.dart';
+import 'package:zolt/domain/models/models.dart';
+import 'package:zolt/core/widgets/panel.dart';
+import 'package:zolt/features/project/project_screen.dart';
 
 import '../helpers/fixtures.dart';
 import '../helpers/pump_app.dart';

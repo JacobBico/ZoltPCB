@@ -24,13 +24,17 @@ class ProjectArchive {
   });
 
   /// Identifies the file as one of ours before anything else is trusted.
-  static const format = 'hintpcb-project';
+  static const format = 'zolt-project';
+
+  /// What backups said they were before the app was called Zolt. Still
+  /// read, never written.
+  static const legacyFormats = {'hintpcb-project'};
 
   /// Bumped only if the layout of this wrapper changes, not the tables.
   static const version = 1;
 
   /// The file extension a backup is saved with.
-  static const extension = 'hintpcb';
+  static const extension = 'zolt';
 
   /// The database schema the rows were read from.
   final int schemaVersion;
@@ -55,13 +59,14 @@ class ProjectArchive {
   };
 
   static ProjectArchive fromJson(Map<String, Object?> json) {
-    if (json['format'] != format) {
-      throw const FormatException('Not a HintPCB project backup');
+    final kind = json['format'];
+    if (kind != format && !legacyFormats.contains(kind)) {
+      throw const FormatException('Not a Zolt project backup');
     }
     final version = json['version'];
     if (version is! int || version > ProjectArchive.version) {
       throw const FormatException(
-        'This backup was made by a newer version of HintPCB',
+        'This backup was made by a newer version of Zolt',
       );
     }
     final raw = json['tables'];
@@ -109,10 +114,10 @@ class ProjectArchive {
     try {
       json = jsonDecode(utf8.decode(plain));
     } catch (_) {
-      throw const FormatException('Not a HintPCB project backup');
+      throw const FormatException('Not a Zolt project backup');
     }
     if (json is! Map<String, Object?>) {
-      throw const FormatException('Not a HintPCB project backup');
+      throw const FormatException('Not a Zolt project backup');
     }
     return fromJson(json);
   }
@@ -276,7 +281,7 @@ class ProjectArchiver {
   void _checkReadable(ProjectArchive archive) {
     if (archive.schemaVersion > _db.schemaVersion) {
       throw const FormatException(
-        'This backup was made by a newer version of HintPCB. Update the app '
+        'This backup was made by a newer version of Zolt. Update the app '
         'to open it.',
       );
     }

@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/editors/footprint_design.dart';
-import 'package:hintpcb/domain/editors/symbol_design.dart';
-import 'package:hintpcb/domain/models/models.dart';
-import 'package:hintpcb/domain/symbols/symbols.dart';
-import 'package:hintpcb/features/components/component_browser_panel.dart';
-import 'package:hintpcb/features/library_editors/footprint_match_dialog.dart';
+import 'package:zolt/domain/editors/footprint_design.dart';
+import 'package:zolt/domain/editors/symbol_design.dart';
+import 'package:zolt/domain/models/models.dart';
+import 'package:zolt/domain/symbols/symbols.dart';
+import 'package:zolt/features/components/component_browser_panel.dart';
+import 'package:zolt/features/library_editors/footprint_match_dialog.dart';
 
 const _threePins = [
   PinDesign(number: '1', name: 'IN+'),
@@ -43,6 +43,26 @@ void main() {
               ).build().unitDrawings.single.graphics.single
               as SymbolPolyline;
       expect(hexagon.points, hasLength(7));
+    });
+
+    test('a symbol saved before the app was called Zolt keeps its body', () {
+      final built = SymbolDesign(
+        name: 'X',
+        pins: pins,
+        shape: BodyShape.polygon,
+        polygonSides: 6,
+      ).build();
+      final properties = {...built.properties};
+      properties['ki_hintpcb_body'] = properties.remove('ki_zolt_body')!;
+      final old = SymbolDefinition(
+        libraryNickname: built.libraryNickname,
+        name: built.name,
+        properties: properties,
+        unitDrawings: built.unitDrawings,
+      );
+      final reopened = SymbolDesign.from(old);
+      expect(reopened.shape, BodyShape.polygon);
+      expect(reopened.polygonSides, 6);
     });
 
     test('a laid-out pin reaches exactly to the body, whatever its shape', () {
@@ -194,7 +214,7 @@ void main() {
       expect(reopened.bodyWidth, closeTo(12.7, 1e-6));
       expect(reopened.showPinNumbers, isFalse);
       // The editor's own note stays out of sight in KiCad.
-      expect(first.properties.keys, contains('ki_hintpcb_body'));
+      expect(first.properties.keys, contains('ki_zolt_body'));
     });
   });
 

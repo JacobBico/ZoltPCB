@@ -80,6 +80,6 @@ Future<void> main() async {
   await container.read(appearanceProvider.notifier).load();
 
   runApp(
-    UncontrolledProviderScope(container: container, child: const HintPcbApp()),
+    UncontrolledProviderScope(container: container, child: const ZoltApp()),
   );
 }

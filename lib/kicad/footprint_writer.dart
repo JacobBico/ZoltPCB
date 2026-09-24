@@ -43,7 +43,7 @@ abstract final class FootprintWriter {
       SAtom('footprint'),
       S.text(footprint.name),
       S.of('version', [formatVersion]),
-      SList([SAtom('generator'), S.text('hintpcb')]),
+      SList([SAtom('generator'), S.text('zolt')]),
       SList([SAtom('layer'), S.text('F.Cu')]),
       if (footprint.description.isNotEmpty)
         SList([SAtom('descr'), S.text(footprint.description)]),

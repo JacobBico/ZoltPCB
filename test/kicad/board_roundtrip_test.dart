@@ -7,20 +7,20 @@ import 'dart:ui';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/db/database.dart';
-import 'package:hintpcb/data/libraries/library_file_storage.dart';
-import 'package:hintpcb/data/repositories/board_repository.dart';
-import 'package:hintpcb/data/repositories/footprint_library_repository.dart';
-import 'package:hintpcb/data/repositories/net_repository.dart';
-import 'package:hintpcb/data/repositories/part_repository.dart';
-import 'package:hintpcb/data/repositories/project_repository.dart';
-import 'package:hintpcb/domain/export/board_document.dart';
-import 'package:hintpcb/domain/models/models.dart';
-import 'package:hintpcb/domain/pcb/pcb.dart';
-import 'package:hintpcb/kicad/board_project_writer.dart';
-import 'package:hintpcb/kicad/board_writer.dart';
-import 'package:hintpcb/kicad/footprint_writer.dart';
-import 'package:hintpcb/kicad/sexpr/sexpr_parser.dart';
+import 'package:zolt/data/db/database.dart';
+import 'package:zolt/data/libraries/library_file_storage.dart';
+import 'package:zolt/data/repositories/board_repository.dart';
+import 'package:zolt/data/repositories/footprint_library_repository.dart';
+import 'package:zolt/data/repositories/net_repository.dart';
+import 'package:zolt/data/repositories/part_repository.dart';
+import 'package:zolt/data/repositories/project_repository.dart';
+import 'package:zolt/domain/export/board_document.dart';
+import 'package:zolt/domain/models/models.dart';
+import 'package:zolt/domain/pcb/pcb.dart';
+import 'package:zolt/kicad/board_project_writer.dart';
+import 'package:zolt/kicad/board_writer.dart';
+import 'package:zolt/kicad/footprint_writer.dart';
+import 'package:zolt/kicad/sexpr/sexpr_parser.dart';
 
 import '../helpers/fixtures.dart';
 
@@ -46,7 +46,7 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.memory();
-    workDir = await Directory.systemTemp.createTemp('hintpcb_board');
+    workDir = await Directory.systemTemp.createTemp('zolt_board');
   });
 
   tearDown(() async {
@@ -91,7 +91,7 @@ void main() {
         sources: readLibrary('Capacitor_SMD'),
       );
 
-      final project = await projects.create(name: 'HintPCB Board Test');
+      final project = await projects.create(name: 'Zolt Board Test');
 
       // Two resistors and a capacitor: a divider with a decoupling cap, which
       // is enough to exercise nets shared by three pads, a flipped part, and
@@ -169,7 +169,7 @@ void main() {
       }
       await boards.addText(
         projectId: project.id,
-        content: 'HINTPCB',
+        content: 'ZOLT',
         position: const Offset(40, 46),
         size: 1.5,
       );
@@ -376,7 +376,7 @@ void main() {
       );
 
       final file = File(
-        Platform.environment['HINTPCB_BOARD_OUT'] ??
+        Platform.environment['ZOLT_BOARD_OUT'] ??
             '${workDir.path}/board_test.kicad_pcb',
       );
       final text = const BoardWriter().write(document);
@@ -405,7 +405,7 @@ void main() {
 
       // The silkscreen as configured: the text, the hidden designator, and
       // the moved one at its new spot and size.
-      expect(text, contains('(gr_text "HINTPCB"'));
+      expect(text, contains('(gr_text "ZOLT"'));
       expect(text, contains('(gr_text "REV A"'));
       expect(text, contains('(hide yes)'));
       expect(text, contains('(at 0 -2.5'));
@@ -423,8 +423,8 @@ void main() {
       // Held where they are, in the words KiCad uses for each.
       expect(text, contains('(locked yes)'));
       expect(text, contains('(teardrops'));
-      expect(text, contains('"HintPCB:MountingHole_3.2mm"'));
-      expect(text, contains('"HintPCB:MountingHole_3.2mm_Pad"'));
+      expect(text, contains('"Zolt:MountingHole_3.2mm"'));
+      expect(text, contains('"Zolt:MountingHole_3.2mm_Pad"'));
       expect(text, contains('np_thru_hole'));
       expect(text, contains('(solder_mask_margin 0.5)'));
       expect(RegExp(r'\(dimension\b').allMatches(text).length, 1);

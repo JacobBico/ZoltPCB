@@ -3,12 +3,12 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/app/file_saver.dart';
-import 'package:hintpcb/data/archive/project_archive.dart';
-import 'package:hintpcb/data/repositories/part_repository.dart';
-import 'package:hintpcb/data/repositories/project_repository.dart';
-import 'package:hintpcb/features/project/backup_actions.dart';
-import 'package:hintpcb/features/project/project_screen.dart';
+import 'package:zolt/app/file_saver.dart';
+import 'package:zolt/data/archive/project_archive.dart';
+import 'package:zolt/data/repositories/part_repository.dart';
+import 'package:zolt/data/repositories/project_repository.dart';
+import 'package:zolt/features/project/backup_actions.dart';
+import 'package:zolt/features/project/project_screen.dart';
 
 import '../helpers/fixtures.dart';
 import '../helpers/pump_app.dart';
@@ -57,7 +57,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('backup-project')));
     await settleApp(tester);
 
-    expect(saver.saved.keys, ['Keep_Me.hintpcb']);
+    expect(saver.saved.keys, ['Keep_Me.zolt']);
     final bytes = saver.saved.values.single;
     expect(ProjectArchive.fromBytes(bytes).count('parts'), 2);
 

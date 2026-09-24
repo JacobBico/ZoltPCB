@@ -127,7 +127,7 @@ class BoardFeature {
     BoardFeatureKind.testPoint => 'TestPoint_Pad_D${_mm(size)}mm',
   };
 
-  String get libId => 'HintPCB:$footprintName';
+  String get libId => 'Zolt:$footprintName';
 
   String get value => switch (kind) {
     BoardFeatureKind.mountingHole => 'MountingHole',
@@ -176,9 +176,9 @@ class BoardFeature {
       BoardFeatureKind.testPoint => size / 2 + 0.25,
     };
     return FootprintDefinition(
-      libraryNickname: 'HintPCB',
+      libraryNickname: 'Zolt',
       name: footprintName,
-      description: '${kind.label}, made by HintPCB',
+      description: '${kind.label}, made by Zolt',
       pads: [pad],
       graphics: [
         FootprintCircle(

@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/features/project/component_sidebar.dart';
-import 'package:hintpcb/features/project/schematic_panel.dart';
-import 'package:hintpcb/data/repositories/net_repository.dart';
-import 'package:hintpcb/data/repositories/part_repository.dart';
-import 'package:hintpcb/data/repositories/project_repository.dart';
-import 'package:hintpcb/core/widgets/app_logo.dart';
-import 'package:hintpcb/core/widgets/app_top_bar.dart';
-import 'package:hintpcb/features/project/project_screen.dart';
-import 'package:hintpcb/features/home/home_screen.dart';
-import 'package:hintpcb/features/projects/projects_panel.dart';
+import 'package:zolt/features/project/component_sidebar.dart';
+import 'package:zolt/features/project/schematic_panel.dart';
+import 'package:zolt/data/repositories/net_repository.dart';
+import 'package:zolt/data/repositories/part_repository.dart';
+import 'package:zolt/data/repositories/project_repository.dart';
+import 'package:zolt/core/widgets/app_logo.dart';
+import 'package:zolt/core/widgets/app_top_bar.dart';
+import 'package:zolt/features/project/project_screen.dart';
+import 'package:zolt/features/home/home_screen.dart';
+import 'package:zolt/features/projects/projects_panel.dart';
 
 import '../helpers/fixtures.dart';
 import '../helpers/pump_app.dart';

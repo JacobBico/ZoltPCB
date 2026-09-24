@@ -1,20 +1,20 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/db/database.dart';
-import 'package:hintpcb/data/libraries/kicad_library_source.dart';
-import 'package:hintpcb/data/libraries/library_file_storage.dart';
-import 'package:hintpcb/data/repositories/footprint_library_repository.dart';
-import 'package:hintpcb/data/repositories/symbol_library_repository.dart';
-import 'package:hintpcb/features/libraries/kicad_library_downloader.dart';
+import 'package:zolt/data/db/database.dart';
+import 'package:zolt/data/libraries/kicad_library_source.dart';
+import 'package:zolt/data/libraries/library_file_storage.dart';
+import 'package:zolt/data/repositories/footprint_library_repository.dart';
+import 'package:zolt/data/repositories/symbol_library_repository.dart';
+import 'package:zolt/features/libraries/kicad_library_downloader.dart';
 
 /// Downloads KiCad's real essentials from gitlab.com and imports them.
 ///
 /// Off by default — it needs the network and takes a while. Run with
-/// `HINTPCB_NETWORK=1 flutter test test/data/kicad_download_network_test.dart`.
+/// `ZOLT_NETWORK=1 flutter test test/data/kicad_download_network_test.dart`.
 void main() {
-  final skip = Platform.environment['HINTPCB_NETWORK'] == null
-      ? 'needs HINTPCB_NETWORK=1 and a connection'
+  final skip = Platform.environment['ZOLT_NETWORK'] == null
+      ? 'needs ZOLT_NETWORK=1 and a connection'
       : null;
 
   test(

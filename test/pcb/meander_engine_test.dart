@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/pcb/pcb.dart';
+import 'package:zolt/domain/pcb/pcb.dart';
 
 // Ported from meander_gui_implementation/test_meander_engine.py, zigzag
 // ("rounded") and sine ("smooth") cases.

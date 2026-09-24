@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/geometry/drawn_wire_geometry.dart';
+import 'package:zolt/domain/geometry/drawn_wire_geometry.dart';
 
 bool _square(List<Offset> points) {
   for (var i = 0; i < points.length - 1; i++) {

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/repositories/net_repository.dart';
-import 'package:hintpcb/data/repositories/part_repository.dart';
-import 'package:hintpcb/data/repositories/project_repository.dart';
-import 'package:hintpcb/domain/geometry/polyline_wiring.dart';
-import 'package:hintpcb/features/project/schematic_panel.dart';
-import 'package:hintpcb/rendering/schematic_painter.dart';
+import 'package:zolt/data/repositories/net_repository.dart';
+import 'package:zolt/data/repositories/part_repository.dart';
+import 'package:zolt/data/repositories/project_repository.dart';
+import 'package:zolt/domain/geometry/polyline_wiring.dart';
+import 'package:zolt/features/project/schematic_panel.dart';
+import 'package:zolt/rendering/schematic_painter.dart';
 
 import '../helpers/fixtures.dart';
 import '../helpers/pump_app.dart';

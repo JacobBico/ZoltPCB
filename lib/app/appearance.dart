@@ -83,7 +83,7 @@ enum WireGesture {
 @immutable
 class Appearance {
   const Appearance({
-    this.palette = AppPalettes.hintpcb,
+    this.palette = AppPalettes.zolt,
     this.resistorStyle = ResistorStyle.iec,
     this.boardEditor = BoardEditorStyle.precision,
     this.wiring = WiringModel.polyline,

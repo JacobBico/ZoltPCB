@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/symbols/mcu_essentials.dart';
+import 'package:zolt/domain/symbols/mcu_essentials.dart';
 
 McuPinInfo _pin(
   String number,

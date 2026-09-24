@@ -1,4 +1,4 @@
-/// Pure Dart domain model for HintPCB.
+/// Pure Dart domain model for Zolt.
 ///
 /// Nothing in this layer knows about persistence, Flutter or KiCad file
 /// syntax. The database maps to these types, and the exporter reads them —

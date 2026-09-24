@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/repositories/board_repository.dart';
-import 'package:hintpcb/data/repositories/footprint_library_repository.dart';
-import 'package:hintpcb/data/repositories/part_repository.dart';
-import 'package:hintpcb/data/repositories/project_repository.dart';
-import 'package:hintpcb/data/repositories/project_settings_repository.dart';
-import 'package:hintpcb/domain/pcb/pcb.dart';
-import 'package:hintpcb/features/panelize/panelize_panel.dart';
-import 'package:hintpcb/features/production/gerber_view.dart';
+import 'package:zolt/data/repositories/board_repository.dart';
+import 'package:zolt/data/repositories/footprint_library_repository.dart';
+import 'package:zolt/data/repositories/part_repository.dart';
+import 'package:zolt/data/repositories/project_repository.dart';
+import 'package:zolt/data/repositories/project_settings_repository.dart';
+import 'package:zolt/domain/pcb/pcb.dart';
+import 'package:zolt/features/panelize/panelize_panel.dart';
+import 'package:zolt/features/production/gerber_view.dart';
 
 import '../helpers/fixtures.dart';
 import '../helpers/footprint_fixture.dart';

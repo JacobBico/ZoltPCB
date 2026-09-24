@@ -2,14 +2,14 @@ import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/db/database.dart';
-import 'package:hintpcb/data/repositories/board_repository.dart';
-import 'package:hintpcb/data/repositories/net_repository.dart';
-import 'package:hintpcb/data/repositories/part_repository.dart';
-import 'package:hintpcb/data/repositories/project_repository.dart';
-import 'package:hintpcb/data/repositories/saved_circuit_repository.dart';
-import 'package:hintpcb/data/repositories/sheet_repository.dart';
-import 'package:hintpcb/domain/pcb/pcb.dart';
+import 'package:zolt/data/db/database.dart';
+import 'package:zolt/data/repositories/board_repository.dart';
+import 'package:zolt/data/repositories/net_repository.dart';
+import 'package:zolt/data/repositories/part_repository.dart';
+import 'package:zolt/data/repositories/project_repository.dart';
+import 'package:zolt/data/repositories/saved_circuit_repository.dart';
+import 'package:zolt/data/repositories/sheet_repository.dart';
+import 'package:zolt/domain/pcb/pcb.dart';
 
 import '../helpers/fixtures.dart';
 
@@ -64,7 +64,7 @@ void main() {
   test(
     'a v13 database upgrades to the latest with its designs intact',
     () async {
-      final dir = await Directory.systemTemp.createTemp('hintpcb_migrate');
+      final dir = await Directory.systemTemp.createTemp('zolt_migrate');
       addTearDown(() => dir.delete(recursive: true));
       final file = File('${dir.path}/app.sqlite');
 
@@ -153,7 +153,7 @@ void main() {
   // What the phone had installed before sub-sheets: pours with no priority,
   // no holes or fiducials, no sheets.
   test('a v15 database upgrades with its board and parts intact', () async {
-    final dir = await Directory.systemTemp.createTemp('hintpcb_migrate15');
+    final dir = await Directory.systemTemp.createTemp('zolt_migrate15');
     addTearDown(() => dir.delete(recursive: true));
     final file = File('${dir.path}/app.sqlite');
 

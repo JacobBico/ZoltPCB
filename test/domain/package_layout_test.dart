@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/models/pin.dart';
-import 'package:hintpcb/domain/symbols/symbols.dart';
+import 'package:zolt/domain/models/pin.dart';
+import 'package:zolt/domain/symbols/symbols.dart';
 
 /// A four-sided package, one pin per side, drawn the way KiCad draws one.
 ///

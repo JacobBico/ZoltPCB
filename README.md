@@ -1,4 +1,4 @@
-# HintPCB
+# Zolt
 
 A mobile schematic-capture and PCB layout tool for electronic circuit design.
 Search for components, check pinouts, decide what connects to what, lay the
@@ -93,7 +93,7 @@ Added afterwards, outside the original plan:
       net classes routed to a target impedance, net length and delay, and
       meanders that add an exact length.
 - [x] **Workflow.** Update board from schematic, courtyard DRC, project
-      backups (`.hintpcb`), snapshots, save-to-folder, and cross-probing
+      backups (`.zolt`), snapshots, save-to-folder, and cross-probing
       between schematic and board.
 - [x] **Schematic tools.** Label ranges (`D[0..7]`) that join parts by name,
       sheet notes and boxes, bulk field edit, and per-project ERC severities.

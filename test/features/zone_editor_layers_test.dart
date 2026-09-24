@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/pcb/pcb.dart';
-import 'package:hintpcb/features/board/zone_editor.dart';
+import 'package:zolt/domain/pcb/pcb.dart';
+import 'package:zolt/features/board/zone_editor.dart';
 
 void main() {
   // "Pour properties: Please implement a fix" — a pour drawn on an inner

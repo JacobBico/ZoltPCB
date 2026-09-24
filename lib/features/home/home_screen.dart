@@ -71,7 +71,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       body: Column(
         children: [
           AppTopBar(
-            title: 'HintPCB',
+            title: 'Zolt',
             logo: const AppLogo(),
             subtitle: _section.label,
             leading: IconButton(

@@ -570,7 +570,7 @@ class SchematicWriter {
   static String _projectToken(String name) {
     final cleaned = name.trim().replaceAll(RegExp(r'[^A-Za-z0-9_\-. ]'), '');
     final collapsed = cleaned.replaceAll(RegExp(r'\s+'), '_');
-    return collapsed.isEmpty ? 'hintpcb' : collapsed;
+    return collapsed.isEmpty ? 'zolt' : collapsed;
   }
 }
 

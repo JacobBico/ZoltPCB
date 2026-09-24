@@ -58,7 +58,7 @@ abstract final class S {
 /// Writes an s-expression tree in KiCad's own layout.
 ///
 /// The formatting is not cosmetic: files are read back by people and by
-/// version control, and matching KiCad's own style means a HintPCB export
+/// version control, and matching KiCad's own style means a Zolt export
 /// and a KiCad re-save differ only where the content differs.
 class SExprWriter {
   const SExprWriter({this.indent = '\t'});

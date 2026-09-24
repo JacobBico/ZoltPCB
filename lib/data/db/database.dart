@@ -8,7 +8,7 @@ import 'tables/tables.dart';
 
 part 'database.g.dart';
 
-/// The on-device SQLite database. HintPCB is local-first: this file is the
+/// The on-device SQLite database. Zolt is local-first: this file is the
 /// only home a design has until the user exports it.
 @DriftDatabase(
   tables: [
@@ -53,7 +53,7 @@ class AppDatabase extends _$AppDatabase {
   /// directory.
   factory AppDatabase.open() => AppDatabase(driftDatabase(name: _databaseName));
 
-  static const _databaseName = 'hintpcb';
+  static const _databaseName = 'zolt';
 
   /// Timestamps are stored as ISO-8601 text rather than drift's default
   /// unix-seconds integer. Second resolution is too coarse for ordering the

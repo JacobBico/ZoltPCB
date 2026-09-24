@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/app/appearance.dart';
-import 'package:hintpcb/core/theme/kicad_palette.dart';
-import 'package:hintpcb/data/repositories/settings_repository.dart';
-import 'package:hintpcb/features/settings/settings_panel.dart';
+import 'package:zolt/app/appearance.dart';
+import 'package:zolt/core/theme/kicad_palette.dart';
+import 'package:zolt/data/repositories/settings_repository.dart';
+import 'package:zolt/features/settings/settings_panel.dart';
 
 import '../helpers/pump_app.dart';
 
 void main() {
-  tearDown(() => KicadPalette.current = AppPalettes.hintpcb);
+  tearDown(() => KicadPalette.current = AppPalettes.zolt);
 
   testApp('choosing a theme applies it and remembers it', (tester, db) async {
     await pumpApp(tester, const Scaffold(body: SettingsPanel()), database: db);

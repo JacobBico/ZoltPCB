@@ -1,14 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/db/database.dart';
-import 'package:hintpcb/data/repositories/net_repository.dart';
-import 'package:hintpcb/data/repositories/part_repository.dart';
-import 'package:hintpcb/data/repositories/project_repository.dart';
-import 'package:hintpcb/domain/export/schematic_document.dart';
-import 'package:hintpcb/domain/geometry/placement.dart';
-import 'package:hintpcb/domain/models/models.dart';
-import 'package:hintpcb/kicad/schematic_writer.dart';
-import 'package:hintpcb/kicad/sexpr/sexpr.dart';
-import 'package:hintpcb/kicad/sexpr/sexpr_parser.dart';
+import 'package:zolt/data/db/database.dart';
+import 'package:zolt/data/repositories/net_repository.dart';
+import 'package:zolt/data/repositories/part_repository.dart';
+import 'package:zolt/data/repositories/project_repository.dart';
+import 'package:zolt/domain/export/schematic_document.dart';
+import 'package:zolt/domain/geometry/placement.dart';
+import 'package:zolt/domain/models/models.dart';
+import 'package:zolt/kicad/schematic_writer.dart';
+import 'package:zolt/kicad/sexpr/sexpr.dart';
+import 'package:zolt/kicad/sexpr/sexpr_parser.dart';
 
 import '../helpers/fixtures.dart';
 
@@ -53,7 +53,7 @@ void main() {
 
       expect(root.head, 'kicad_sch');
       expect(root.childInteger('version'), 20250114);
-      expect(root.childAtom('generator'), 'hintpcb');
+      expect(root.childAtom('generator'), 'zolt');
       // The sheet UUID is the project's own id, so re-exporting a design
       // produces the same file rather than a fresh set of identifiers.
       expect(root.childAtom('uuid'), project.id);

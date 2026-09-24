@@ -360,7 +360,7 @@ class KicadProjectImporter {
       final library = SList([
         SAtom('kicad_symbol_lib'),
         S.of('version', [20241209]),
-        SList([SAtom('generator'), S.text('hintpcb')]),
+        SList([SAtom('generator'), S.text('zolt')]),
         ...entry.value,
       ]);
       try {

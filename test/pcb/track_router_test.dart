@@ -1,7 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/pcb/track_router.dart';
+import 'package:zolt/domain/pcb/track_router.dart';
 
 void main() {
   group('45 degree routing', () {

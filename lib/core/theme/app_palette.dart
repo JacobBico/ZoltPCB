@@ -137,10 +137,10 @@ class AppPalette {
 abstract final class AppPalettes {
   /// The default: the logo's night purple. Lavender wires, rose symbols
   /// and a gold selection, so the roles stay apart on a purple ground.
-  static const hintpcb = AppPalette(
-    id: 'hintpcb',
-    name: 'HintPCB',
-    description: 'Deep night purple with lavender wires — the HintPCB look.',
+  static const zolt = AppPalette(
+    id: 'zolt',
+    name: 'Zolt',
+    description: 'Deep night purple with lavender wires — the Zolt look.',
     brightness: Brightness.dark,
     background: Color(0xFF0C0812),
     surface: Color(0xFF150E20),
@@ -469,7 +469,7 @@ abstract final class AppPalettes {
 
   /// In the order the settings screen offers them.
   static const all = [
-    hintpcb,
+    zolt,
     kicad,
     blueprint,
     paper,
@@ -481,5 +481,5 @@ abstract final class AppPalettes {
   /// The palette with [id], or the default when it is unknown — a setting
   /// written by a newer version of the app must not stop this one opening.
   static AppPalette byId(String? id) =>
-      all.where((p) => p.id == id).firstOrNull ?? hintpcb;
+      all.where((p) => p.id == id).firstOrNull ?? zolt;
 }

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/kicad/sexpr/sexpr.dart';
-import 'package:hintpcb/kicad/sexpr/sexpr_parser.dart';
+import 'package:zolt/kicad/sexpr/sexpr.dart';
+import 'package:zolt/kicad/sexpr/sexpr_parser.dart';
 
 void main() {
   group('parsing', () {

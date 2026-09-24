@@ -2,8 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/core/theme/kicad_palette.dart';
-import 'package:hintpcb/rendering/schematic_painter.dart';
+import 'package:zolt/core/theme/kicad_palette.dart';
+import 'package:zolt/rendering/schematic_painter.dart';
 
 /// WCAG relative luminance.
 double _luminance(Color c) {
@@ -116,8 +116,8 @@ void main() {
 
   test('an unknown palette id falls back rather than failing', () {
     // A setting written by a newer version must not stop this one opening.
-    expect(AppPalettes.byId('from-the-future'), AppPalettes.hintpcb);
-    expect(AppPalettes.byId(null), AppPalettes.hintpcb);
+    expect(AppPalettes.byId('from-the-future'), AppPalettes.zolt);
+    expect(AppPalettes.byId(null), AppPalettes.zolt);
   });
 
   test('palette ids are unique', () {

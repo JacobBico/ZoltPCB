@@ -1,10 +1,10 @@
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/export/board_document.dart';
-import 'package:hintpcb/domain/models/models.dart';
-import 'package:hintpcb/domain/pcb/pcb.dart';
-import 'package:hintpcb/kicad/board_writer.dart';
+import 'package:zolt/domain/export/board_document.dart';
+import 'package:zolt/domain/models/models.dart';
+import 'package:zolt/domain/pcb/pcb.dart';
+import 'package:zolt/kicad/board_writer.dart';
 
 BoardEdge _edge(
   BoardEdgeKind kind,
@@ -279,13 +279,13 @@ void main() {
           BoardText(
             id: 't1',
             projectId: 'p',
-            content: 'HINTPCB',
+            content: 'ZOLT',
             position: Offset(12, 8),
             size: 1.5,
           ),
         ],
       );
-      expect(text, contains('(gr_text "HINTPCB"'));
+      expect(text, contains('(gr_text "ZOLT"'));
       expect(text, contains('(at 12 8 0)'));
       expect(text, contains('(layer "F.SilkS")'));
       expect(text, contains('(size 1.5 1.5)'));

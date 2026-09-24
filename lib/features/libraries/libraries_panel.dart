@@ -26,7 +26,7 @@ enum LibraryKind {
 /// Imported KiCad libraries: symbols for the schematic, footprints for the
 /// board.
 ///
-/// HintPCB ships with no CAD data of its own. Everything here is a file the
+/// Zolt ships with no CAD data of its own. Everything here is a file the
 /// user copied onto the phone — from their own KiCad install, or downloaded
 /// — and imported.
 class LibrariesPanel extends ConsumerStatefulWidget {

@@ -3,11 +3,11 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/db/database.dart';
-import 'package:hintpcb/data/repositories/symbol_library_repository.dart';
-import 'package:hintpcb/data/libraries/library_file_storage.dart';
-import 'package:hintpcb/domain/models/pin.dart';
-import 'package:hintpcb/domain/symbols/symbols.dart';
+import 'package:zolt/data/db/database.dart';
+import 'package:zolt/data/repositories/symbol_library_repository.dart';
+import 'package:zolt/data/libraries/library_file_storage.dart';
+import 'package:zolt/domain/models/pin.dart';
+import 'package:zolt/domain/symbols/symbols.dart';
 
 const _library = '''
 (kicad_symbol_lib
@@ -60,7 +60,7 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.memory();
-    root = await Directory.systemTemp.createTemp('hintpcb_symbols');
+    root = await Directory.systemTemp.createTemp('zolt_symbols');
     repo = SymbolLibraryRepository(db, FileLibraryStorage(root));
   });
 

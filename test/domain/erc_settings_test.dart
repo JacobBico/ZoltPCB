@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/erc/erc.dart';
+import 'package:zolt/domain/erc/erc.dart';
 
 void main() {
   const loose = ErcViolation(

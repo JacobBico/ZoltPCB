@@ -635,22 +635,25 @@ abstract final class FabricationWriter {
     List<Offset> copies = const [Offset.zero],
     PanelLayout? panel,
   }) {
-    final holes = <(Offset, double)>[
+    // A hole is drilled at one point; a slot is routed from one point to
+    // another with a tool as wide as the slot.
+    final holes = <(Offset, double, Offset?)>[
       for (final copy in copies) ...[
         if (plated)
           for (final via in scene.vias)
-            if (via.drill > 0) (Offset(via.x, via.y) + copy, via.drill),
+            if (via.drill > 0) (Offset(via.x, via.y) + copy, via.drill, null),
         for (final footprint in scene.footprints)
           for (final pad in footprint.pads)
             if (pad.pad.drill > 0 &&
                 (plated
                     ? pad.pad.type == PadType.thruHole
                     : pad.pad.type == PadType.npth))
-              (pad.position + copy, pad.pad.drill),
+              _hole(pad, copy),
       ],
       if (!plated && panel != null) ...[
-        for (final at in panel.toolingHoles) (at, panel.toolingDiameter),
-        for (final at in panel.biteHoles) (at, PanelSettings.biteDiameter),
+        for (final at in panel.toolingHoles) (at, panel.toolingDiameter, null),
+        for (final at in panel.biteHoles)
+          (at, PanelSettings.biteDiameter, null),
       ],
     ];
 
@@ -659,9 +662,7 @@ abstract final class FabricationWriter {
 
     final out = StringBuffer()
       ..writeln('M48')
-      ..writeln(
-        '; DRILL file {HintPCB} ${plated ? 'plated' : 'non-plated'} holes',
-      )
+      ..writeln('; DRILL file {Zolt} ${plated ? 'plated' : 'non-plated'} holes')
       ..writeln('; FORMAT={-:-/ absolute / metric / decimal}')
       ..writeln(
         '; #@! TF.FileFunction,${plated ? 'Plated' : 'NonPlated'},1,2,'
@@ -678,18 +679,39 @@ abstract final class FabricationWriter {
       ..writeln('G05');
     for (var i = 0; i < sizes.length; i++) {
       out.writeln('T${i + 1}');
-      for (final hole in holes) {
-        if (tool(hole.$2) != sizes[i]) continue;
-        out.writeln(
-          'X${hole.$1.dx.toStringAsFixed(3)}'
-          'Y${(-hole.$1.dy).toStringAsFixed(3)}',
-        );
+      for (final (at, size, to) in holes) {
+        if (tool(size) != sizes[i]) continue;
+        String xy(Offset p) =>
+            'X${p.dx.toStringAsFixed(3)}Y${(-p.dy).toStringAsFixed(3)}';
+        // G85 is the routed slot every board house reads, and what KiCad
+        // writes: the tool plunges at the first point and routes to the
+        // second.
+        out.writeln(to == null ? xy(at) : '${xy(at)}G85${xy(to)}');
       }
     }
     out
       ..writeln('T0')
       ..writeln('M30');
     return out.toString();
+  }
+
+  /// A pad's hole: a plain drill, or — for an oval hole, the kind USB-C
+  /// shells and DC jacks have — a slot along the hole's long side, routed
+  /// with a tool as wide as its short side.
+  static (Offset, double, Offset?) _hole(PlacedPad pad, Offset copy) {
+    final centre = pad.position + copy;
+    final dx = pad.pad.drill;
+    final dy = pad.pad.drillY > 0 ? pad.pad.drillY : dx;
+    if ((dx - dy).abs() < 1e-6) return (centre, dx, null);
+
+    // The pad's own axes on the board, as its copper is drawn.
+    final radians = pad.angle * math.pi / 180;
+    final along = dx > dy
+        ? Offset(math.cos(radians), -math.sin(radians))
+        : Offset(math.sin(radians), math.cos(radians));
+    final width = math.min(dx, dy);
+    final reach = (math.max(dx, dy) - width) / 2;
+    return (centre - along * reach, width, centre + along * reach);
   }
 }
 
@@ -806,7 +828,7 @@ class _Gerber {
 
   String build() {
     final out = StringBuffer()
-      ..writeln('%TF.GenerationSoftware,HintPCB,HintPCB,1.0*%')
+      ..writeln('%TF.GenerationSoftware,Zolt,Zolt,1.0*%')
       ..writeln('%TF.FileFunction,$function*%')
       ..writeln('%FSLAX46Y46*%')
       ..writeln('%MOMM*%')

@@ -1,4 +1,4 @@
-package com.hintpcb.hintpcb
+package com.zolt.app
 
 import io.flutter.embedding.android.FlutterActivity
 

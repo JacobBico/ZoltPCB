@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/repositories/symbol_library_repository.dart';
-import 'package:hintpcb/features/components/component_browser_panel.dart';
-import 'package:hintpcb/features/components/pinout_view.dart';
-import 'package:hintpcb/features/home/home_screen.dart';
-import 'package:hintpcb/features/libraries/libraries_panel.dart';
-import 'package:hintpcb/domain/symbols/symbols.dart';
+import 'package:zolt/data/repositories/symbol_library_repository.dart';
+import 'package:zolt/features/components/component_browser_panel.dart';
+import 'package:zolt/features/components/pinout_view.dart';
+import 'package:zolt/features/home/home_screen.dart';
+import 'package:zolt/features/libraries/libraries_panel.dart';
+import 'package:zolt/domain/symbols/symbols.dart';
 
 import '../helpers/library_fixture.dart';
 import '../helpers/pump_app.dart';

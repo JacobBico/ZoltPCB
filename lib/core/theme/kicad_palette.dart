@@ -12,7 +12,7 @@ export 'app_palette.dart';
 /// how a theme is applied.
 abstract final class KicadPalette {
   /// The palette everything is painted with right now.
-  static AppPalette current = AppPalettes.hintpcb;
+  static AppPalette current = AppPalettes.zolt;
 
   // Chrome.
   static Color get background => current.background;

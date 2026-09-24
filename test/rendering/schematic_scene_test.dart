@@ -2,13 +2,13 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/db/database.dart';
-import 'package:hintpcb/data/repositories/net_repository.dart';
-import 'package:hintpcb/data/repositories/part_repository.dart';
-import 'package:hintpcb/data/repositories/project_repository.dart';
-import 'package:hintpcb/domain/models/models.dart';
-import 'package:hintpcb/domain/symbols/symbols.dart';
-import 'package:hintpcb/rendering/schematic_scene.dart';
+import 'package:zolt/data/db/database.dart';
+import 'package:zolt/data/repositories/net_repository.dart';
+import 'package:zolt/data/repositories/part_repository.dart';
+import 'package:zolt/data/repositories/project_repository.dart';
+import 'package:zolt/domain/models/models.dart';
+import 'package:zolt/domain/symbols/symbols.dart';
+import 'package:zolt/rendering/schematic_scene.dart';
 
 import '../helpers/fixtures.dart';
 

@@ -73,7 +73,7 @@ class OwnLibraryStore {
     final library = SList([
       SAtom('kicad_symbol_lib'),
       S.of('version', [20241209]),
-      SList([SAtom('generator'), S.text('hintpcb')]),
+      SList([SAtom('generator'), S.text('zolt')]),
       for (final symbol in all)
         SymbolWriter.libSymbol(symbol, libId: symbol.name),
     ]);

@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/app/appearance.dart';
-import 'package:hintpcb/app/providers.dart';
-import 'package:hintpcb/core/theme/app_theme.dart';
-import 'package:hintpcb/data/db/database.dart';
-import 'package:hintpcb/data/libraries/library_file_storage.dart';
+import 'package:zolt/app/appearance.dart';
+import 'package:zolt/app/providers.dart';
+import 'package:zolt/core/theme/app_theme.dart';
+import 'package:zolt/data/db/database.dart';
+import 'package:zolt/data/libraries/library_file_storage.dart';
 import 'package:meta/meta.dart';
 
 /// The viewport every widget test runs at: a landscape phone.
@@ -89,7 +89,7 @@ Future<void> pumpApp(
         // Only constructed, never written to: a widget test runs under a
         // fake clock, where a real file write would never complete.
         exportDirectoryProvider.overrideWithValue(
-          Directory('${Directory.systemTemp.path}/hintpcb_widget_exports'),
+          Directory('${Directory.systemTemp.path}/zolt_widget_exports'),
         ),
         appearanceProvider.overrideWith(
           () => _FixedAppearance(wiring, wireGesture),

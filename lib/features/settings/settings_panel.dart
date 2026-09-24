@@ -231,7 +231,7 @@ class _ErrorLogCard extends ConsumerWidget {
       return;
     }
     await SharePlus.instance.share(
-      ShareParams(files: [XFile(file.path)], subject: 'HintPCB error log'),
+      ShareParams(files: [XFile(file.path)], subject: 'Zolt error log'),
     );
   }
 

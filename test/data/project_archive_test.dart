@@ -1,12 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/data/archive/project_archive.dart';
-import 'package:hintpcb/data/db/database.dart';
-import 'package:hintpcb/data/repositories/board_repository.dart';
-import 'package:hintpcb/data/repositories/net_repository.dart';
-import 'package:hintpcb/data/repositories/part_repository.dart';
-import 'package:hintpcb/data/repositories/project_repository.dart';
-import 'package:hintpcb/data/repositories/snapshot_repository.dart';
-import 'package:hintpcb/domain/pcb/pcb.dart';
+import 'package:zolt/data/archive/project_archive.dart';
+import 'package:zolt/data/db/database.dart';
+import 'package:zolt/data/repositories/board_repository.dart';
+import 'package:zolt/data/repositories/net_repository.dart';
+import 'package:zolt/data/repositories/part_repository.dart';
+import 'package:zolt/data/repositories/project_repository.dart';
+import 'package:zolt/data/repositories/snapshot_repository.dart';
+import 'package:zolt/domain/pcb/pcb.dart';
 
 import '../helpers/fixtures.dart';
 
@@ -162,6 +162,18 @@ void main() {
       () => ProjectArchive.decode('{"format":"something-else"}'),
       throwsFormatException,
     );
+  });
+
+  test('a backup made before the app was called Zolt still restores', () async {
+    final id = await divider();
+    final archive = await ProjectArchiver(db).capture(id);
+    final old = archive.encode().replaceFirst(
+      '"format":"${ProjectArchive.format}"',
+      '"format":"hintpcb-project"',
+    );
+    expect(old, contains('hintpcb-project'));
+    final restored = ProjectArchive.decode(old);
+    expect(restored.tables.keys, archive.tables.keys);
   });
 
   test('a column the archive does not know is left at its default', () async {

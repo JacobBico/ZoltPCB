@@ -1,7 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/features/board/crosshair.dart';
+import 'package:zolt/features/board/crosshair.dart';
 
 void main() {
   const board = Rect.fromLTWH(10, 20, 40, 30); // centre (30, 35)

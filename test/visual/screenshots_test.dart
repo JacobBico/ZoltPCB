@@ -6,23 +6,23 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/app/appearance.dart';
-import 'package:hintpcb/core/theme/kicad_palette.dart';
-import 'package:hintpcb/data/repositories/board_repository.dart';
-import 'package:hintpcb/data/repositories/footprint_library_repository.dart';
-import 'package:hintpcb/data/repositories/net_repository.dart';
-import 'package:hintpcb/data/repositories/part_repository.dart';
-import 'package:hintpcb/data/repositories/project_repository.dart';
-import 'package:hintpcb/data/repositories/symbol_library_repository.dart';
-import 'package:hintpcb/domain/pcb/pcb.dart';
-import 'package:hintpcb/domain/symbols/symbols.dart';
-import 'package:hintpcb/features/board/board_panel.dart';
-import 'package:hintpcb/features/project/schematic_panel.dart';
-import 'package:hintpcb/features/settings/settings_panel.dart';
-import 'package:hintpcb/kicad/symbol_library_reader.dart';
+import 'package:zolt/app/appearance.dart';
+import 'package:zolt/core/theme/kicad_palette.dart';
+import 'package:zolt/data/repositories/board_repository.dart';
+import 'package:zolt/data/repositories/footprint_library_repository.dart';
+import 'package:zolt/data/repositories/net_repository.dart';
+import 'package:zolt/data/repositories/part_repository.dart';
+import 'package:zolt/data/repositories/project_repository.dart';
+import 'package:zolt/data/repositories/symbol_library_repository.dart';
+import 'package:zolt/domain/pcb/pcb.dart';
+import 'package:zolt/domain/symbols/symbols.dart';
+import 'package:zolt/features/board/board_panel.dart';
+import 'package:zolt/features/project/schematic_panel.dart';
+import 'package:zolt/features/settings/settings_panel.dart';
+import 'package:zolt/kicad/symbol_library_reader.dart';
 
 import '../helpers/footprint_fixture.dart';
-import 'package:hintpcb/features/home/home_screen.dart';
+import 'package:zolt/features/home/home_screen.dart';
 
 import '../helpers/library_fixture.dart';
 import '../helpers/pump_app.dart';
@@ -31,9 +31,9 @@ import '../helpers/pump_app.dart';
 ///
 /// A way to check how a theme or a new view actually looks without a phone
 /// in hand. Off by default; run with
-/// `HINTPCB_SCREENSHOTS=<dir> flutter test test/visual`.
+/// `ZOLT_SCREENSHOTS=<dir> flutter test test/visual`.
 void main() {
-  final outDir = Platform.environment['HINTPCB_SCREENSHOTS'];
+  final outDir = Platform.environment['ZOLT_SCREENSHOTS'];
   final skip = outDir == null;
 
   setUpAll(() async {
@@ -57,7 +57,7 @@ void main() {
     }
   });
 
-  tearDown(() => KicadPalette.current = AppPalettes.hintpcb);
+  tearDown(() => KicadPalette.current = AppPalettes.zolt);
 
   const key = ValueKey('shot');
 
@@ -87,7 +87,7 @@ void main() {
     await shoot(tester, 'settings');
   });
 
-  for (final palette in [AppPalettes.hintpcb, AppPalettes.paper]) {
+  for (final palette in [AppPalettes.zolt, AppPalettes.paper]) {
     testAppWithStorage('home ${palette.id}', skip: skip, (
       tester,
       db,
@@ -110,7 +110,7 @@ void main() {
   }
 
   for (final palette in [
-    AppPalettes.hintpcb,
+    AppPalettes.zolt,
     AppPalettes.kicad,
     AppPalettes.banana,
     AppPalettes.halloween,

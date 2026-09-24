@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/geometry/pin_attachment.dart';
+import 'package:zolt/domain/geometry/pin_attachment.dart';
 
 void main() {
   group('attachmentFor', () {

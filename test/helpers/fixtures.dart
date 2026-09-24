@@ -1,4 +1,4 @@
-import 'package:hintpcb/domain/models/models.dart';
+import 'package:zolt/domain/models/models.dart';
 
 /// A two-pin passive, the simplest thing that can join a net.
 NewPartSpec resistorSpec({

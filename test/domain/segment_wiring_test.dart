@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hintpcb/domain/geometry/segment_wiring.dart';
+import 'package:zolt/domain/geometry/segment_wiring.dart';
 
 WireSegment _s(String id, Offset a, Offset b, {String? pinA, String? pinB}) =>
     WireSegment(id: id, a: a, b: b, pinA: pinA, pinB: pinB);
