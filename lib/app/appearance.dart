@@ -54,6 +54,31 @@ enum WiringModel {
       values.where((m) => m.name == name).firstOrNull ?? polyline;
 }
 
+/// How a wire is drawn out of a pin on the schematic.
+///
+/// One or the other, never both: with both, a tap meant to look at a pin
+/// started a wire, and the next stray tap on the sheet laid a corner of it.
+enum WireGesture {
+  drag(
+    'Drag',
+    'Drag out of a pin and let go on another pin or a wire. Let go on '
+        'empty sheet for a corner, then drag on from the loose end',
+  ),
+  tap(
+    'Tap',
+    'Tap a pin, tap the sheet for each corner, then tap the pin or wire it '
+        'ends on. Dragging a pin moves its part',
+  );
+
+  const WireGesture(this.label, this.description);
+
+  final String label;
+  final String description;
+
+  static WireGesture byName(String? name) =>
+      values.where((g) => g.name == name).firstOrNull ?? drag;
+}
+
 /// The look the user has chosen.
 @immutable
 class Appearance {
@@ -62,23 +87,27 @@ class Appearance {
     this.resistorStyle = ResistorStyle.iec,
     this.boardEditor = BoardEditorStyle.precision,
     this.wiring = WiringModel.polyline,
+    this.wireGesture = WireGesture.drag,
   });
 
   final AppPalette palette;
   final ResistorStyle resistorStyle;
   final BoardEditorStyle boardEditor;
   final WiringModel wiring;
+  final WireGesture wireGesture;
 
   Appearance copyWith({
     AppPalette? palette,
     ResistorStyle? resistorStyle,
     BoardEditorStyle? boardEditor,
     WiringModel? wiring,
+    WireGesture? wireGesture,
   }) => Appearance(
     palette: palette ?? this.palette,
     resistorStyle: resistorStyle ?? this.resistorStyle,
     boardEditor: boardEditor ?? this.boardEditor,
     wiring: wiring ?? this.wiring,
+    wireGesture: wireGesture ?? this.wireGesture,
   );
 
   @override
@@ -87,10 +116,12 @@ class Appearance {
       other.palette == palette &&
       other.resistorStyle == resistorStyle &&
       other.boardEditor == boardEditor &&
-      other.wiring == wiring;
+      other.wiring == wiring &&
+      other.wireGesture == wireGesture;
 
   @override
-  int get hashCode => Object.hash(palette, resistorStyle, boardEditor, wiring);
+  int get hashCode =>
+      Object.hash(palette, resistorStyle, boardEditor, wiring, wireGesture);
 }
 
 final settingsRepositoryProvider = Provider<SettingsRepository>(
@@ -147,6 +178,9 @@ class AppearanceNotifier extends Notifier<Appearance> {
           settings[SettingsRepository.boardEditorKey],
         ),
         wiring: WiringModel.byName(settings[SettingsRepository.wiringKey]),
+        wireGesture: WireGesture.byName(
+          settings[SettingsRepository.wireGestureKey],
+        ),
       ),
     );
   }
@@ -177,6 +211,13 @@ class AppearanceNotifier extends Notifier<Appearance> {
     await ref
         .read(settingsRepositoryProvider)
         .set(SettingsRepository.wiringKey, model.name);
+  }
+
+  Future<void> setWireGesture(WireGesture gesture) async {
+    _apply(state.copyWith(wireGesture: gesture));
+    await ref
+        .read(settingsRepositoryProvider)
+        .set(SettingsRepository.wireGestureKey, gesture.name);
   }
 
   void _apply(Appearance next) {

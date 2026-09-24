@@ -114,6 +114,7 @@ void main() {
       final board = await boards.ensureBoard(project.id);
       await boards.updateBoard(
         board.copyWith(
+          outlineKind: BoardOutlineKind.rectangle,
           outlineX: 25,
           outlineY: 25,
           outlineWidth: 34,
@@ -237,9 +238,9 @@ void main() {
       // Teardrops on, so the project file carries the parameters and the
       // vias carry their own settings.
       await boards.updateBoard(
-        (await boards.getBoard(project.id))!.copyWith(
-          teardrops: const TeardropRules(enabled: true),
-        ),
+        (await boards.getBoard(
+          project.id,
+        ))!.copyWith(teardrops: const TeardropRules(enabled: true)),
       );
 
       // A mounting cutout, as a real circle on Edge.Cuts.

@@ -7,21 +7,29 @@ import '../../core/theme/kicad_palette.dart';
 import '../../domain/models/models.dart';
 import '../../domain/pcb/pcb.dart';
 
-/// Names the widths a board is routed with, and says which nets use them.
+/// The widths a board is routed with: the quick sizes picked from while
+/// routing, and the named classes that say which nets use what.
 ///
-/// Edits apply as they are made. It is setup, not a drawing operation, and
-/// every change shows up at once on the list behind it.
+/// Both answer the same question — how wide is this track — one roughly and
+/// one per net, so they are set up in the same place.
+///
+/// Class edits apply as they are made. It is setup, not a drawing
+/// operation, and every change shows up at once on the list behind it.
+/// [onEditSizes] opens the quick sizes' own editor; without it that section
+/// is not shown.
 Future<void> showNetClassesDialog(
   BuildContext context, {
   required String projectId,
   required DesignRules rules,
   Stackup? stackup,
+  Future<void> Function()? onEditSizes,
 }) => showDialog<void>(
   context: context,
   builder: (_) => _NetClassesDialog(
     projectId: projectId,
     rules: rules,
     stackup: stackup ?? Stackup.standard(),
+    onEditSizes: onEditSizes,
   ),
 );
 
@@ -30,10 +38,12 @@ class _NetClassesDialog extends ConsumerWidget {
     required this.projectId,
     required this.rules,
     required this.stackup,
+    this.onEditSizes,
   });
 
   final String projectId;
   final DesignRules rules;
+  final Future<void> Function()? onEditSizes;
 
   /// The board's build, which an impedance class takes its widths from.
   final Stackup stackup;
@@ -45,8 +55,17 @@ class _NetClassesDialog extends ConsumerWidget {
     final nets = ref.watch(projectNetsProvider(projectId)).value ?? const [];
     final repository = ref.read(boardRepositoryProvider);
 
+    final editSizes = onEditSizes;
+    final board = ref.watch(boardProvider(projectId)).value;
+    final heading = theme.textTheme.labelSmall?.copyWith(
+      color: KicadPalette.textSecondary,
+      letterSpacing: 1.2,
+    );
+
     return AlertDialog(
-      title: const Text('Net classes'),
+      title: Text(
+        editSizes == null ? 'Net classes' : 'Track sizes and net classes',
+      ),
       contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
       content: SizedBox(
         width: 560,
@@ -55,6 +74,48 @@ class _NetClassesDialog extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (editSizes != null && board != null) ...[
+                Row(
+                  children: [
+                    Expanded(child: Text('QUICK SIZES', style: heading)),
+                    TextButton.icon(
+                      key: const ValueKey('edit-quick-sizes'),
+                      icon: const Icon(Icons.edit_outlined, size: 16),
+                      label: const Text('EDIT'),
+                      onPressed: editSizes,
+                    ),
+                  ],
+                ),
+                Text(
+                  'Offered on the width and via chips while routing, for any '
+                  'net.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: KicadPalette.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final width in board.availableTrackWidths)
+                      Chip(
+                        visualDensity: VisualDensity.compact,
+                        avatar: const Icon(Icons.horizontal_rule, size: 14),
+                        label: Text('${_mm(width)} mm'),
+                      ),
+                    for (final via in board.availableViaSizes)
+                      Chip(
+                        visualDensity: VisualDensity.compact,
+                        avatar: const Icon(Icons.adjust, size: 14),
+                        label: Text('${_mm(via.diameter)}/${_mm(via.drill)}'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text('NET CLASSES', style: heading),
+                const SizedBox(height: 4),
+              ],
               Text(
                 'A net in a class routes at the class width, and keeps the '
                 'class clearance from other nets. Everything else uses the '

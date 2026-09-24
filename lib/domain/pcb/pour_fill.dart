@@ -170,8 +170,16 @@ abstract final class PourFill {
     final warnings = <PourWarning>[];
     // Nothing is poured past the board's bounding box, so the clear round
     // the outline never has to reach further than that — which is what
-    // lets copies of the board sit side by side in a panel.
-    final box = scene.outline.bounds;
+    // lets copies of the board sit side by side in a panel. With no edge
+    // drawn yet there is nothing to stop at, and a pour fills its own shape.
+    final drawn = scene.outline.isDrawn;
+    final box = drawn
+        ? scene.outline.bounds
+        : zones.fold<Rect>(
+            Rect.zero,
+            (all, zone) =>
+                all.isEmpty ? zone.bounds : all.expandToInclude(zone.bounds),
+          );
 
     // 1. The pours.
     for (var i = 0; i < zones.length; i++) {
@@ -217,18 +225,20 @@ abstract final class PourFill {
     // Just round the box: less than the edge margin, so a copy of the board
     // butted up against this one keeps its own copper.
     final frame = box.inflate(0.05);
-    steps
-      ..add(
-        PourStep.clear(
-          PourRegion([
-            frame.topLeft,
-            frame.topRight,
-            frame.bottomRight,
-            frame.bottomLeft,
-          ], hole: outline),
-        ),
-      )
-      ..add(PourStep.clear(PourStroke(outline, edgeGap * 2, closed: true)));
+    if (drawn) {
+      steps
+        ..add(
+          PourStep.clear(
+            PourRegion([
+              frame.topLeft,
+              frame.topRight,
+              frame.bottomRight,
+              frame.bottomLeft,
+            ], hole: outline),
+          ),
+        )
+        ..add(PourStep.clear(PourStroke(outline, edgeGap * 2, closed: true)));
+    }
     for (final edge in scene.edges) {
       if (!edge.isValid) continue;
       final shape = _edgePoints(edge);
@@ -239,7 +249,7 @@ abstract final class PourFill {
         BoardEdgeKind.line || BoardEdgeKind.arc => false,
       };
       // A closed shape inside the board is a cutout: nothing in it.
-      if (closed && _inside(scene.outline.bounds, edge.bounds)) {
+      if (closed && drawn && _inside(scene.outline.bounds, edge.bounds)) {
         steps.add(PourStep.clear(PourRegion(shape)));
       }
       steps.add(PourStep.clear(PourStroke(shape, edgeGap * 2, closed: closed)));
@@ -348,8 +358,9 @@ abstract final class PourFill {
         final end =
             at + direction * (half + zone.thermalGap + zone.thermalSpoke);
         if (!zone.contains(end) ||
-            !_insidePolygon(outline, end) ||
-            _nearPolygon(outline, end, edgeGap + zone.thermalSpoke)) {
+            (drawn &&
+                (!_insidePolygon(outline, end) ||
+                    _nearPolygon(outline, end, edgeGap + zone.thermalSpoke)))) {
           continue;
         }
         steps.add(
@@ -388,8 +399,9 @@ abstract final class PourFill {
         // A spoke only helps if it lands in copper: inside the pour and
         // clear of the board's edge margin.
         if (!zone.contains(end) ||
-            !_insidePolygon(outline, end) ||
-            _nearPolygon(outline, end, edgeGap + zone.thermalSpoke)) {
+            (drawn &&
+                (!_insidePolygon(outline, end) ||
+                    _nearPolygon(outline, end, edgeGap + zone.thermalSpoke)))) {
           continue;
         }
         steps.add(

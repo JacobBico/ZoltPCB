@@ -16,6 +16,7 @@ class Net {
     required this.createdAt,
     this.name,
     this.labelAt,
+    this.labelSize,
     this.netClassId,
   });
 
@@ -33,6 +34,9 @@ class Net {
   /// dragged. `null` leaves it on the drawing's own choice of spot.
   final Offset? labelAt;
 
+  /// The label's text height in millimetres; null for KiCad's default.
+  final double? labelSize;
+
   final DateTime createdAt;
 
   bool get isNamed => name != null && name!.isNotEmpty;
@@ -48,6 +52,7 @@ class Net {
     createdAt: createdAt,
     name: clearName ? null : (name ?? this.name),
     labelAt: clearLabelAt ? null : (labelAt ?? this.labelAt),
+    labelSize: labelSize,
     netClassId: netClassId,
   );
 
@@ -58,12 +63,20 @@ class Net {
       other.projectId == projectId &&
       other.name == name &&
       other.labelAt == labelAt &&
+      other.labelSize == labelSize &&
       other.netClassId == netClassId &&
       other.createdAt == createdAt;
 
   @override
-  int get hashCode =>
-      Object.hash(id, projectId, name, labelAt, netClassId, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    projectId,
+    name,
+    labelAt,
+    labelSize,
+    netClassId,
+    createdAt,
+  );
 
   @override
   String toString() => 'Net($id, ${name ?? "<unnamed>"})';

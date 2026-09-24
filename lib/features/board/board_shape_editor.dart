@@ -52,7 +52,9 @@ class _BoardShapeEditorState extends State<_BoardShapeEditor> {
   void initState() {
     super.initState();
     final outline = widget.outline;
-    _kind = outline.kind;
+    // A board with no edge yet starts from a rectangle over the working
+    // area: typing numbers needs a shape to type them into.
+    _kind = outline.isDrawn ? outline.kind : BoardOutlineKind.rectangle;
     final bounds = outline.bounds;
     _origin = bounds.topLeft;
 
@@ -104,6 +106,9 @@ class _BoardShapeEditorState extends State<_BoardShapeEditor> {
   /// made.
   (BoardOutline?, String?) _build() {
     switch (_kind) {
+      case BoardOutlineKind.none:
+        return (BoardOutline.none(widget.outline.bounds), null);
+
       case BoardOutlineKind.rectangle:
         final w = _parse(_width);
         final h = _parse(_height);
@@ -233,7 +238,7 @@ class _BoardShapeEditorState extends State<_BoardShapeEditor> {
                   SegmentedButton<BoardOutlineKind>(
                     showSelectedIcon: false,
                     segments: [
-                      for (final kind in BoardOutlineKind.values)
+                      for (final kind in _drawable)
                         ButtonSegment(value: kind, label: Text(kind.label)),
                     ],
                     selected: {_kind},
@@ -305,8 +310,17 @@ class _BoardShapeEditorState extends State<_BoardShapeEditor> {
     );
   }
 
+  /// The shapes that can be picked here: every kind but no shape at all.
+  static final _drawable = [
+    for (final kind in BoardOutlineKind.values)
+      if (kind != BoardOutlineKind.none) kind,
+  ];
+
   Widget _fields(ThemeData theme) {
     switch (_kind) {
+      case BoardOutlineKind.none:
+        return const SizedBox.shrink();
+
       case BoardOutlineKind.rectangle:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -405,6 +405,15 @@ class NetRepository {
     await _touchProjectForNet(netId);
   }
 
+  /// Sets a net label's text height in millimetres; null goes back to
+  /// KiCad's default.
+  Future<void> setNetLabelSize(String netId, double? size) async {
+    await (_db.update(_db.nets)..where((t) => t.id.equals(netId))).write(
+      NetsCompanion(labelSize: Value(size)),
+    );
+    await _touchProjectForNet(netId);
+  }
+
   /// Deletes a net and every membership in it. The pins become unconnected.
   Future<void> deleteNet(String netId) async {
     final row = await (_db.select(

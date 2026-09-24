@@ -1,4 +1,6 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hintpcb/features/production/production_panel.dart';
 import 'package:hintpcb/data/repositories/net_repository.dart';
 import 'package:hintpcb/data/repositories/part_repository.dart';
 import 'package:hintpcb/data/repositories/project_repository.dart';
@@ -72,14 +74,21 @@ void main() {
     );
 
     await openRail(tester);
-    await tester.tap(find.text('Components'));
+    await tester.tap(find.text('Production'));
+    await settleApp(tester);
+    expect(find.byType(ProductionPanel), findsOneWidget);
+
+    // The parts list is a tab of the overview, not a section of its own.
+    await openRail(tester);
+    await tester.tap(find.text('Overview'));
+    await settleApp(tester);
+    await tester.tap(find.byKey(const ValueKey('overview-parts-tab')));
     await settleApp(tester);
     expect(find.text('No components yet'), findsOneWidget);
 
     await openRail(tester);
-    await tester.tap(find.text('Nets'));
-    await settleApp(tester);
-    expect(find.text('Nothing to connect yet'), findsOneWidget);
+    expect(find.text('Components'), findsNothing);
+    expect(find.text('Nets'), findsNothing);
   });
 
   testAppWithStorage('the rail closes once a section is chosen', (
@@ -97,16 +106,16 @@ void main() {
     );
 
     // Hidden to begin with: the section fills the screen.
-    expect(find.text('Nets').hitTestable(), findsNothing);
+    expect(find.text('Panelization').hitTestable(), findsNothing);
 
     await openRail(tester);
-    expect(find.text('Nets').hitTestable(), findsOneWidget);
+    expect(find.text('Panelization').hitTestable(), findsOneWidget);
 
-    await tester.tap(find.text('Nets'));
+    await tester.tap(find.text('Production'));
     await settleApp(tester);
 
     expect(
-      find.text('Components').hitTestable(),
+      find.text('Panelization').hitTestable(),
       findsNothing,
       reason: 'the rail slides away again once a section is chosen',
     );

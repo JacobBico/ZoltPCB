@@ -133,6 +133,10 @@ class Nets extends Table {
   RealColumn get labelX => real().nullable()();
   RealColumn get labelY => real().nullable()();
 
+  /// The label's text height in millimetres, once the user has changed it.
+  /// Null is KiCad's own 1.27 mm.
+  RealColumn get labelSize => real().nullable()();
+
   /// The net class the board routes this net with; null for the default.
   TextColumn get netClassId => text().nullable().references(
     NetClasses,
@@ -430,8 +434,7 @@ class Boards extends Table {
   /// because nobody solders one, which is the only reason a thermal exists.
   TextColumn get padConnection =>
       text().withDefault(const Constant('thermal'))();
-  TextColumn get viaConnection =>
-      text().withDefault(const Constant('solid'))();
+  TextColumn get viaConnection => text().withDefault(const Constant('solid'))();
 
   /// The gap a thermal relief leaves round the copper, and the width of
   /// the spokes that bridge it.
@@ -614,8 +617,7 @@ class BoardZones extends Table {
       text().withDefault(const Constant('thermal'))();
 
   /// The same three, for vias and plated holes on the pour's own net.
-  TextColumn get viaConnection =>
-      text().withDefault(const Constant('solid'))();
+  TextColumn get viaConnection => text().withDefault(const Constant('solid'))();
   RealColumn get thermalGap => real().withDefault(const Constant(0.5))();
   RealColumn get thermalSpoke => real().withDefault(const Constant(0.5))();
 
@@ -674,8 +676,7 @@ class BoardVias extends Table {
   /// of the board to the bottom and costs nothing extra; the other two are
   /// drilled before the board is pressed together, and every fab charges
   /// for the extra lamination cycle.
-  TextColumn get viaKind =>
-      text().withDefault(const Constant('through'))();
+  TextColumn get viaKind => text().withDefault(const Constant('through'))();
 
   /// The copper layers a blind or buried via joins, as layer tokens. Empty
   /// means top to bottom, which is what a through via always is.

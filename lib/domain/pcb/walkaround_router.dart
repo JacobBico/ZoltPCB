@@ -289,6 +289,9 @@ class WalkaroundField {
     final on = Uint8List(columns * rows);
 
     switch (outline.kind) {
+      case BoardOutlineKind.none:
+        // No edge: all of it is board.
+        on.fillRange(0, on.length, 1);
       case BoardOutlineKind.rectangle:
         final rect = outline.rect;
         for (var r = 0; r < rows; r++) {

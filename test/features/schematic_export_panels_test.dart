@@ -205,6 +205,56 @@ void main() {
 }
 
 void _placementTests() {
+  group('the component picker opens on the parts most circuits use', () {
+    testAppWithStorage('common parts are one tap each, drawn as symbols', (
+      tester,
+      db,
+      storage,
+    ) async {
+      await SymbolLibraryRepository(
+        db,
+        storage,
+      ).import(fileName: 'Device.kicad_sym', bytes: libraryBytes());
+      final project = await ProjectRepository(db).create(name: 'Quick');
+
+      await pumpApp(
+        tester,
+        Scaffold(body: SchematicPanel(project: project)),
+        database: db,
+        storage: storage,
+      );
+      ProviderScope.containerOf(
+        tester.element(find.byType(SchematicPanel)),
+      ).read(componentPickerOpenProvider.notifier).set(true);
+      await settleApp(tester);
+
+      // The library has a resistor and a capacitor, and nothing else on
+      // the list — so those two are offered and nothing else is.
+      expect(find.byKey(const ValueKey('quick-Device:R')), findsOneWidget);
+      expect(find.byKey(const ValueKey('quick-Device:C')), findsOneWidget);
+      expect(find.byKey(const ValueKey('quick-Device:LED')), findsNothing);
+      expect(find.text('POWER AND GROUND'), findsNothing);
+
+      for (var i = 0; i < 2; i++) {
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('quick-Device:R')),
+        );
+        await tester.tap(find.byKey(const ValueKey('quick-Device:R')));
+        await settleApp(tester);
+      }
+
+      final parts = await PartRepository(db).getPartsWithDetails(project.id);
+      expect(parts.map((p) => p.part.reference), ['R1', 'R2']);
+      // And the project's own parts are offered again.
+      // (Above the tiles, which the list has scrolled down to.)
+      expect(find.text('IN THIS PROJECT', skipOffstage: false), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('used-Device:R'), skipOffstage: false),
+        findsOneWidget,
+      );
+    });
+  });
+
   group('reported: an added part must land where it can be seen', () {
     // Adding a second component dealt it into a fixed grid 38 mm from the
     // first, which on a phone put it off the edge of the screen: it had

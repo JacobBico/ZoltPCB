@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hintpcb/app/appearance.dart';
 import 'package:hintpcb/data/repositories/net_repository.dart';
 import 'package:hintpcb/data/repositories/part_repository.dart';
 import 'package:hintpcb/data/repositories/project_repository.dart';
@@ -52,6 +53,7 @@ void main() {
         Scaffold(body: SchematicPanel(project: project)),
         database: db,
         storage: storage,
+        wireGesture: WireGesture.tap,
       );
 
       final painter = _painter(tester);
@@ -164,6 +166,7 @@ void main() {
         Scaffold(body: SchematicPanel(project: project)),
         database: db,
         storage: storage,
+        wireGesture: WireGesture.tap,
       );
 
       final painter = _painter(tester);

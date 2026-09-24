@@ -189,6 +189,7 @@ class Board {
   BoardOutline get outline => switch (outlineKind) {
     BoardOutlineKind.rectangle => BoardOutline.rectangle(_boundsRect),
     BoardOutlineKind.circle => BoardOutline.circle(_boundsRect),
+    BoardOutlineKind.none => BoardOutline.none(_boundsRect),
     BoardOutlineKind.polygon =>
       outlinePoints.length >= 3
           ? BoardOutline.polygon(outlinePoints)

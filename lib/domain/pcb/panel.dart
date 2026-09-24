@@ -225,8 +225,16 @@ class PanelLayout {
     final rows = settings.rows.clamp(1, 20);
     final columns = settings.columns.clamp(1, 20);
 
+    if (!outline.isDrawn) {
+      warnings.add(
+        'The board has no outline yet, so each copy is its working area. '
+        'Draw the outline with the Edge cut tool first',
+      );
+    }
+
     var join = settings.join;
     if (join == PanelJoin.vScore &&
+        outline.isDrawn &&
         outline.kind != BoardOutlineKind.rectangle) {
       warnings.add(
         'V-score cuts only straight lines through the whole panel, so a '
@@ -482,9 +490,11 @@ class PanelLayout {
   }
 
   /// The board outline as a closed run of points; a circle finely enough
-  /// that no flat is worth milling differently.
-  static List<Offset> outlinePolygon(BoardOutline outline) =>
-      outline.kind == BoardOutlineKind.circle
+  /// that no flat is worth milling differently. A board with no outline
+  /// yet is its working area.
+  static List<Offset> outlinePolygon(BoardOutline outline) => !outline.isDrawn
+      ? BoardOutline.rectangle(outline.rect).path
+      : outline.kind == BoardOutlineKind.circle
       ? [
           for (var i = 0; i < 256; i++)
             outline.center +

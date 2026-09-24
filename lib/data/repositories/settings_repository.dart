@@ -18,6 +18,10 @@ class SettingsRepository {
   static const boardEditorKey = 'board.editor';
   static const wiringKey = 'schematic.wiring';
 
+  /// Whether a schematic wire is drawn by dragging out of a pin or by
+  /// tapping its pins and corners.
+  static const wireGestureKey = 'schematic.wire_gesture';
+
   Future<String?> get(String key) async {
     final row = await (_db.select(
       _db.appSettings,

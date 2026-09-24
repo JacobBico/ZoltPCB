@@ -298,7 +298,10 @@ class BoardPainter extends CustomPainter {
   }
 
   Path _outlinePath() {
-    final outline = scene.outline;
+    // With no edge yet, the preview shows the working area as the board.
+    final outline = scene.outline.isDrawn
+        ? scene.outline
+        : BoardOutline.rectangle(scene.outline.rect);
     if (outline.kind == BoardOutlineKind.circle) {
       return Path()..addOval(
         Rect.fromCircle(
@@ -710,6 +713,8 @@ class BoardPainter extends CustomPainter {
 
   void _paintOutline(Canvas canvas) {
     final outline = scene.outline;
+    // Nothing to draw until the user draws one.
+    if (!outline.isDrawn) return;
     final color = draggingOutline
         ? KicadPalette.highlight
         : KicadPalette.edgeCuts;

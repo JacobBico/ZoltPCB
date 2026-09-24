@@ -5,7 +5,11 @@ import 'dart:ui';
 enum BoardOutlineKind {
   rectangle('Rectangle'),
   circle('Circle'),
-  polygon('Polygon');
+  polygon('Polygon'),
+
+  /// No edge drawn yet. A new board starts this way: the shape is the
+  /// user's to draw with the Edge cut tool, not a box the app made up.
+  none('Not drawn yet');
 
   const BoardOutlineKind(this.label);
 
@@ -37,6 +41,11 @@ class BoardOutline {
   factory BoardOutline.circle(Rect rect) =>
       BoardOutline(kind: BoardOutlineKind.circle, rect: rect);
 
+  /// No outline yet. [area] is only where the view is framed and parts are
+  /// first put down; nothing is off the board.
+  factory BoardOutline.none(Rect area) =>
+      BoardOutline(kind: BoardOutlineKind.none, rect: area);
+
   factory BoardOutline.polygon(List<Offset> points) => BoardOutline(
     kind: BoardOutlineKind.polygon,
     rect: _boundsOf(points),
@@ -52,6 +61,9 @@ class BoardOutline {
 
   /// Polygon vertices, in order. Empty for the other kinds.
   final List<Offset> points;
+
+  /// Whether there is an edge at all. See [BoardOutlineKind.none].
+  bool get isDrawn => kind != BoardOutlineKind.none;
 
   Offset get center => rect.center;
 
@@ -77,6 +89,7 @@ class BoardOutline {
       rect.bottomLeft,
     ],
     BoardOutlineKind.polygon => points,
+    BoardOutlineKind.none => const [],
     BoardOutlineKind.circle => [
       for (var i = 0; i < 64; i++)
         Offset(
@@ -100,6 +113,8 @@ class BoardOutline {
     BoardOutlineKind.rectangle => rect.contains(point),
     BoardOutlineKind.circle => (point - center).distance <= radius,
     BoardOutlineKind.polygon => _polygonContains(points, point),
+    // Nothing is off a board with no edge.
+    BoardOutlineKind.none => true,
   };
 
   /// The same shape with one handle moved.
@@ -144,6 +159,9 @@ class BoardOutline {
           for (var i = 0; i < points.length; i++)
             if (i == index) to else points[i],
         ]);
+
+      case BoardOutlineKind.none:
+        return this;
     }
   }
 
@@ -175,6 +193,7 @@ class BoardOutline {
   BoardOutline as(BoardOutlineKind next) {
     if (next == kind) return this;
     return switch (next) {
+      BoardOutlineKind.none => BoardOutline.none(bounds),
       BoardOutlineKind.rectangle => BoardOutline.rectangle(bounds),
       BoardOutlineKind.circle => BoardOutline.circle(bounds),
       BoardOutlineKind.polygon => BoardOutline.polygon(
@@ -188,6 +207,8 @@ class BoardOutline {
                     center.dy + radius * math.sin(i * math.pi / 3),
                   ),
               ]
+            : kind == BoardOutlineKind.none
+            ? BoardOutline.rectangle(bounds).path
             : path,
       ),
     };

@@ -102,7 +102,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 21;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -313,6 +313,10 @@ class AppDatabase extends _$AppDatabase {
         await flag('board_zones', 'no_pours', true);
         await flag('board_zones', 'no_parts', false);
         await flag('board_zones', 'locked', false);
+      }
+      // v21: a net label's own text size.
+      if (from < 21) {
+        await m.addColumn(nets, nets.labelSize);
       }
     },
     beforeOpen: (details) async {

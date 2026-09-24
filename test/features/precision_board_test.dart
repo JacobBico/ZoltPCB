@@ -26,7 +26,10 @@ BoardPainter _painter(WidgetTester tester) => tester
     .whereType<BoardPainter>()
     .first;
 
-Future<(Project, BoardRepository)> _board(AppDatabase db, LibraryFileStorage storage) async {
+Future<(Project, BoardRepository)> _board(
+  AppDatabase db,
+  LibraryFileStorage storage,
+) async {
   final project = await ProjectRepository(db).create(name: 'Aim');
   final parts = PartRepository(db);
   final nets = NetRepository(db);
@@ -49,6 +52,26 @@ Future<(Project, BoardRepository)> _board(AppDatabase db, LibraryFileStorage sto
     await boards.updatePlacement(ref.copyWith(x: x, y: 35, placed: true));
   }
   return (project, boards);
+}
+
+/// Picks the Edge cut tool drawing [style], through the tool's own menu.
+Future<void> _edgeTool(WidgetTester tester, EdgeStyle style) async {
+  await tester.tap(find.byKey(const ValueKey('tool-edge')));
+  await settleApp(tester);
+  // A second tap on the chosen tool opens its menu.
+  await tester.tap(find.byKey(const ValueKey('tool-edge')));
+  await settleApp(tester);
+  await tester.ensureVisible(find.byKey(ValueKey('pick-${style.label}')));
+  await tester.tap(find.byKey(ValueKey('pick-${style.label}')));
+  await settleApp(tester);
+}
+
+/// Gives the board a drawn rectangle outline over its working area.
+Future<void> _drawnOutline(BoardRepository boards, String projectId) async {
+  final board = await boards.ensureBoard(projectId);
+  await boards.updateBoard(
+    board.withOutline(board.outline.as(BoardOutlineKind.rectangle)),
+  );
 }
 
 /// Pans the board so [board] sits under the crosshair.
@@ -253,8 +276,7 @@ void main() {
         footprintStorage: footprintStorage,
       );
 
-      await tester.tap(find.byIcon(Icons.content_cut).first);
-      await settleApp(tester);
+      await _edgeTool(tester, EdgeStyle.lines);
 
       for (final corner in const [
         Offset(26, 45),
@@ -284,10 +306,7 @@ void main() {
       await history.redo();
       await settleApp(tester);
       final redone = await boards.getEdges(project.id);
-      expect(
-        redone.map((e) => e.id).toSet(),
-        edges.map((e) => e.id).toSet(),
-      );
+      expect(redone.map((e) => e.id).toSet(), edges.map((e) => e.id).toSet());
     });
 
     testAppWithStorage('a chain back to its start is a closed cutout', (
@@ -297,6 +316,8 @@ void main() {
     ) async {
       final footprintStorage = InMemoryLibraryStorageFor();
       final (project, boards) = await _board(db, footprintStorage);
+      // With an outline already there, a closed shape is a hole in it.
+      await _drawnOutline(boards, project.id);
 
       await pumpApp(
         tester,
@@ -305,8 +326,7 @@ void main() {
         footprintStorage: footprintStorage,
       );
 
-      await tester.tap(find.byIcon(Icons.content_cut).first);
-      await settleApp(tester);
+      await _edgeTool(tester, EdgeStyle.lines);
 
       // Round a square and back to where it began — which is how an
       // internal cutout is drawn, rather than spawning a circle and typing
@@ -329,6 +349,125 @@ void main() {
       expect(edges, hasLength(1));
       expect(edges.single.kind, BoardEdgeKind.polygon);
       expect(edges.single.points, hasLength(4));
+    });
+  });
+
+  group('the board outline is drawn, not given', () {
+    testAppWithStorage('a new board has none, and a rectangle becomes it', (
+      tester,
+      db,
+      storage,
+    ) async {
+      final footprintStorage = InMemoryLibraryStorageFor();
+      final (project, boards) = await _board(db, footprintStorage);
+      expect((await boards.ensureBoard(project.id)).outline.isDrawn, isFalse);
+
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+
+      // The strip says what is missing, and takes you to the tool.
+      await tester.tap(find.byKey(const ValueKey('draw-outline-chip')));
+      await settleApp(tester);
+
+      await _aimAt(tester, const Offset(20, 25));
+      await tester.tap(find.text('CORNER'));
+      await settleApp(tester);
+      await _aimAt(tester, const Offset(60, 50));
+      // The second corner finishes it: no Finish to press.
+      await tester.tap(find.text('OPPOSITE'));
+      await settleApp(tester);
+
+      final board = await boards.ensureBoard(project.id);
+      expect(board.outline.kind, BoardOutlineKind.rectangle);
+      expect(board.outline.rect.left, closeTo(20, 1e-6));
+      expect(board.outline.rect.top, closeTo(25, 1e-6));
+      expect(board.outline.rect.width, closeTo(40, 1e-6));
+      expect(board.outline.rect.height, closeTo(25, 1e-6));
+      expect(await boards.getEdges(project.id), isEmpty);
+      expect(find.byKey(const ValueKey('draw-outline-chip')), findsNothing);
+    });
+
+    testAppWithStorage('with an outline, a circle is a round cutout', (
+      tester,
+      db,
+      storage,
+    ) async {
+      final footprintStorage = InMemoryLibraryStorageFor();
+      final (project, boards) = await _board(db, footprintStorage);
+      await _drawnOutline(boards, project.id);
+
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+
+      await _edgeTool(tester, EdgeStyle.circle);
+      await _aimAt(tester, const Offset(40, 45));
+      await tester.tap(find.text('CENTRE'));
+      await settleApp(tester);
+      await _aimAt(tester, const Offset(43, 45));
+      await tester.tap(find.text('RIM'));
+      await settleApp(tester);
+
+      final edges = await boards.getEdges(project.id);
+      expect(edges, hasLength(1));
+      expect(edges.single.kind, BoardEdgeKind.circle);
+      expect(edges.single.radius, closeTo(3, 1e-6));
+      expect(
+        (await boards.ensureBoard(project.id)).outline.kind,
+        BoardOutlineKind.rectangle,
+      );
+    });
+
+    testAppWithStorage('a triangle outline can be deleted and undone', (
+      tester,
+      db,
+      storage,
+    ) async {
+      final footprintStorage = InMemoryLibraryStorageFor();
+      final (project, boards) = await _board(db, footprintStorage);
+
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+
+      await _edgeTool(tester, EdgeStyle.triangle);
+      for (final corner in const [
+        Offset(20, 55),
+        Offset(60, 55),
+        Offset(40, 20),
+      ]) {
+        await _aimAt(tester, corner);
+        await tester.tap(find.textContaining(RegExp('START|CORNER')));
+        await settleApp(tester);
+      }
+      var board = await boards.ensureBoard(project.id);
+      expect(board.outline.kind, BoardOutlineKind.polygon);
+      expect(board.outline.points, hasLength(3));
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(PrecisionBoardPanel)),
+      );
+      final history = container.read(editHistoryProvider.notifier);
+      await history.undo();
+      await settleApp(tester);
+      board = await boards.ensureBoard(project.id);
+      expect(board.outline.isDrawn, isFalse);
+      await history.redo();
+      await settleApp(tester);
+      expect(
+        (await boards.ensureBoard(project.id)).outline.points,
+        hasLength(3),
+      );
     });
   });
 
@@ -600,7 +739,12 @@ void main() {
   ) async {
     final footprintStorage = InMemoryLibraryStorageFor();
     final (project, boards) = await _board(db, footprintStorage);
-    final board = await boards.ensureBoard(project.id);
+    // A drawn outline to take hold of: a new board has none.
+    final board = await boards.ensureBoard(project.id).then((b) async {
+      final drawn = b.withOutline(b.outline.as(BoardOutlineKind.rectangle));
+      await boards.updateBoard(drawn);
+      return drawn;
+    });
 
     await pumpApp(
       tester,
@@ -1399,7 +1543,12 @@ void main() {
   ) async {
     final footprintStorage = InMemoryLibraryStorageFor();
     final (project, boards) = await _board(db, footprintStorage);
-    final board = await boards.ensureBoard(project.id);
+    // A drawn outline to take hold of: a new board has none.
+    final board = await boards.ensureBoard(project.id).then((b) async {
+      final drawn = b.withOutline(b.outline.as(BoardOutlineKind.rectangle));
+      await boards.updateBoard(drawn);
+      return drawn;
+    });
 
     await pumpApp(
       tester,

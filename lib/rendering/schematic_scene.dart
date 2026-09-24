@@ -100,10 +100,17 @@ class NetLabel {
     required this.position,
     required this.pinned,
     this.primary = true,
+    this.size = defaultSize,
   });
+
+  /// KiCad's own label text height, in millimetres.
+  static const defaultSize = 1.27;
 
   final String netId;
   final String text;
+
+  /// Text height in millimetres of sheet.
+  final double size;
 
   /// The net's own label, the one that is stored and dragged. A named net
   /// whose pins are not all wired together — a bus label on two chips —
@@ -298,6 +305,7 @@ class SchematicScene {
                 : _defaultLabelSpot(islandWires, islandPins),
             pinned: first && stored != null,
             primary: first,
+            size: net.net.labelSize ?? NetLabel.defaultSize,
           ),
         );
       }
@@ -448,6 +456,7 @@ class SchematicScene {
             text: label.text,
             position: at,
             pinned: true,
+            size: label.size,
           )
         else
           label,
@@ -460,14 +469,14 @@ class SchematicScene {
   /// zoom, so the target is exactly the text the user can see.
   NetLabel? labelNear(
     Offset sheetPoint, {
-    required double halfHeightMm,
+    required double Function(NetLabel label) halfHeightMm,
     required double Function(NetLabel label) halfWidthMm,
   }) {
     for (final label in labels.reversed) {
       final box = Rect.fromCenter(
         center: label.position,
         width: halfWidthMm(label) * 2,
-        height: halfHeightMm * 2,
+        height: halfHeightMm(label) * 2,
       );
       if (box.contains(sheetPoint)) return label;
     }

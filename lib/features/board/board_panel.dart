@@ -86,7 +86,8 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
   /// start a route from it without a trip to the mode switch first.
   PlacedPad? _tappedPad;
 
-  /// Showing the board as it will be made, rather than editing it.
+  /// Showing the fabrication preview — the board as it will be made —
+  /// rather than editing it.
   bool _fabPreview = false;
   bool _fabBack = false;
 
@@ -904,6 +905,7 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
                   Icons.straighten,
                   'Net lengths',
                   () => showNetLengthsDialog(context, scene: scene),
+                  subtitle: netLengthsSummary(scene),
                 ),
                 item(
                   Icons.tune,
@@ -921,7 +923,7 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
                 ),
                 item(
                   Icons.photo_filter,
-                  'As it will be made',
+                  'Fabrication preview',
                   () => setState(() {
                     _cancelRoute();
                     _fabPreview = true;

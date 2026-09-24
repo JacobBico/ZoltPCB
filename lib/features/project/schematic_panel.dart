@@ -23,7 +23,6 @@ import 'cross_probe_view.dart';
 import 'pin_labels_dialog.dart';
 import 'note_dialog.dart';
 import 'erc_sheet.dart';
-import 'power_symbol_sidebar.dart';
 import 'starter_circuit.dart';
 import 'swap_dialog.dart';
 import 'starter_circuit_dialog.dart';
@@ -71,10 +70,6 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     _hintTimer?.cancel();
     super.dispose();
   }
-
-  /// The pin a supply is being chosen for, with the choices down the right.
-  PlacedPin? _supplyFor;
-  List<SymbolIndexEntry>? _supplies;
 
   /// A passing message shown in place of the action bar's title.
   String? _hint;
@@ -221,6 +216,11 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   // Pan/zoom state.
   Offset _gestureStartFocal = Offset.zero;
   SchematicViewport? _gestureStartViewport;
+
+  /// Wires are drawn by tapping pins and corners rather than by dragging.
+  /// See [WireGesture].
+  bool get _tapWiring =>
+      ref.read(appearanceProvider).wireGesture == WireGesture.tap;
 
   /// How close a tap has to land, in millimetres of sheet, to count as
   /// hitting a pin. Scaled by zoom so the target stays roughly a finger
@@ -379,18 +379,9 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
         Expanded(
           child: parts.isEmpty ? _emptySheet(pickerOpen) : _canvas(scene),
         ),
-        if (_supplyFor case final pin?)
-          PowerSymbolSidebar(
-            entries: _supplies,
-            pinLabel: pin.label,
-            onPick: (entry) {
-              setState(() => _supplyFor = null);
-              _attachPower(pin, entry);
-            },
-            onClose: () => setState(() => _supplyFor = null),
-          )
-        else if (pickerOpen)
+        if (pickerOpen)
           ComponentSidebar(
+            projectId: widget.project.id,
             onAdd: _addFromLibrary,
             onStarter: _addStarter,
             onSavedCircuit: _insertSaved,
@@ -494,7 +485,18 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   );
 
   /// Adds [entry] to the project, landing it where the user last tapped.
+  ///
+  /// A ground or supply picked while a pin is held goes on that pin, facing
+  /// away from it, already joined.
   Future<void> _addFromLibrary(SymbolIndexEntry entry) async {
+    if (entry.isPower) {
+      final pendingId = ref.read(pendingPinProvider);
+      final pin = _scene?.pins.where((p) => p.id == pendingId).firstOrNull;
+      if (pin != null) {
+        await _attachPower(pin, entry);
+        return;
+      }
+    }
     final symbol = await ref
         .read(symbolLibraryRepositoryProvider)
         .loadSymbol(entry.libId);
@@ -1060,17 +1062,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     );
   }
 
+  /// Ground and supplies are not here: they are parts like any other, in
+  /// the component picker. Picking one while a pin is held puts it on that
+  /// pin, which is what the buttons that used to be here did.
   List<CanvasAction> _pinActions(PlacedPin pin) => [
-    CanvasAction(
-      label: 'GND',
-      icon: Icons.vertical_align_bottom,
-      onPressed: () => _attachGround(pin),
-    ),
-    CanvasAction(
-      label: 'Power',
-      icon: Icons.bolt_outlined,
-      onPressed: () => _attachSupply(pin),
-    ),
     CanvasAction(
       label: pin.pin.noConnect ? 'Connect' : 'No conn',
       icon: pin.pin.noConnect ? Icons.link : Icons.close,
@@ -1110,6 +1105,11 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       onPressed: net == null ? null : () => _labelNet(net),
     ),
     CanvasAction(
+      label: 'Size',
+      icon: Icons.format_size,
+      onPressed: net == null ? null : () => _resizeLabel(label, net),
+    ),
+    CanvasAction(
       label: 'Snap back',
       icon: Icons.restart_alt,
       onPressed: label.pinned ? () => _resetLabel(label) : null,
@@ -1121,6 +1121,61 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       onPressed: net == null ? null : () => _clearLabel(net),
     ),
   ];
+
+  /// Text heights offered for a label, in millimetres. 1.27 is KiCad's.
+  static const _labelSizes = [1.0, 1.27, 1.5, 2.0, 2.54, 3.5, 5.0];
+
+  /// Changes how large a label's text is drawn.
+  Future<void> _resizeLabel(NetLabel label, NetWithEndpoints net) async {
+    final chosen = await showModalBottomSheet<double>(
+      context: context,
+      backgroundColor: KicadPalette.surface,
+      builder: (sheet) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${label.text} label size',
+                style: Theme.of(sheet).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final size in _labelSizes)
+                    ChoiceChip(
+                      key: ValueKey('label-size-$size'),
+                      label: Text(
+                        size == NetLabel.defaultSize
+                            ? '$size mm (KiCad)'
+                            : '$size mm',
+                      ),
+                      selected: (label.size - size).abs() < 1e-6,
+                      onSelected: (_) => Navigator.of(sheet).pop(size),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (chosen == null || !mounted) return;
+    final repository = ref.read(netRepositoryProvider);
+    final before = net.net.labelSize;
+    final after = chosen == NetLabel.defaultSize ? null : chosen;
+    if (before == after) return;
+    await repository.setNetLabelSize(net.net.id, after);
+    _record(
+      '${label.text} label size',
+      undo: () => repository.setNetLabelSize(net.net.id, before),
+      redo: () => repository.setNetLabelSize(net.net.id, after),
+    );
+  }
 
   /// Puts a dragged label back on the wire the drawing chose for it.
   Future<void> _resetLabel(NetLabel label) async {
@@ -1163,11 +1218,6 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     int? run,
   ) => [
     CanvasAction(
-      label: 'Straighten',
-      icon: Icons.horizontal_rule,
-      onPressed: () => _straighten(wire),
-    ),
-    CanvasAction(
       label: 'Label',
       icon: Icons.label_outline,
       onPressed: net == null ? null : () => _labelNet(net),
@@ -1187,56 +1237,6 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       onPressed: net == null ? null : () => _deleteNet(net),
     ),
   ];
-
-  /// Puts a wire back on its automatic route.
-  /// Takes a wire's own shape away, so the app routes it again.
-  Future<void> _straighten(RoutedWire wire) async {
-    final repository = ref.read(netRepositoryProvider);
-    final drawnId = wire.drawnId;
-    if (drawnId != null) {
-      final before =
-          (ref.read(sheetWiresProvider(widget.project.id)).value ??
-                  const <SchematicWire>[])
-              .where((w) => w.id == drawnId)
-              .firstOrNull;
-      if (before == null) return;
-      await repository.deleteWire(drawnId);
-      if (mounted) setState(() => _selectedWireKey = null);
-      _record(
-        'Re-route wire',
-        undo: () => repository.restoreWire(before),
-        redo: () => repository.deleteWire(drawnId),
-      );
-      return;
-    }
-
-    final before = List<double>.from(
-      ref.read(routeHintsProvider(widget.project.id)).value?[wire.key] ??
-          const <double>[],
-    );
-    if (before.isEmpty) return;
-    await repository.setRouteHint(
-      widget.project.id,
-      wire.pinAId,
-      wire.pinBId,
-      const [],
-    );
-    _record(
-      'Straighten wire',
-      undo: () => repository.setRouteHint(
-        widget.project.id,
-        wire.pinAId,
-        wire.pinBId,
-        before,
-      ),
-      redo: () => repository.setRouteHint(
-        widget.project.id,
-        wire.pinAId,
-        wire.pinBId,
-        const [],
-      ),
-    );
-  }
 
   Future<void> _labelNet(NetWithEndpoints net) async {
     final name = await showDialog<String>(
@@ -1923,42 +1923,6 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       .read(symbolLibraryRepositoryProvider)
       .search('', powerOnly: true, limit: 300);
 
-  /// Grounds a pin in one action.
-  ///
-  /// Ground is placed far more often than everything else put together, so
-  /// it skips the chooser entirely: the alternative is six taps — open the
-  /// picker, search, place, drag, tap pin, tap pin — repeated across a whole
-  /// sheet.
-  Future<void> _attachGround(PlacedPin pin) async {
-    final entries = await _powerSymbols();
-    if (!mounted) return;
-
-    final ground =
-        entries.where((e) => e.name.toUpperCase() == 'GND').firstOrNull ??
-        entries
-            .where((e) => e.name.toUpperCase().startsWith('GND'))
-            .firstOrNull;
-
-    if (ground == null) {
-      _notify('No ground symbol found — import the KiCad power library');
-      return;
-    }
-    await _attachPower(pin, ground);
-  }
-
-  /// Opens the supplies down the right of the sheet, the way parts are
-  /// chosen, with no keyboard until the search is actually wanted.
-  Future<void> _attachSupply(PlacedPin pin) async {
-    ref.read(componentPickerOpenProvider.notifier).set(false);
-    setState(() {
-      _supplyFor = pin;
-      _supplies = null;
-    });
-    final entries = await _powerSymbols();
-    if (!mounted || _supplyFor?.id != pin.id) return;
-    setState(() => _supplies = entries);
-  }
-
   /// Places [entry] facing [pin] and joins the two.
   Future<void> _attachPower(PlacedPin pin, SymbolIndexEntry entry) async {
     final result = await attachPower(
@@ -2306,7 +2270,14 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       // ordinary case — a filter's output, a supply rail — and until now it
       // could only be done by finding one of the pins already on the net.
       final pendingId = ref.read(pendingPinProvider);
-      if (pendingId != null) {
+      // Dragging is how wires are drawn: a tap never adds to one. Half-way
+      // through a wire, a stray tap leaves it be rather than throw away the
+      // corners already laid.
+      if (pendingId != null && !_tapWiring && _wireCorners.isNotEmpty) {
+        _notify('Drag on from the loose end, or press Finish');
+        return;
+      }
+      if (pendingId != null && _tapWiring) {
         final wire = scene.wireNear(sheet, _wireToleranceMm(viewport));
         if (wire != null) {
           final (run, _) = DrawnWireGeometry.nearestRun(wire.points, sheet);
@@ -2548,11 +2519,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
 
   /// Picks a pin up: highlights its net and puts its own actions on the bar.
   ///
-  /// Tapping a second pin used to connect the two. It has been taken out:
-  /// on a canvas where every tap answers, two taps a few seconds apart
-  /// joined things nobody meant to join, and the mistake is invisible until
-  /// the netlist reaches the desktop. Wiring is a drag out of a pin, which
-  /// cannot happen by accident.
+  /// With wires drawn by dragging (the default), that is all a tap does:
+  /// two taps a few seconds apart joining things nobody meant to join was
+  /// the mistake that made drag the default. With [WireGesture.tap] chosen
+  /// in Settings, a tap on a second pin ends the wire there instead.
   void _tapPin(SchematicScene scene, PlacedPin pin) {
     final notifier = ref.read(pendingPinProvider.notifier);
 
@@ -2562,14 +2532,21 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     final selectedWire = scene.wires
         .where((w) => w.key == _selectedWireKey)
         .firstOrNull;
-    if (selectedWire != null) {
+    if (selectedWire != null && _tapWiring) {
       unawaited(_joinPinToNet(scene, pin.id, selectedWire.netId));
       return;
     }
 
-    if (ref.read(pendingPinProvider) == pin.id) {
+    final pendingId = ref.read(pendingPinProvider);
+    if (pendingId == pin.id) {
       notifier.set(null);
       setState(() => _wireCorners = const []);
+      return;
+    }
+
+    // Wiring by taps: the second pin is where the wire ends.
+    if (pendingId != null && _tapWiring) {
+      unawaited(_connectPins(scene, pendingId, pin));
       return;
     }
 
@@ -2582,11 +2559,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     });
   }
 
-  /// Joins two pins, and draws the wire the drag took to get there.
+  /// Joins two pins, and draws the wire the drag or taps took to get there.
   ///
-  /// Only reachable by dragging a wire out of one pin and letting go on
-  /// another. That is deliberate: it is the one gesture that cannot be
-  /// mistaken for looking at something.
+  /// Reached by letting go of a dragged wire on a pin or, with wiring by
+  /// taps chosen, by tapping the pin it ends on.
   Future<void> _connectPins(
     SchematicScene scene,
     String fromId,
@@ -2711,7 +2687,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       // drawn — drags a wire out of it. Tighter than a tap's target, so a
       // part can still be picked up by its body right next to its pins.
       // Not with a group selected: a touch on it moves the group.
-      if (!_boxSelecting && _selectedUnitIds.isEmpty) {
+      if (!_tapWiring && !_boxSelecting && _selectedUnitIds.isEmpty) {
         final grab = math.max(0.6, 14 / viewport.pixelsPerMm);
         final pendingId = ref.read(pendingPinProvider);
         final end = _wireEnd(scene);
@@ -2840,9 +2816,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     final slack = math.max(0.0, (16 / viewport.pixelsPerMm));
     return scene.labelNear(
       sheet,
-      halfHeightMm: SchematicPainter.labelHeightMm + slack,
+      halfHeightMm: (label) =>
+          SchematicPainter.labelHalfHeightMm(label.size) + slack,
       halfWidthMm: (label) =>
-          SchematicPainter.labelHalfWidthMm(label.text) + slack,
+          SchematicPainter.labelHalfWidthMm(label.text, label.size) + slack,
     );
   }
 
@@ -3586,8 +3563,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       ref.read(editTransactionProvider)(edit);
 
   /// The sheet open in this project's schematic; null for the top sheet.
-  String? get _currentSheet =>
-      ref.read(openSheetProvider(widget.project.id));
+  String? get _currentSheet => ref.read(openSheetProvider(widget.project.id));
 
   /// Whether the segment model is in force.
   bool get _segmentWiring =>

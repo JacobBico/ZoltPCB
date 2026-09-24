@@ -62,6 +62,9 @@ Future<void> pumpApp(
   /// The wiring model the schematic uses, for tests about one or the other.
   WiringModel wiring = WiringModel.polyline,
 
+  /// How a wire is drawn out of a pin: dragged, unless a test says taps.
+  WireGesture wireGesture = WireGesture.drag,
+
   /// Extra overrides for the whole app — dialogs included, which a nested
   /// ProviderScope around [child] would not reach.
   List<Override> overrides = const [],
@@ -88,7 +91,9 @@ Future<void> pumpApp(
         exportDirectoryProvider.overrideWithValue(
           Directory('${Directory.systemTemp.path}/hintpcb_widget_exports'),
         ),
-        appearanceProvider.overrideWith(() => _FixedAppearance(wiring)),
+        appearanceProvider.overrideWith(
+          () => _FixedAppearance(wiring, wireGesture),
+        ),
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -159,10 +164,11 @@ Future<void> openRail(WidgetTester tester) async {
 /// to load: a widget test runs under a fake clock, where a database read on
 /// the way to the first frame would never come back.
 class _FixedAppearance extends AppearanceNotifier {
-  _FixedAppearance(this.wiring);
+  _FixedAppearance(this.wiring, this.wireGesture);
 
   final WiringModel wiring;
+  final WireGesture wireGesture;
 
   @override
-  Appearance build() => Appearance(wiring: wiring);
+  Appearance build() => Appearance(wiring: wiring, wireGesture: wireGesture);
 }

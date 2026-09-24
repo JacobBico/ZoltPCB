@@ -80,6 +80,7 @@ extension NetRowMapper on NetRow {
     projectId: projectId,
     name: name,
     labelAt: labelX == null || labelY == null ? null : Offset(labelX!, labelY!),
+    labelSize: labelSize,
     netClassId: netClassId,
     createdAt: createdAt,
   );

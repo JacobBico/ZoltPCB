@@ -25,6 +25,7 @@ enum DrcRule {
   unrouted('Unrouted'),
   offBoard('Outside the board'),
   unplaced('Not placed'),
+  noOutline('No board outline'),
   missingFootprint('No footprint'),
   orphanCopper('Copper on no net'),
   courtyardOverlap('Courtyards overlap'),
@@ -89,6 +90,19 @@ List<DrcViolation> checkBoard(BoardScene scene, {FabPreset? fab}) {
   final outlineBounds = scene.outlineBounds;
 
   // --- things that are simply not finished -----------------------------
+
+  if (!outline.isDrawn) {
+    violations.add(
+      DrcViolation(
+        rule: DrcRule.noOutline,
+        severity: DrcSeverity.error,
+        message:
+            'The board has no outline yet — draw one with the Edge cut tool '
+            'before ordering',
+        position: outlineBounds.center,
+      ),
+    );
+  }
 
   if (scene.unplaced.isNotEmpty) {
     violations.add(
@@ -340,12 +354,7 @@ List<DrcViolation> _keepoutViolations(BoardScene scene) {
       for (final footprint in scene.footprints) {
         if (!footprint.ref.placed) continue;
         if (!area.contains(footprint.bounds.center)) continue;
-        complain(
-          area,
-          footprint.part.reference,
-          footprint.bounds.center,
-          null,
-        );
+        complain(area, footprint.part.reference, footprint.bounds.center, null);
       }
     }
   }

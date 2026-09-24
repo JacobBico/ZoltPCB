@@ -450,7 +450,10 @@ class SchematicWriter {
             SAtom('label'),
             S.text(name),
             S.of('at', [at.dx, at.dy, 0]),
-            SymbolWriter.effects(justify: 'left bottom'),
+            SymbolWriter.effects(
+              size: net.net.labelSize ?? SymbolWriter.defaultTextSize,
+              justify: 'left bottom',
+            ),
             SList([SAtom('uuid'), S.text(endpoint.node.id)]),
           ]),
         );

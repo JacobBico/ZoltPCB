@@ -293,15 +293,18 @@ class SchematicPainter extends CustomPainter {
       );
   }
 
-  /// How tall a net label's text is drawn, in millimetres of sheet. Shared
-  /// with hit-testing so a label is grabbable exactly where it is drawn.
-  static const labelHeightMm = 1.6;
+  /// How tall a net label's text is drawn unless it has been resized, in
+  /// millimetres of sheet.
+  static const labelHeightMm = NetLabel.defaultSize;
 
-  /// Half the width of a label's box, in millimetres — a rough advance per
-  /// character plus the chip's padding. Rough is enough: the box only has
-  /// to be finger-sized and to follow the text's length.
-  static double labelHalfWidthMm(String text) =>
-      text.length * labelHeightMm * 0.34 + 0.9;
+  /// Half the width of a label's text, in millimetres — a rough advance per
+  /// character of the monospaced font. Shared with hit-testing, so a label
+  /// is grabbable exactly where it is drawn.
+  static double labelHalfWidthMm(String text, [double size = labelHeightMm]) =>
+      text.length * size * 0.31 + size * 0.2;
+
+  /// Half the height of a label's text, in millimetres.
+  static double labelHalfHeightMm([double size = labelHeightMm]) => size * 0.6;
 
   void _paintPage(Canvas canvas) {
     final page = _rectToScreen(scene.pageRect);
@@ -388,7 +391,41 @@ class SchematicPainter extends CustomPainter {
 
     _paintSelectedRun(canvas);
     _paintJunctions(canvas);
+    _paintLooseEnds(canvas);
+  }
 
+  /// Loose ends, per list of wires: worked out once, not every frame.
+  static final _looseEndsCache = Expando<List<Offset>>();
+
+  /// A small open square at every wire end that is joined to nothing, the
+  /// way KiCad marks a dangling wire.
+  void _paintLooseEnds(Canvas canvas) {
+    final wires = scene.wires;
+    if (wires.isEmpty) return;
+    final ends = _looseEndsCache[wires] ??= DrawnWireGeometry.looseEnds(
+      [for (final wire in wires) wire.points],
+      anchors: [
+        for (final pin in scene.pins) pin.sheetPosition,
+        for (final view in sheetBoxes)
+          for (var i = 0; i < view.pins.length; i++) view.pinAt(i),
+      ],
+    );
+    if (ends.isEmpty) return;
+    final half = math.max(3.5, viewport.lengthToScreen(0.5));
+    final paint = Paint()
+      ..color = colors.wire.withValues(alpha: 0.6)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+    for (final end in ends) {
+      canvas.drawRect(
+        Rect.fromCenter(
+          center: viewport.toScreen(end),
+          width: half * 2,
+          height: half * 2,
+        ),
+        paint,
+      );
+    }
   }
 
   /// Where each wire hops over another, by segment.
@@ -748,48 +785,60 @@ class SchematicPainter extends CustomPainter {
   /// The gap between a symbol and its fields, in millimetres.
   static const fieldGapMm = 0.9;
 
-  /// The name of each named net, drawn once, on the wire.
+  /// The name of each named net, drawn once, just above its wire.
   ///
-  /// Drawn on a small filled chip: a label sitting on the drawing has to be
-  /// legible where it crosses a wire, and it has to look like something you
-  /// can pick up and move, because it is.
+  /// Plain text, the way KiCad draws a label, with a thin outline in the
+  /// sheet's own colour so it stays legible where it crosses a wire. A box
+  /// appears round it only while it is picked, to show what a drag will
+  /// move.
   void _paintNetLabels(Canvas canvas) {
     if (viewport.pixelsPerMm < 3.2) return;
 
     for (final label in scene.labels) {
       final selected = label.netId == highlightedNetId;
+      final colour = selected ? colors.highlight : colors.label;
       final centre = viewport.toScreen(label.position);
-      final fontSize = math.max(9.0, viewport.lengthToScreen(labelHeightMm));
-      final halfWidth = viewport.lengthToScreen(labelHalfWidthMm(label.text));
-      final halfHeight = viewport.lengthToScreen(labelHeightMm);
+      final fontSize = math.max(8.0, viewport.lengthToScreen(label.size));
 
-      final box = RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: centre,
-          width: halfWidth * 2,
-          height: halfHeight * 2,
+      TextPainter text(Paint foreground) => TextPainter(
+        text: TextSpan(
+          text: label.text,
+          style: TextStyle(
+            foreground: foreground,
+            fontSize: fontSize,
+            fontFamily: 'monospace',
+            fontFamilyFallback: const ['monospace', 'Roboto Mono', 'Courier'],
+            height: 1.0,
+          ),
         ),
-        Radius.circular(halfHeight * 0.45),
-      );
-      canvas.drawRRect(
-        box,
-        Paint()..color = colors.canvas.withValues(alpha: 0.88),
-      );
-      canvas.drawRRect(
-        box,
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      final halo = text(
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = selected ? 1.6 : 0.9
-          ..color = selected ? colors.highlight : colors.label,
+          ..strokeWidth = math.max(2.0, fontSize * 0.22)
+          ..strokeJoin = StrokeJoin.round
+          ..color = colors.canvas.withValues(alpha: 0.9),
       );
-      drawCanvasText(
-        canvas,
-        text: label.text,
-        anchor: Offset(centre.dx, centre.dy - fontSize * 0.5),
-        color: selected ? colors.highlight : colors.label,
-        fontSize: fontSize,
-        align: TextAlign.center,
-      );
+      final ink = text(Paint()..color = colour);
+      final topLeft = centre - Offset(ink.width / 2, ink.height / 2);
+      halo.paint(canvas, topLeft);
+      ink.paint(canvas, topLeft);
+
+      if (selected) {
+        canvas.drawRect(
+          Rect.fromCenter(
+            center: centre,
+            width: ink.width + 6,
+            height: ink.height + 4,
+          ),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1
+            ..color = colors.highlight.withValues(alpha: 0.7),
+        );
+      }
     }
   }
 

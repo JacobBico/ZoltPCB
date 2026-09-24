@@ -317,4 +317,44 @@ void main() {
       );
     });
   });
+
+  group('looseEnds', () {
+    test('an end on a pin or on another wire is not loose', () {
+      final ends = DrawnWireGeometry.looseEnds(
+        [
+          [const Offset(0, 0), const Offset(10, 0)],
+          // Ends part-way along the first wire.
+          [const Offset(5, 0), const Offset(5, 8)],
+        ],
+        anchors: const [Offset(0, 0), Offset(10, 0)],
+      );
+      expect(ends, [const Offset(5, 8)]);
+    });
+
+    test('a wire that stops short of a pin is loose at that end', () {
+      final ends = DrawnWireGeometry.looseEnds(
+        [
+          [const Offset(0, 0), const Offset(0, 5), const Offset(9.9, 5)],
+        ],
+        anchors: const [Offset(0, 0), Offset(10, 5)],
+      );
+      expect(ends, [const Offset(9.9, 5)]);
+    });
+
+    test('a wire ending on its own corner is not loose', () {
+      final ends = DrawnWireGeometry.looseEnds(
+        [
+          [
+            const Offset(0, 0),
+            const Offset(10, 0),
+            const Offset(10, 10),
+            const Offset(5, 10),
+            const Offset(5, 0),
+          ],
+        ],
+        anchors: const [Offset(0, 0)],
+      );
+      expect(ends, isEmpty);
+    });
+  });
 }

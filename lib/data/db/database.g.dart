@@ -3280,6 +3280,17 @@ class $NetsTable extends Nets with TableInfo<$NetsTable, NetRow> {
     type: DriftSqlType.double,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _labelSizeMeta = const VerificationMeta(
+    'labelSize',
+  );
+  @override
+  late final GeneratedColumn<double> labelSize = GeneratedColumn<double>(
+    'label_size',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _netClassIdMeta = const VerificationMeta(
     'netClassId',
   );
@@ -3312,6 +3323,7 @@ class $NetsTable extends Nets with TableInfo<$NetsTable, NetRow> {
     name,
     labelX,
     labelY,
+    labelSize,
     netClassId,
     createdAt,
   ];
@@ -3356,6 +3368,12 @@ class $NetsTable extends Nets with TableInfo<$NetsTable, NetRow> {
       context.handle(
         _labelYMeta,
         labelY.isAcceptableOrUnknown(data['label_y']!, _labelYMeta),
+      );
+    }
+    if (data.containsKey('label_size')) {
+      context.handle(
+        _labelSizeMeta,
+        labelSize.isAcceptableOrUnknown(data['label_size']!, _labelSizeMeta),
       );
     }
     if (data.containsKey('net_class_id')) {
@@ -3404,6 +3422,10 @@ class $NetsTable extends Nets with TableInfo<$NetsTable, NetRow> {
         DriftSqlType.double,
         data['${effectivePrefix}label_y'],
       ),
+      labelSize: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}label_size'],
+      ),
       netClassId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}net_class_id'],
@@ -3434,6 +3456,10 @@ class NetRow extends DataClass implements Insertable<NetRow> {
   final double? labelX;
   final double? labelY;
 
+  /// The label's text height in millimetres, once the user has changed it.
+  /// Null is KiCad's own 1.27 mm.
+  final double? labelSize;
+
   /// The net class the board routes this net with; null for the default.
   final String? netClassId;
   final DateTime createdAt;
@@ -3443,6 +3469,7 @@ class NetRow extends DataClass implements Insertable<NetRow> {
     this.name,
     this.labelX,
     this.labelY,
+    this.labelSize,
     this.netClassId,
     required this.createdAt,
   });
@@ -3459,6 +3486,9 @@ class NetRow extends DataClass implements Insertable<NetRow> {
     }
     if (!nullToAbsent || labelY != null) {
       map['label_y'] = Variable<double>(labelY);
+    }
+    if (!nullToAbsent || labelSize != null) {
+      map['label_size'] = Variable<double>(labelSize);
     }
     if (!nullToAbsent || netClassId != null) {
       map['net_class_id'] = Variable<String>(netClassId);
@@ -3478,6 +3508,9 @@ class NetRow extends DataClass implements Insertable<NetRow> {
       labelY: labelY == null && nullToAbsent
           ? const Value.absent()
           : Value(labelY),
+      labelSize: labelSize == null && nullToAbsent
+          ? const Value.absent()
+          : Value(labelSize),
       netClassId: netClassId == null && nullToAbsent
           ? const Value.absent()
           : Value(netClassId),
@@ -3496,6 +3529,7 @@ class NetRow extends DataClass implements Insertable<NetRow> {
       name: serializer.fromJson<String?>(json['name']),
       labelX: serializer.fromJson<double?>(json['labelX']),
       labelY: serializer.fromJson<double?>(json['labelY']),
+      labelSize: serializer.fromJson<double?>(json['labelSize']),
       netClassId: serializer.fromJson<String?>(json['netClassId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
@@ -3509,6 +3543,7 @@ class NetRow extends DataClass implements Insertable<NetRow> {
       'name': serializer.toJson<String?>(name),
       'labelX': serializer.toJson<double?>(labelX),
       'labelY': serializer.toJson<double?>(labelY),
+      'labelSize': serializer.toJson<double?>(labelSize),
       'netClassId': serializer.toJson<String?>(netClassId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
@@ -3520,6 +3555,7 @@ class NetRow extends DataClass implements Insertable<NetRow> {
     Value<String?> name = const Value.absent(),
     Value<double?> labelX = const Value.absent(),
     Value<double?> labelY = const Value.absent(),
+    Value<double?> labelSize = const Value.absent(),
     Value<String?> netClassId = const Value.absent(),
     DateTime? createdAt,
   }) => NetRow(
@@ -3528,6 +3564,7 @@ class NetRow extends DataClass implements Insertable<NetRow> {
     name: name.present ? name.value : this.name,
     labelX: labelX.present ? labelX.value : this.labelX,
     labelY: labelY.present ? labelY.value : this.labelY,
+    labelSize: labelSize.present ? labelSize.value : this.labelSize,
     netClassId: netClassId.present ? netClassId.value : this.netClassId,
     createdAt: createdAt ?? this.createdAt,
   );
@@ -3538,6 +3575,7 @@ class NetRow extends DataClass implements Insertable<NetRow> {
       name: data.name.present ? data.name.value : this.name,
       labelX: data.labelX.present ? data.labelX.value : this.labelX,
       labelY: data.labelY.present ? data.labelY.value : this.labelY,
+      labelSize: data.labelSize.present ? data.labelSize.value : this.labelSize,
       netClassId: data.netClassId.present
           ? data.netClassId.value
           : this.netClassId,
@@ -3553,6 +3591,7 @@ class NetRow extends DataClass implements Insertable<NetRow> {
           ..write('name: $name, ')
           ..write('labelX: $labelX, ')
           ..write('labelY: $labelY, ')
+          ..write('labelSize: $labelSize, ')
           ..write('netClassId: $netClassId, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
@@ -3560,8 +3599,16 @@ class NetRow extends DataClass implements Insertable<NetRow> {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, projectId, name, labelX, labelY, netClassId, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    projectId,
+    name,
+    labelX,
+    labelY,
+    labelSize,
+    netClassId,
+    createdAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -3571,6 +3618,7 @@ class NetRow extends DataClass implements Insertable<NetRow> {
           other.name == this.name &&
           other.labelX == this.labelX &&
           other.labelY == this.labelY &&
+          other.labelSize == this.labelSize &&
           other.netClassId == this.netClassId &&
           other.createdAt == this.createdAt);
 }
@@ -3581,6 +3629,7 @@ class NetsCompanion extends UpdateCompanion<NetRow> {
   final Value<String?> name;
   final Value<double?> labelX;
   final Value<double?> labelY;
+  final Value<double?> labelSize;
   final Value<String?> netClassId;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
@@ -3590,6 +3639,7 @@ class NetsCompanion extends UpdateCompanion<NetRow> {
     this.name = const Value.absent(),
     this.labelX = const Value.absent(),
     this.labelY = const Value.absent(),
+    this.labelSize = const Value.absent(),
     this.netClassId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -3600,6 +3650,7 @@ class NetsCompanion extends UpdateCompanion<NetRow> {
     this.name = const Value.absent(),
     this.labelX = const Value.absent(),
     this.labelY = const Value.absent(),
+    this.labelSize = const Value.absent(),
     this.netClassId = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
@@ -3612,6 +3663,7 @@ class NetsCompanion extends UpdateCompanion<NetRow> {
     Expression<String>? name,
     Expression<double>? labelX,
     Expression<double>? labelY,
+    Expression<double>? labelSize,
     Expression<String>? netClassId,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
@@ -3622,6 +3674,7 @@ class NetsCompanion extends UpdateCompanion<NetRow> {
       if (name != null) 'name': name,
       if (labelX != null) 'label_x': labelX,
       if (labelY != null) 'label_y': labelY,
+      if (labelSize != null) 'label_size': labelSize,
       if (netClassId != null) 'net_class_id': netClassId,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
@@ -3634,6 +3687,7 @@ class NetsCompanion extends UpdateCompanion<NetRow> {
     Value<String?>? name,
     Value<double?>? labelX,
     Value<double?>? labelY,
+    Value<double?>? labelSize,
     Value<String?>? netClassId,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
@@ -3644,6 +3698,7 @@ class NetsCompanion extends UpdateCompanion<NetRow> {
       name: name ?? this.name,
       labelX: labelX ?? this.labelX,
       labelY: labelY ?? this.labelY,
+      labelSize: labelSize ?? this.labelSize,
       netClassId: netClassId ?? this.netClassId,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
@@ -3668,6 +3723,9 @@ class NetsCompanion extends UpdateCompanion<NetRow> {
     if (labelY.present) {
       map['label_y'] = Variable<double>(labelY.value);
     }
+    if (labelSize.present) {
+      map['label_size'] = Variable<double>(labelSize.value);
+    }
     if (netClassId.present) {
       map['net_class_id'] = Variable<String>(netClassId.value);
     }
@@ -3688,6 +3746,7 @@ class NetsCompanion extends UpdateCompanion<NetRow> {
           ..write('name: $name, ')
           ..write('labelX: $labelX, ')
           ..write('labelY: $labelY, ')
+          ..write('labelSize: $labelSize, ')
           ..write('netClassId: $netClassId, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
@@ -21493,6 +21552,7 @@ typedef $$NetsTableCreateCompanionBuilder =
       Value<String?> name,
       Value<double?> labelX,
       Value<double?> labelY,
+      Value<double?> labelSize,
       Value<String?> netClassId,
       required DateTime createdAt,
       Value<int> rowid,
@@ -21504,6 +21564,7 @@ typedef $$NetsTableUpdateCompanionBuilder =
       Value<String?> name,
       Value<double?> labelX,
       Value<double?> labelY,
+      Value<double?> labelSize,
       Value<String?> netClassId,
       Value<DateTime> createdAt,
       Value<int> rowid,
@@ -21681,6 +21742,11 @@ class $$NetsTableFilterComposer extends Composer<_$AppDatabase, $NetsTable> {
 
   ColumnFilters<double> get labelY => $composableBuilder(
     column: $table.labelY,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get labelSize => $composableBuilder(
+    column: $table.labelSize,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -21914,6 +21980,11 @@ class $$NetsTableOrderingComposer extends Composer<_$AppDatabase, $NetsTable> {
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get labelSize => $composableBuilder(
+    column: $table.labelSize,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -21986,6 +22057,9 @@ class $$NetsTableAnnotationComposer
 
   GeneratedColumn<double> get labelY =>
       $composableBuilder(column: $table.labelY, builder: (column) => column);
+
+  GeneratedColumn<double> get labelSize =>
+      $composableBuilder(column: $table.labelSize, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -22229,6 +22303,7 @@ class $$NetsTableTableManager
                 Value<String?> name = const Value.absent(),
                 Value<double?> labelX = const Value.absent(),
                 Value<double?> labelY = const Value.absent(),
+                Value<double?> labelSize = const Value.absent(),
                 Value<String?> netClassId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -22238,6 +22313,7 @@ class $$NetsTableTableManager
                 name: name,
                 labelX: labelX,
                 labelY: labelY,
+                labelSize: labelSize,
                 netClassId: netClassId,
                 createdAt: createdAt,
                 rowid: rowid,
@@ -22249,6 +22325,7 @@ class $$NetsTableTableManager
                 Value<String?> name = const Value.absent(),
                 Value<double?> labelX = const Value.absent(),
                 Value<double?> labelY = const Value.absent(),
+                Value<double?> labelSize = const Value.absent(),
                 Value<String?> netClassId = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
@@ -22258,6 +22335,7 @@ class $$NetsTableTableManager
                 name: name,
                 labelX: labelX,
                 labelY: labelY,
+                labelSize: labelSize,
                 netClassId: netClassId,
                 createdAt: createdAt,
                 rowid: rowid,

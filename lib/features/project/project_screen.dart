@@ -18,14 +18,16 @@ import '../projects/project_editor_dialog.dart';
 import 'backup_actions.dart';
 import 'components_panel.dart';
 import 'export_panel.dart';
-import 'nets_panel.dart';
 import 'schematic_panel.dart';
 
 /// Sections of the project workspace.
+///
+/// There is no Components or Nets section any more. The parts list is a tab
+/// of the Overview, and connections are made on the schematic, which does
+/// everything the tap-two-pins Nets page did and shows the result. The two
+/// panels are kept, unlisted, while the rest settles.
 enum ProjectSection {
   overview('Overview', Icons.description_outlined),
-  components('Components', Icons.memory_outlined),
-  nets('Nets', Icons.account_tree_outlined),
   schematic('Schematic', Icons.grid_on_outlined),
   board('Board', Icons.developer_board_outlined),
   panel('Panelization', Icons.grid_view_outlined),
@@ -77,7 +79,6 @@ class _ProjectScreenState extends ConsumerState<ProjectScreen> {
     final project = ref.watch(projectProvider(widget.projectId));
     final loaded = project.value;
     final parts = ref.watch(projectPartsProvider(widget.projectId)).value;
-    final nets = ref.watch(projectNetsProvider(widget.projectId)).value;
 
     return Scaffold(
       body: Column(
@@ -156,13 +157,10 @@ class _ProjectScreenState extends ConsumerState<ProjectScreen> {
                       RailEntry(
                         label: section.label,
                         icon: section.icon,
-                        badge: switch (section) {
-                          ProjectSection.components =>
-                            parts == null ? null : '${parts.length}',
-                          ProjectSection.nets =>
-                            nets == null ? null : '${nets.length}',
-                          _ => null,
-                        },
+                        badge:
+                            section == ProjectSection.overview && parts != null
+                            ? '${parts.length}'
+                            : null,
                         children: section == ProjectSection.schematic
                             ? _sheetEntries(value)
                             : const [],
@@ -306,11 +304,6 @@ class _ProjectScreenState extends ConsumerState<ProjectScreen> {
     ProjectSection.board ||
     ProjectSection.panel ||
     ProjectSection.production => const SizedBox.shrink(),
-    ProjectSection.components || ProjectSection.nets => FilledButton.icon(
-      onPressed: () => ProjectComponentsPanel.add(context, project),
-      icon: const Icon(Icons.add, size: 18),
-      label: const Text('ADD COMPONENT'),
-    ),
     _ => OutlinedButton.icon(
       onPressed: () => _editProperties(project),
       icon: const Icon(Icons.tune, size: 16),
@@ -320,8 +313,6 @@ class _ProjectScreenState extends ConsumerState<ProjectScreen> {
 
   Widget _panel(Project project) => switch (_section) {
     ProjectSection.overview => _OverviewPanel(project: project),
-    ProjectSection.components => ProjectComponentsPanel(project: project),
-    ProjectSection.nets => NetsPanel(project: project),
     ProjectSection.schematic => SchematicPanel(
       project: project,
       onShowBoard: () => setState(() => _section = ProjectSection.board),
@@ -368,6 +359,36 @@ class _OverviewPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final parts = ref.watch(projectPartsProvider(project.id)).value;
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            tabs: [
+              const Tab(key: ValueKey('overview-summary-tab'), text: 'Summary'),
+              Tab(
+                key: const ValueKey('overview-parts-tab'),
+                text: parts == null ? 'Parts' : 'Parts (${parts.length})',
+              ),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _summary(ref),
+                ProjectComponentsPanel(project: project),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _summary(WidgetRef ref) {
     final parts = ref.watch(projectPartsProvider(project.id));
     final nets = ref.watch(projectNetsProvider(project.id));
 

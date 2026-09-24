@@ -252,6 +252,42 @@ abstract final class DrawnWireGeometry {
     return dots;
   }
 
+  /// The ends of [wires] that touch nothing: no pin in [anchors], and no
+  /// other wire, whether at its end, a corner or part-way along.
+  ///
+  /// KiCad marks these with a small square, because a wire that stops a
+  /// hair short of a pin looks exactly like one that reaches it and is the
+  /// most common way a schematic ends up quietly unconnected.
+  static List<Offset> looseEnds(
+    List<List<Offset>> wires, {
+    Iterable<Offset> anchors = const [],
+  }) {
+    const tolerance = 0.01;
+    final pins = anchors.toList();
+    final loose = <Offset>[];
+    for (var w = 0; w < wires.length; w++) {
+      final wire = wires[w];
+      if (wire.length < 2) continue;
+      for (final atStart in const [true, false]) {
+        final end = atStart ? wire.first : wire.last;
+        if (pins.any((pin) => (pin - end).distance < tolerance)) continue;
+        // The run the end belongs to reaches it by definition.
+        final ownRun = atStart ? 0 : wire.length - 2;
+        var touches = false;
+        for (var o = 0; o < wires.length && !touches; o++) {
+          final other = wires[o];
+          for (var i = 0; i < other.length - 1 && !touches; i++) {
+            if (o == w && i == ownRun) continue;
+            touches =
+                _distanceToSegment(end, other[i], other[i + 1]) < tolerance;
+          }
+        }
+        if (!touches) loose.add(end);
+      }
+    }
+    return loose;
+  }
+
   /// [points] with corner [index] moved to [to], the runs on either side of
   /// it bending to keep up — the way a corner is dragged in KiCad.
   static List<Offset> moveVertex(List<Offset> points, int index, Offset to) {

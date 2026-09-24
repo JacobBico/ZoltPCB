@@ -106,6 +106,52 @@ enum PourStyle {
   final String hint;
 }
 
+/// What the Edge cut tool draws.
+///
+/// The board's own outline is drawn with the same tool: on a board with no
+/// outline yet, the first closed shape becomes it. After that a closed
+/// shape is a cutout, and lines and arcs are slots and notches.
+enum EdgeStyle {
+  lines(
+    'Lines',
+    Icons.polyline_outlined,
+    'Place corner by corner; back to the start closes the shape',
+    null,
+  ),
+  rectangle(
+    'Rectangle',
+    Icons.crop_square,
+    'Place one corner, then the opposite one',
+    2,
+  ),
+  circle(
+    'Circle',
+    Icons.circle_outlined,
+    'Place the centre, then a point on the rim',
+    2,
+  ),
+  triangle('Triangle', Icons.change_history, 'Place the three corners', 3),
+  arc(
+    'Arc',
+    Icons.architecture,
+    'Place the start, a point it passes through, then the end',
+    3,
+  );
+
+  const EdgeStyle(this.label, this.icon, this.hint, this.points);
+
+  final String label;
+  final IconData icon;
+  final String hint;
+
+  /// How many points make the shape, after which it is finished without
+  /// being asked. Null for a chain of lines, which goes on until Finish.
+  final int? points;
+
+  /// Whether the shape encloses an area — a board, or a hole in one.
+  bool get closed => this != lines && this != arc;
+}
+
 /// What the Via tool puts down.
 ///
 /// A via is what you want nine times out of ten; a hole, a fiducial and a
@@ -271,6 +317,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   RouteStyle _routeStyle = RouteStyle.track;
   ViaStyle _viaStyle = ViaStyle.via;
   PourStyle _pourStyle = PourStyle.copper;
+  EdgeStyle _edgeStyle = EdgeStyle.rectangle;
 
   /// The loops a meander draws, while that is what the Route tool is set
   /// to. Kept between runs: the shape you want is a property of the board,
@@ -498,6 +545,33 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
               top: 0,
               child: _topStrip(scene, parts),
             ),
+            // A new board has no edge until one is drawn. Said on the board
+            // rather than on the strip, which has no room to spare, and only
+            // until the Edge cut tool is in hand.
+            if (!scene.outline.isDrawn && !_fabPreview && _tool != AimTool.edge)
+              Positioned(
+                top: 52,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: ActionChip(
+                    key: const ValueKey('draw-outline-chip'),
+                    avatar: Icon(
+                      Icons.crop_square,
+                      size: 16,
+                      color: KicadPalette.warning,
+                    ),
+                    label: const Text('No board outline yet — draw one'),
+                    backgroundColor: KicadPalette.surface.withValues(
+                      alpha: 0.94,
+                    ),
+                    side: BorderSide(color: KicadPalette.warning),
+                    onPressed: () => _pickEdgeStyle(
+                      _edgeStyle.closed ? _edgeStyle : EdgeStyle.rectangle,
+                    ),
+                  ),
+                ),
+              ),
             Positioned(
               left: 10,
               right: 10,
@@ -777,6 +851,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         BoardOutlineKind.polygon => BoardOutline.polygon([
           for (final p in outline.points) p + delta,
         ]),
+        BoardOutlineKind.none => outline,
       };
 
   /// Where the crosshair is pointing, after snapping.
@@ -833,8 +908,58 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   List<Offset> _pendingPath(Offset at) {
     // A bus shows its lanes, not the one path they follow.
     if (_points.isEmpty || _tool == AimTool.bus) return const [];
+    if (_tool == AimTool.edge) return _edgePreview([..._points, at]);
     if (_tool != AimTool.route) return [..._points, at];
     return [..._points, ..._legsTo(at)];
+  }
+
+  /// The edge shape [points] make so far, drawn as the shape rather than as
+  /// the points: a rectangle from its two corners, a circle round its
+  /// centre.
+  List<Offset> _edgePreview(List<Offset> points) {
+    final shape = _edgeShape(points);
+    if (shape == null) return points;
+    final (kind, at) = shape;
+    if (kind == BoardEdgeKind.line || kind == BoardEdgeKind.polygon) {
+      return kind == BoardEdgeKind.polygon ? [...at, at.first] : at;
+    }
+    final path = BoardEdge(id: '', projectId: '', kind: kind, points: at).path;
+    return [
+      for (final metric in path.computeMetrics())
+        for (var d = 0.0; d <= metric.length; d += metric.length / 64)
+          metric.getTangentForOffset(d)!.position,
+    ];
+  }
+
+  /// What the points placed with the current [EdgeStyle] make, as an edge
+  /// of some kind: null while there are not enough of them.
+  (BoardEdgeKind, List<Offset>)? _edgeShape(List<Offset> points) {
+    switch (_edgeStyle) {
+      case EdgeStyle.lines:
+        if (points.length < 2) return null;
+        final closed =
+            points.length >= 4 &&
+            (points.last - points.first).distance <= math.max(_grid, 0.2);
+        return closed
+            ? (BoardEdgeKind.polygon, points.sublist(0, points.length - 1))
+            : (BoardEdgeKind.line, points);
+      case EdgeStyle.rectangle:
+        if (points.length < 2) return null;
+        final r = Rect.fromPoints(points[0], points[1]);
+        return (
+          BoardEdgeKind.polygon,
+          [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft],
+        );
+      case EdgeStyle.circle:
+        if (points.length < 2) return null;
+        return (BoardEdgeKind.circle, [points[0], points[1]]);
+      case EdgeStyle.triangle:
+        if (points.length < 3) return null;
+        return (BoardEdgeKind.polygon, points.sublist(0, 3));
+      case EdgeStyle.arc:
+        if (points.length < 3) return null;
+        return (BoardEdgeKind.arc, points.sublist(0, 3));
+    }
   }
 
   void _onPanZoom(ScaleUpdateDetails details) {
@@ -922,6 +1047,17 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                           onPressed: _tool == AimTool.zone
                               ? _choosePourStyle
                               : () => _pickPourStyle(_pourStyle),
+                        )
+                      else if (tool == AimTool.edge)
+                        _ToolChip(
+                          key: const ValueKey('tool-edge'),
+                          icon: _edgeStyle.icon,
+                          label: _edgeStyle.label,
+                          selected: _tool == AimTool.edge,
+                          hasMenu: true,
+                          onPressed: _tool == AimTool.edge
+                              ? _chooseEdgeStyle
+                              : () => _pickEdgeStyle(_edgeStyle),
                         )
                       else if (tool == AimTool.via)
                         _ToolChip(
@@ -1063,7 +1199,14 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     return switch (_tool) {
       AimTool.select => 'PLACE',
       AimTool.route => _points.isEmpty ? 'START' : 'CORNER',
-      AimTool.zone || AimTool.edge => _points.isEmpty ? 'START' : 'CORNER',
+      AimTool.zone => _points.isEmpty ? 'START' : 'CORNER',
+      AimTool.edge => switch (_edgeStyle) {
+        EdgeStyle.lines ||
+        EdgeStyle.triangle => _points.isEmpty ? 'START' : 'CORNER',
+        EdgeStyle.rectangle => _points.isEmpty ? 'CORNER' : 'OPPOSITE',
+        EdgeStyle.circle => _points.isEmpty ? 'CENTRE' : 'RIM',
+        EdgeStyle.arc => const ['START', 'THROUGH', 'END'][_points.length % 3],
+      },
       AimTool.via => 'VIA',
       AimTool.measure => _measureFrom == null ? 'FROM' : 'TO',
       AimTool.region => _regionFrom == null ? 'CORNER' : 'FINISH',
@@ -1176,16 +1319,18 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
             label: 'Via + flip',
             onPressed: () => _viaAndSwitch(scene),
           ),
-        _Chip(
-          icon: Icons.check,
-          label: switch (_tool) {
-            AimTool.zone => 'Close pour',
-            AimTool.edge => 'Finish cut',
-            AimTool.bus => 'Lay ${_busLanes.length}',
-            _ => 'Finish',
-          },
-          onPressed: () => _finish(scene),
-        ),
+        // A shape with a set number of points finishes on its last one.
+        if (_tool != AimTool.edge || _edgeStyle.points == null)
+          _Chip(
+            icon: Icons.check,
+            label: switch (_tool) {
+              AimTool.zone => 'Close pour',
+              AimTool.edge => 'Finish cut',
+              AimTool.bus => 'Lay ${_busLanes.length}',
+              _ => 'Finish',
+            },
+            onPressed: () => _finish(scene),
+          ),
         _Chip(
           icon: Icons.close,
           label: 'Cancel',
@@ -1471,6 +1616,13 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           onPressed: () => _chooseShape(scene),
         ),
         _Chip(
+          key: const ValueKey('delete-outline'),
+          icon: Icons.delete_outline,
+          label: 'Delete outline',
+          danger: true,
+          onPressed: () => _deleteOutline(scene),
+        ),
+        _Chip(
           icon: Icons.close,
           label: 'Done',
           onPressed: () => setState(() => _outlineSelected = false),
@@ -1628,6 +1780,24 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     _pickPourStyle(chosen);
   }
 
+  void _pickEdgeStyle(EdgeStyle style) {
+    _pickTool(AimTool.edge);
+    setState(() => _edgeStyle = style);
+    _notify(style.hint);
+  }
+
+  Future<void> _chooseEdgeStyle() async {
+    final chosen = await _pickFrom(
+      EdgeStyle.values,
+      selected: _edgeStyle,
+      icon: (s) => s.icon,
+      label: (s) => s.label,
+      hint: (s) => s.hint,
+    );
+    if (chosen == null || !mounted) return;
+    _pickEdgeStyle(chosen);
+  }
+
   Future<void> _chooseViaStyle() async {
     final chosen = await _pickFrom(
       ViaStyle.values,
@@ -1651,6 +1821,9 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   }) => showModalBottomSheet<T>(
     context: context,
     backgroundColor: KicadPalette.surface,
+    // As tall as its choices, rather than capped at half a landscape
+    // screen with the last of them out of sight.
+    isScrollControlled: true,
     builder: (sheet) => SafeArea(
       child: ListView(
         shrinkWrap: true,
@@ -1986,9 +2159,14 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         return;
 
       case AimTool.zone:
+        unawaited(HapticFeedback.selectionClick());
+        setState(() => _points.add(at));
+        return;
+
       case AimTool.edge:
         unawaited(HapticFeedback.selectionClick());
         setState(() => _points.add(at));
+        if (_points.length == _edgeStyle.points) await _finishEdge(scene);
         return;
 
       case AimTool.region:
@@ -2468,29 +2646,57 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   Future<void> _finishEdge(BoardScene scene) async {
     final points = List<Offset>.from(_points);
     setState(_clearDrawing);
-    if (points.length < 2) return;
+    final shape = _edgeShape(points);
+    if (shape == null) return;
+    var (kind, at) = shape;
 
     final repository = ref.read(boardRepositoryProvider);
-    // A chain that comes back to its start is a closed shape — a cutout —
-    // and goes in as one polygon rather than a pile of loose lines.
     final closed =
-        points.length >= 3 &&
-        (points.last - points.first).distance <= math.max(_grid, 0.2);
-    final added = await repository.addEdge(
-      projectId: widget.project.id,
-      kind: closed ? BoardEdgeKind.polygon : BoardEdgeKind.line,
-      points: closed ? points.sublist(0, points.length - 1) : points,
-    );
+        kind == BoardEdgeKind.polygon || kind == BoardEdgeKind.circle;
+
+    // The first closed shape on a board with no outline is the outline.
+    if (closed && !scene.outline.isDrawn) {
+      final outline = switch (kind) {
+        BoardEdgeKind.circle => BoardOutline.circle(
+          Rect.fromCircle(center: at[0], radius: (at[1] - at[0]).distance),
+        ),
+        _ when _edgeStyle == EdgeStyle.rectangle => BoardOutline.rectangle(
+          Rect.fromPoints(at[0], at[2]),
+        ),
+        _ => BoardOutline.polygon(at),
+      };
+      if (outline.bounds.width < 1 || outline.bounds.height < 1) {
+        _notify('Too small for a board');
+        return;
+      }
+      final before = scene.board;
+      final after = before.withOutline(outline);
+      await repository.updateBoard(after);
+      if (!mounted) return;
+      unawaited(HapticFeedback.lightImpact());
+      _notify('Board outline drawn — ${outline.kind.label.toLowerCase()}');
+      _record(
+        'Draw the board outline',
+        undo: () => repository.updateBoard(before),
+        redo: () => repository.updateBoard(after),
+      );
+      return;
+    }
+
+    // A rectangle cutout is kept as a rectangle, by two opposite corners.
+    if (_edgeStyle == EdgeStyle.rectangle) {
+      kind = BoardEdgeKind.rectangle;
+      at = [at[0], at[2]];
+    }
 
     // A run of more than two corners is several lines, not one.
-    if (!closed && points.length > 2) {
-      await repository.deleteEdge(added.id);
+    if (kind == BoardEdgeKind.line && at.length > 2) {
       final ids = <String>[];
-      for (var i = 0; i < points.length - 1; i++) {
+      for (var i = 0; i < at.length - 1; i++) {
         final segment = await repository.addEdge(
           projectId: widget.project.id,
           kind: BoardEdgeKind.line,
-          points: [points[i], points[i + 1]],
+          points: [at[i], at[i + 1]],
         );
         ids.add(segment.id);
       }
@@ -2516,6 +2722,11 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       return;
     }
 
+    final added = await repository.addEdge(
+      projectId: widget.project.id,
+      kind: kind,
+      points: at,
+    );
     if (!mounted) return;
     unawaited(HapticFeedback.lightImpact());
     setState(() => _selectedEdgeId = added.id);
@@ -3952,16 +4163,29 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
   /// The board's own list of widths and via sizes, the way KiCad keeps one
   /// in Board Setup.
-  Future<void> _editSizes(BoardScene scene) async {
+  Future<void> _editSizes(BoardScene scene) => _editBoardSizes(scene.board);
+
+  /// The same, from a dialog that stays open while the board changes under
+  /// it: the board is read afresh rather than taken from the scene it was
+  /// opened on.
+  Future<void> _editSizesNow() async {
+    final board = await ref
+        .read(boardRepositoryProvider)
+        .getBoard(widget.project.id);
+    if (board == null || !mounted) return;
+    await _editBoardSizes(board);
+  }
+
+  Future<void> _editBoardSizes(Board board) async {
     final result = await showTrackSizesDialog(
       context,
-      widths: scene.board.trackWidths,
-      viaSizes: scene.board.viaSizes,
+      widths: board.trackWidths,
+      viaSizes: board.viaSizes,
     );
     if (result == null || !mounted) return;
 
     final repository = ref.read(boardRepositoryProvider);
-    final before = scene.board;
+    final before = board;
     final after = before.copyWith(
       trackWidths: result.widths,
       viaSizes: result.viaSizes,
@@ -4062,24 +4286,22 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                 ),
                 item(
                   Icons.straighten,
-                  'Track and via sizes',
-                  () => _editSizes(scene),
-                  subtitle:
-                      '${scene.board.availableTrackWidths.length} widths · '
-                      '${scene.board.availableViaSizes.length} vias',
-                ),
-                item(
-                  Icons.label_important_outline,
-                  'Net classes',
+                  'Track sizes and net classes',
                   () => showNetClassesDialog(
                     context,
                     projectId: widget.project.id,
                     rules: scene.board.rules,
                     stackup: scene.board.stackup,
+                    onEditSizes: _editSizesNow,
                   ),
-                  subtitle: scene.netClasses.isEmpty
-                      ? 'Named widths for power, signal…'
-                      : [for (final c in scene.netClasses) c.name].join(' · '),
+                  subtitle: [
+                    '${scene.board.availableTrackWidths.length} widths',
+                    '${scene.board.availableViaSizes.length} vias',
+                    if (scene.netClasses.isEmpty)
+                      'no classes'
+                    else
+                      for (final c in scene.netClasses) c.name,
+                  ].join(' · '),
                 ),
                 item(
                   Icons.sync,
@@ -4114,7 +4336,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                   Icons.straighten,
                   'Net lengths',
                   () => showNetLengthsDialog(context, scene: scene),
-                  subtitle: 'Select a track and TUNE to add loops',
+                  subtitle: netLengthsSummary(scene),
                 ),
                 item(
                   Icons.tune,
@@ -4132,7 +4354,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                 ),
                 item(
                   Icons.photo_filter,
-                  'As it will be made',
+                  'Fabrication preview',
                   () => setState(() => _fabPreview = true),
                 ),
                 item(Icons.rule, 'Check the rules', () => _runDrc(scene)),
@@ -4513,6 +4735,22 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       'Delete a pour',
       undo: () => repository.restoreZone(zone),
       redo: () => repository.deleteZone(zone.id),
+    );
+  }
+
+  /// Takes the outline away, so a new one can be drawn with the Edge cut
+  /// tool. The area it covered stays as the working area.
+  Future<void> _deleteOutline(BoardScene scene) async {
+    final repository = ref.read(boardRepositoryProvider);
+    final before = scene.board;
+    final after = before.withOutline(BoardOutline.none(scene.outline.bounds));
+    await repository.updateBoard(after);
+    if (!mounted) return;
+    setState(() => _outlineSelected = false);
+    _record(
+      'Delete the board outline',
+      undo: () => repository.updateBoard(before),
+      redo: () => repository.updateBoard(after),
     );
   }
 

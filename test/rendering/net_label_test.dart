@@ -122,8 +122,9 @@ void main() {
 
     NetLabel? at(Offset point) => scene.labelNear(
       point,
-      halfHeightMm: SchematicPainter.labelHeightMm,
-      halfWidthMm: (label) => SchematicPainter.labelHalfWidthMm(label.text),
+      halfHeightMm: (label) => SchematicPainter.labelHalfHeightMm(label.size),
+      halfWidthMm: (label) =>
+          SchematicPainter.labelHalfWidthMm(label.text, label.size),
     );
 
     expect(at(const Offset(60, 70))?.netId, netId);

@@ -30,6 +30,10 @@ class BoardRepository {
   /// A project that never leaves the schematic never gets a row, so opening
   /// the board is what brings it into existence rather than creating a
   /// project doing so.
+  ///
+  /// A new board has no outline: its shape is the user's to draw, not a
+  /// box made up for them. The stored rectangle is only the working area
+  /// the view opens on.
   Future<Board> ensureBoard(String projectId) async {
     final existing = await _boardRow(projectId);
     if (existing != null) return _toBoard(existing);
@@ -41,6 +45,7 @@ class BoardRepository {
           BoardsCompanion.insert(
             id: id,
             projectId: projectId,
+            outlineKind: Value(BoardOutlineKind.none.name),
             modifiedAt: DateTime.now(),
           ),
         );

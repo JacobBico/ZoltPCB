@@ -119,6 +119,26 @@ class SettingsPanel extends ConsumerWidget {
                       onTap: () => notifier.setWiring(model),
                     ),
                   ),
+                const SizedBox(height: 6),
+                Text(
+                  'DRAWING A WIRE',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: KicadPalette.textSecondary,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                for (final gesture in WireGesture.values)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _ChoiceCard(
+                      key: ValueKey('wire-gesture-${gesture.name}'),
+                      label: gesture.label,
+                      description: gesture.description,
+                      selected: gesture == appearance.wireGesture,
+                      onTap: () => notifier.setWireGesture(gesture),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -224,6 +244,7 @@ class _ErrorLogCard extends ConsumerWidget {
 /// A labelled choice with a radio dot, as a card you can pick.
 class _ChoiceCard extends StatelessWidget {
   const _ChoiceCard({
+    super.key,
     required this.label,
     required this.description,
     required this.selected,
