@@ -11,6 +11,31 @@ routing, buses, differential pairs, length tuning, teardrops, blind and
 buried vias, a design rule check, panelisation and fab-ready output. There is
 still no autorouter, and there is no 3D view; both remain desktop work.
 
+## License
+
+Zolt is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version. See [LICENSE](LICENSE).
+
+In short: you may use, study, change and share Zolt, including commercially,
+but anything you distribute that is built from it must be released under the
+same license, with its full source code.
+
+It is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+A PARTICULAR PURPOSE. Check your board before you order it.
+
+Copyright © 2026 JacobBico.
+
+## Trademarks
+
+"Zolt" and the Zolt logo are trademarks of JacobBico and are not covered by
+the license above. You are welcome to fork the code, but a fork that is
+distributed — on an app store or anywhere else — must use a different name
+and logo, so that nobody mistakes it for the original. Saying that your
+project is "based on Zolt" is fine.
+
 ## Scope
 
 * **Flutter, Android, landscape only.** Every screen is laid out for a wide,

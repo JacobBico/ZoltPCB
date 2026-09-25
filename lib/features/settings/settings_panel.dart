@@ -174,6 +174,53 @@ class SettingsPanel extends ConsumerWidget {
             const SizedBox(height: 12),
             const _ErrorLogCard(),
           ],
+          const SizedBox(height: 12),
+          const _AboutCard(),
+        ],
+      ),
+    );
+  }
+}
+
+/// Who made the app and on what terms: the notice the GPL asks an
+/// interactive program to show, and the licences of everything it is built
+/// with.
+class _AboutCard extends StatelessWidget {
+  const _AboutCard();
+
+  static const legalese =
+      'Copyright © 2026 JacobBico.\n'
+      'Free software under the GNU General Public License, version 3 or '
+      'later: you may share and change it under its terms.';
+
+  @override
+  Widget build(BuildContext context) {
+    final small = Theme.of(
+      context,
+    ).textTheme.bodySmall?.copyWith(color: KicadPalette.textSecondary);
+    return Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const PanelHeading('About Zolt'),
+          const SizedBox(height: 4),
+          Text(legalese, style: small),
+          const SizedBox(height: 6),
+          Text(
+            'It comes with no warranty. Check a board before you order it.',
+            style: small,
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            key: const ValueKey('show-licences'),
+            onPressed: () => showLicensePage(
+              context: context,
+              applicationName: 'Zolt',
+              applicationLegalese: legalese,
+            ),
+            icon: const Icon(Icons.gavel_outlined, size: 16),
+            label: const Text('LICENCES'),
+          ),
         ],
       ),
     );
