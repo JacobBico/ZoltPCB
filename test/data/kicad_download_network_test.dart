@@ -26,7 +26,10 @@ void main() {
         fetcher: HttpLibraryFetcher(),
         symbols: SymbolLibraryRepository(db, InMemoryLibraryStorage()),
         footprints: FootprintLibraryRepository(db, InMemoryLibraryStorage()),
-        parseInBackground: false,
+        // As the app does it: a real clock here, so the isolate finishes.
+        // Parsing in the foreground is what let every download on the phone
+        // fail without this test noticing.
+        parseInBackground: true,
       );
 
       final picked = [

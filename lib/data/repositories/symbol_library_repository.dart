@@ -52,6 +52,20 @@ class SymbolLibraryRepository {
 
   /// Imports a `.kicad_sym` file: stores it, parses it, indexes every symbol.
   ///
+  /// Parses on another isolate.
+  ///
+  /// A plain function, not a closure inside [import]: a closure written in an
+  /// async method captures that method's whole frame, its own unfinished
+  /// Future included, and a Future cannot be sent to another isolate — so
+  /// every download failed with "object is unsendable". Here the closure can
+  /// only see [bytes] and [nickname].
+  static Future<ParsedSymbolLibrary> _parseInBackground(
+    Uint8List bytes,
+    String nickname,
+  ) => Isolate.run(
+    () => SymbolLibraryReader.parseLibrary(bytes, nickname: nickname),
+  );
+
   /// Re-importing a library with a nickname that is already present replaces
   /// it, which is what updating a library from the desktop looks like.
   ///
@@ -71,9 +85,7 @@ class SymbolLibraryRepository {
     final ParsedSymbolLibrary parsed;
     try {
       parsed = inBackground
-          ? await Isolate.run(
-              () => SymbolLibraryReader.parseLibrary(bytes, nickname: nickname),
-            )
+          ? await _parseInBackground(bytes, nickname)
           : SymbolLibraryReader.parseLibrary(bytes, nickname: nickname);
     } catch (error) {
       throw LibraryImportException('Not a readable .kicad_sym file: $error');

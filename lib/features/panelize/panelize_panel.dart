@@ -34,6 +34,10 @@ class _PanelizePanelState extends ConsumerState<PanelizePanel> {
   PanelSettings? _builtWith;
   FabPreset? _builtFab;
   PanelLayout? _layout;
+
+  /// The panel's fiducials, ringed on the preview: a 1 mm copper dot is
+  /// otherwise hard to find on a whole panel.
+  List<(Offset, double)> _fiducialRings = const [];
   List<FabricationFile> _files = const [];
   List<GerberLayer> _layers = const [];
   Size? _fittedTo;
@@ -91,6 +95,9 @@ class _PanelizePanelState extends ConsumerState<PanelizePanel> {
     final layout = PanelLayout.of(scene, settings, fab: fab);
     if (_layout?.panel.size != layout.panel.size) _pixelsPerMm = 0;
     _layout = layout;
+    _fiducialRings = [
+      for (final at in layout.fiducials) (at, PanelSettings.fiducialCopper),
+    ];
     final base = '${ProjectExporter.fileNameFor(widget.project.name)}-panel';
     _files = FabricationWriter.writePanel(
       scene,
@@ -166,6 +173,7 @@ class _PanelizePanelState extends ConsumerState<PanelizePanel> {
                       layers: _layers,
                       origin: _origin,
                       pixelsPerMm: _pixelsPerMm,
+                      ringed: _fiducialRings,
                     ),
                   ),
                 ),

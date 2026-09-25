@@ -35,9 +35,21 @@ class GerberPainter extends CustomPainter {
     required this.layers,
     required this.origin,
     required this.pixelsPerMm,
+    this.ringed = const [],
   });
 
   final List<GerberLayer> layers;
+
+  /// Small things to ring in white so they can be found — a panel's
+  /// fiducials — as a centre and a diameter in millimetres.
+  final List<(Offset, double)> ringed;
+
+  /// The outline every hole gets: drilled holes are painted near-black, and
+  /// on the dark viewer that is all but invisible without one.
+  static final _holeOutline = Paint()
+    ..color = const Color(0xE6FFFFFF)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1.2;
   final Offset origin;
   final double pixelsPerMm;
 
@@ -114,23 +126,43 @@ class GerberPainter extends CustomPainter {
         final width = math.max(2.0, hole.diameter * pixelsPerMm);
         final to = hole.to;
         if (to == null) {
-          canvas.drawCircle(
-            _screen(hole.at),
-            width / 2,
-            Paint()..color = layer.color,
-          );
+          canvas
+            ..drawCircle(
+              _screen(hole.at),
+              width / 2,
+              Paint()..color = layer.color,
+            )
+            ..drawCircle(_screen(hole.at), width / 2, _holeOutline);
         } else {
           // A slot: the tool's path, as wide as the tool, round at the ends.
-          canvas.drawLine(
-            _screen(hole.at),
-            _screen(to),
-            Paint()
-              ..color = layer.color
-              ..strokeWidth = width
-              ..strokeCap = StrokeCap.round,
-          );
+          // Outlined by drawing it a little wider in white underneath.
+          canvas
+            ..drawLine(
+              _screen(hole.at),
+              _screen(to),
+              Paint()
+                ..color = _holeOutline.color
+                ..strokeWidth = width + _holeOutline.strokeWidth * 2
+                ..strokeCap = StrokeCap.round,
+            )
+            ..drawLine(
+              _screen(hole.at),
+              _screen(to),
+              Paint()
+                ..color = layer.color
+                ..strokeWidth = width
+                ..strokeCap = StrokeCap.round,
+            );
         }
       }
+    }
+
+    for (final (at, diameter) in ringed) {
+      canvas.drawCircle(
+        _screen(at),
+        math.max(4, diameter * pixelsPerMm * 0.9),
+        _holeOutline,
+      );
     }
   }
 
@@ -142,7 +174,8 @@ class GerberPainter extends CustomPainter {
         (i) => identical(layers[i], old.layers[i]),
       ).every((same) => same) ||
       old.origin != origin ||
-      old.pixelsPerMm != pixelsPerMm;
+      old.pixelsPerMm != pixelsPerMm ||
+      !identical(old.ringed, ringed);
 }
 
 /// The text of [file], as the board house will get it.
