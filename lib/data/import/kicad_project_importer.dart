@@ -6,6 +6,7 @@ import '../../domain/geometry/placement.dart';
 import '../../domain/models/models.dart';
 import '../../domain/pcb/pcb.dart';
 import '../../domain/symbols/symbols.dart';
+import '../../kicad/schematic_writer.dart';
 import '../../kicad/board_writer.dart';
 import '../../kicad/board_project_writer.dart';
 import '../../kicad/sexpr/sexpr.dart';
@@ -415,6 +416,12 @@ class KicadProjectImporter {
         reference: reference,
         value: properties['Value'] ?? '',
         footprint: properties['Footprint'] ?? '',
+        componentId:
+            SchematicWriter.componentIdFields
+                .map((name) => properties[name]?.trim() ?? '')
+                .where((id) => id.isNotEmpty && id != '~')
+                .firstOrNull ??
+            '',
       );
       // An unnumbered part is one part per symbol, not all of them one part.
       final key = reference.contains('?') ? '?${unnumbered++}' : reference;
@@ -440,6 +447,7 @@ class KicadProjectImporter {
             reference: numbered ? first.reference : null,
             value: first.value,
             footprint: first.footprint,
+            componentId: first.componentId,
           ),
         );
       } on DuplicateReferenceException {
@@ -449,6 +457,7 @@ class KicadProjectImporter {
           definition.toNewPartSpec(
             value: first.value,
             footprint: first.footprint,
+            componentId: first.componentId,
           ),
         );
       }
@@ -1366,6 +1375,7 @@ class _Instance {
     required this.reference,
     required this.value,
     required this.footprint,
+    this.componentId = '',
   });
 
   final String libId;
@@ -1376,6 +1386,7 @@ class _Instance {
   final String reference;
   final String value;
   final String footprint;
+  final String componentId;
 }
 
 /// How the sheets of an import are joined while they come in.

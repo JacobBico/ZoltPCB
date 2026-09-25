@@ -29,6 +29,7 @@ extension PartRowMapper on PartRow {
     value: value,
     footprint: footprint,
     datasheet: datasheet,
+    componentId: componentId,
     description: description,
     unitCount: unitCount,
     inBom: inBom,

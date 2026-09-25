@@ -12,12 +12,16 @@ class PartEditorResult {
     required this.footprint,
     required this.dnp,
     this.fieldsHidden = false,
+    this.componentId = '',
   });
 
   final String reference;
   final String value;
   final String footprint;
   final bool dnp;
+
+  /// A supplier's part number, such as a JLCPCB one.
+  final String componentId;
 
   /// Whether the designator and value are left off the drawing.
   final bool fieldsHidden;
@@ -49,6 +53,7 @@ class _PartEditorDialogState extends State<_PartEditorDialog> {
   late final TextEditingController _reference;
   late final TextEditingController _value;
   late final TextEditingController _footprint;
+  late final TextEditingController _componentId;
   late bool _dnp;
   late bool _fieldsHidden;
 
@@ -62,6 +67,7 @@ class _PartEditorDialogState extends State<_PartEditorDialog> {
     _reference = TextEditingController(text: widget.part.reference);
     _value = TextEditingController(text: widget.part.value);
     _footprint = TextEditingController(text: widget.part.footprint);
+    _componentId = TextEditingController(text: widget.part.componentId);
     _dnp = widget.part.dnp;
     _fieldsHidden = widget.part.fieldsHidden;
     _keypad = isNumericValuePart(widget.part.reference);
@@ -93,6 +99,7 @@ class _PartEditorDialogState extends State<_PartEditorDialog> {
     _reference.dispose();
     _value.dispose();
     _footprint.dispose();
+    _componentId.dispose();
     super.dispose();
   }
 
@@ -105,6 +112,7 @@ class _PartEditorDialogState extends State<_PartEditorDialog> {
         footprint: _footprint.text.trim(),
         dnp: _dnp,
         fieldsHidden: _fieldsHidden,
+        componentId: _componentId.text.trim(),
       ),
     );
   }
@@ -160,13 +168,39 @@ class _PartEditorDialogState extends State<_PartEditorDialog> {
         ],
       ),
       const SizedBox(height: 8),
-      TextFormField(
-        controller: _footprint,
-        decoration: const InputDecoration(
-          labelText: 'Footprint',
-          hintText: 'Library:Footprint_Name',
-          isDense: true,
-        ),
+      // Side by side, like the checkboxes below: stacked, the dialog no
+      // longer fit a phone in landscape with the keypad out.
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: TextFormField(
+              controller: _footprint,
+              decoration: const InputDecoration(
+                labelText: 'Footprint',
+                hintText: 'Library:Footprint_Name',
+                isDense: true,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // What the part is ordered by. Goes into the BOM and the exported
+          // schematic, where an assembly service matches it.
+          Expanded(
+            child: TextFormField(
+              key: const ValueKey('part-component-id'),
+              controller: _componentId,
+              decoration: InputDecoration(
+                labelText: 'Component ID',
+                hintText: _keypad
+                    ? 'e.g. JLCPCB ID'
+                    : 'e.g. JLCPCB component ID',
+                isDense: true,
+              ),
+              onFieldSubmitted: (_) => _submit(),
+            ),
+          ),
+        ],
       ),
       const SizedBox(height: 2),
       // Side by side, and a line of explanation each: stacked, with two

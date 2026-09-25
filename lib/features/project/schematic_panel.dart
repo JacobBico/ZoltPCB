@@ -2039,6 +2039,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       value: result.value,
       footprint: result.footprint,
       dnp: result.dnp,
+      componentId: result.componentId,
       fieldsHidden: result.fieldsHidden,
     );
     await repository.updatePart(after);

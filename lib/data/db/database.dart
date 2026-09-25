@@ -102,7 +102,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 21;
+  int get schemaVersion => 22;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -317,6 +317,10 @@ class AppDatabase extends _$AppDatabase {
       // v21: a net label's own text size.
       if (from < 21) {
         await m.addColumn(nets, nets.labelSize);
+      }
+      // v22: a part's component ID, for ordering and assembly.
+      if (from < 22) {
+        await m.addColumn(parts, parts.componentId);
       }
     },
     beforeOpen: (details) async {

@@ -58,6 +58,25 @@ void main() {
       expect(await lines(), hasLength(2));
     });
 
+    test('a component ID is its own column, and splits a line', () async {
+      final a = await parts.addPart(project.id, resistorSpec(value: '10k'));
+      final b = await parts.addPart(project.id, resistorSpec(value: '10k'));
+      await parts.addPart(project.id, resistorSpec(value: '10k'));
+      await parts.updatePart(a.part.copyWith(componentId: 'C25804'));
+      await parts.updatePart(b.part.copyWith(componentId: 'C25804'));
+
+      // Two ordered by C25804, and one with no number of its own.
+      final result = await lines();
+      expect(result.map((l) => (l.quantity, l.componentId)), [
+        (2, 'C25804'),
+        (1, ''),
+      ]);
+
+      final text = await csv();
+      expect(text.split('\n').first, contains('LCSC Part #'));
+      expect(text, contains('C25804'));
+    });
+
     test('a part kept out of the BOM does not appear', () async {
       await parts.addPart(project.id, resistorSpec());
       await parts.addPart(project.id, groundSpec());

@@ -42,6 +42,21 @@ class SchematicWriter {
   /// the widest target for a file leaving the phone.
   static const kicad9FormatVersion = 20250114;
 
+  /// The symbol field a part's component ID is written to. `LCSC` is the
+  /// name JLCPCB's KiCad tools and most JLC workflows read.
+  static const componentIdField = 'LCSC';
+
+  /// Field names a component ID is read back from, in the order tried:
+  /// ours first, then the spellings other tools and templates use.
+  static const componentIdFields = [
+    componentIdField,
+    'LCSC Part #',
+    'LCSC Part',
+    'JLCPCB Part #',
+    'JLC',
+    'Component ID',
+  ];
+
   final int formatVersion;
   final SExprWriter writer;
 
@@ -308,6 +323,14 @@ class SchematicWriter {
         y: unit.y,
         hide: true,
       ),
+      if (part.part.componentId.isNotEmpty)
+        SymbolWriter.property(
+          SchematicWriter.componentIdField,
+          part.part.componentId,
+          x: unit.x,
+          y: unit.y,
+          hide: true,
+        ),
       ..._symbolPins(part, unit),
       S.list('instances', [
         SList([

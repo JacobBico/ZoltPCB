@@ -259,6 +259,7 @@ class _PartRow extends ConsumerWidget {
             value: result.value,
             footprint: result.footprint,
             dnp: result.dnp,
+            componentId: result.componentId,
           ),
         );
   }

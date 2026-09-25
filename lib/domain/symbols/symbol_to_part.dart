@@ -12,6 +12,7 @@ extension SymbolToPart on SymbolDefinition {
     String? reference,
     String? value,
     String? footprint,
+    String componentId = '',
   }) {
     return NewPartSpec(
       libId: libId,
@@ -26,6 +27,7 @@ extension SymbolToPart on SymbolDefinition {
       // BOM and off the board.
       inBom: inBom && !isPower,
       onBoard: onBoard && !isPower,
+      componentId: componentId,
       pins: [
         for (final drawing in unitDrawings)
           if (drawing.bodyStyle <= 1)

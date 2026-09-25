@@ -52,6 +52,7 @@ class NewPartSpec {
     this.unitCount = 1,
     this.inBom = true,
     this.onBoard = true,
+    this.componentId = '',
   });
 
   final String libId;
@@ -71,6 +72,9 @@ class NewPartSpec {
   final int unitCount;
   final bool inBom;
   final bool onBoard;
+
+  /// A supplier's part number, such as a JLCPCB / LCSC one.
+  final String componentId;
 
   @override
   String toString() => 'NewPartSpec($libId, ${pins.length} pins)';

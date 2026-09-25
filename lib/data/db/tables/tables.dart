@@ -43,6 +43,10 @@ class Parts extends Table {
   /// already says GND, a row of identical decoupling caps.
   BoolColumn get fieldsHidden => boolean().withDefault(const Constant(false))();
 
+  /// The supplier's or manufacturer's number for the part — a JLCPCB / LCSC
+  /// part number such as C25804 — for ordering and assembly.
+  TextColumn get componentId => text().withDefault(const Constant(''))();
+
   DateTimeColumn get createdAt => dateTime()();
 
   @override

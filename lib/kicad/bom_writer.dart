@@ -10,6 +10,7 @@ class BomLine {
     required this.libId,
     this.description = '',
     this.datasheet = '',
+    this.componentId = '',
     this.dnp = false,
   });
 
@@ -21,6 +22,9 @@ class BomLine {
   final String libId;
   final String description;
   final String datasheet;
+
+  /// The supplier's part number the line is ordered by.
+  final String componentId;
   final bool dnp;
 
   int get quantity => references.length;
@@ -47,6 +51,8 @@ abstract final class BomWriter {
     'Symbol',
     'Description',
     'Datasheet',
+    // What JLCPCB's assembly BOM upload matches a line by.
+    'LCSC Part #',
     'DNP',
   ];
 
@@ -67,6 +73,7 @@ abstract final class BomWriter {
         part.value,
         part.footprint,
         part.libId,
+        part.componentId,
         part.dnp ? 'dnp' : 'fitted',
       ].join(' ');
       (groups[key] ??= []).add(part);
@@ -84,6 +91,7 @@ abstract final class BomWriter {
           libId: first.libId,
           description: first.description,
           datasheet: first.datasheet,
+          componentId: first.componentId,
           dnp: first.dnp,
         ),
       );
@@ -113,6 +121,7 @@ abstract final class BomWriter {
           line.libId,
           line.description,
           line.datasheet,
+          line.componentId,
           line.dnp ? 'DNP' : '',
         ].map(escape).join(','),
       );

@@ -160,6 +160,32 @@ void main() {
     },
   );
 
+  test('a component ID goes out as LCSC and comes back', () async {
+    final project = await design();
+    final r1 = (await source.parts.getPartsWithDetails(
+      project.id,
+    )).firstWhere((p) => p.part.reference == 'R1');
+    await source.parts.updatePart(r1.part.copyWith(componentId: 'C25804'));
+    final text = await schematicOf(source, project);
+    expect(text, contains('(property "LCSC" "C25804"'));
+
+    final target = _App();
+    addTearDown(() => target.db.close());
+    final result = await target.importer.import(
+      name: 'Divider',
+      schematic: text,
+    );
+    final parts = await target.parts.getPartsWithDetails(result.project.id);
+    expect(
+      parts.firstWhere((p) => p.part.reference == 'R1').part.componentId,
+      'C25804',
+    );
+    expect(
+      parts.firstWhere((p) => p.part.reference == 'R2').part.componentId,
+      isEmpty,
+    );
+  });
+
   test('sub-sheets come back as sheets, joined as they were', () async {
     // Top: R1. Power: R2. Regulator, inside Power: GND-side R3.
     final project = await source.projects.create(name: 'Nested');

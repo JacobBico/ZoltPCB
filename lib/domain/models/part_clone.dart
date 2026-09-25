@@ -18,6 +18,7 @@ extension PartToSpec on PartWithDetails {
     unitCount: part.unitCount,
     inBom: part.inBom,
     onBoard: part.onBoard,
+    componentId: part.componentId,
     pins: [
       for (final pin in pins)
         NewPinSpec(

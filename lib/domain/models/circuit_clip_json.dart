@@ -94,6 +94,7 @@ abstract final class CircuitClipJson {
       'unitCount': spec.unitCount,
       'inBom': spec.inBom,
       'onBoard': spec.onBoard,
+      'componentId': spec.componentId,
       'pins': [
         for (final pin in spec.pins)
           {
@@ -137,6 +138,7 @@ abstract final class CircuitClipJson {
         unitCount: json['unitCount'] as int? ?? 1,
         inBom: json['inBom'] as bool? ?? true,
         onBoard: json['onBoard'] as bool? ?? true,
+        componentId: json['componentId'] as String? ?? '',
         pins: [
           for (final raw in json['pins'] as List)
             () {

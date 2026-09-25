@@ -681,6 +681,18 @@ class $PartsTable extends Parts with TableInfo<$PartsTable, PartRow> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _componentIdMeta = const VerificationMeta(
+    'componentId',
+  );
+  @override
+  late final GeneratedColumn<String> componentId = GeneratedColumn<String>(
+    'component_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -707,6 +719,7 @@ class $PartsTable extends Parts with TableInfo<$PartsTable, PartRow> {
     onBoard,
     dnp,
     fieldsHidden,
+    componentId,
     createdAt,
   ];
   @override
@@ -810,6 +823,15 @@ class $PartsTable extends Parts with TableInfo<$PartsTable, PartRow> {
         ),
       );
     }
+    if (data.containsKey('component_id')) {
+      context.handle(
+        _componentIdMeta,
+        componentId.isAcceptableOrUnknown(
+          data['component_id']!,
+          _componentIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -883,6 +905,10 @@ class $PartsTable extends Parts with TableInfo<$PartsTable, PartRow> {
         DriftSqlType.bool,
         data['${effectivePrefix}fields_hidden'],
       )!,
+      componentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}component_id'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -914,6 +940,10 @@ class PartRow extends DataClass implements Insertable<PartRow> {
   /// a part whose label is only in the way — a power symbol whose shape
   /// already says GND, a row of identical decoupling caps.
   final bool fieldsHidden;
+
+  /// The supplier's or manufacturer's number for the part — a JLCPCB / LCSC
+  /// part number such as C25804 — for ordering and assembly.
+  final String componentId;
   final DateTime createdAt;
   const PartRow({
     required this.id,
@@ -929,6 +959,7 @@ class PartRow extends DataClass implements Insertable<PartRow> {
     required this.onBoard,
     required this.dnp,
     required this.fieldsHidden,
+    required this.componentId,
     required this.createdAt,
   });
   @override
@@ -947,6 +978,7 @@ class PartRow extends DataClass implements Insertable<PartRow> {
     map['on_board'] = Variable<bool>(onBoard);
     map['dnp'] = Variable<bool>(dnp);
     map['fields_hidden'] = Variable<bool>(fieldsHidden);
+    map['component_id'] = Variable<String>(componentId);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -966,6 +998,7 @@ class PartRow extends DataClass implements Insertable<PartRow> {
       onBoard: Value(onBoard),
       dnp: Value(dnp),
       fieldsHidden: Value(fieldsHidden),
+      componentId: Value(componentId),
       createdAt: Value(createdAt),
     );
   }
@@ -989,6 +1022,7 @@ class PartRow extends DataClass implements Insertable<PartRow> {
       onBoard: serializer.fromJson<bool>(json['onBoard']),
       dnp: serializer.fromJson<bool>(json['dnp']),
       fieldsHidden: serializer.fromJson<bool>(json['fieldsHidden']),
+      componentId: serializer.fromJson<String>(json['componentId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -1009,6 +1043,7 @@ class PartRow extends DataClass implements Insertable<PartRow> {
       'onBoard': serializer.toJson<bool>(onBoard),
       'dnp': serializer.toJson<bool>(dnp),
       'fieldsHidden': serializer.toJson<bool>(fieldsHidden),
+      'componentId': serializer.toJson<String>(componentId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -1027,6 +1062,7 @@ class PartRow extends DataClass implements Insertable<PartRow> {
     bool? onBoard,
     bool? dnp,
     bool? fieldsHidden,
+    String? componentId,
     DateTime? createdAt,
   }) => PartRow(
     id: id ?? this.id,
@@ -1042,6 +1078,7 @@ class PartRow extends DataClass implements Insertable<PartRow> {
     onBoard: onBoard ?? this.onBoard,
     dnp: dnp ?? this.dnp,
     fieldsHidden: fieldsHidden ?? this.fieldsHidden,
+    componentId: componentId ?? this.componentId,
     createdAt: createdAt ?? this.createdAt,
   );
   PartRow copyWithCompanion(PartsCompanion data) {
@@ -1063,6 +1100,9 @@ class PartRow extends DataClass implements Insertable<PartRow> {
       fieldsHidden: data.fieldsHidden.present
           ? data.fieldsHidden.value
           : this.fieldsHidden,
+      componentId: data.componentId.present
+          ? data.componentId.value
+          : this.componentId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -1083,6 +1123,7 @@ class PartRow extends DataClass implements Insertable<PartRow> {
           ..write('onBoard: $onBoard, ')
           ..write('dnp: $dnp, ')
           ..write('fieldsHidden: $fieldsHidden, ')
+          ..write('componentId: $componentId, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -1103,6 +1144,7 @@ class PartRow extends DataClass implements Insertable<PartRow> {
     onBoard,
     dnp,
     fieldsHidden,
+    componentId,
     createdAt,
   );
   @override
@@ -1122,6 +1164,7 @@ class PartRow extends DataClass implements Insertable<PartRow> {
           other.onBoard == this.onBoard &&
           other.dnp == this.dnp &&
           other.fieldsHidden == this.fieldsHidden &&
+          other.componentId == this.componentId &&
           other.createdAt == this.createdAt);
 }
 
@@ -1139,6 +1182,7 @@ class PartsCompanion extends UpdateCompanion<PartRow> {
   final Value<bool> onBoard;
   final Value<bool> dnp;
   final Value<bool> fieldsHidden;
+  final Value<String> componentId;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const PartsCompanion({
@@ -1155,6 +1199,7 @@ class PartsCompanion extends UpdateCompanion<PartRow> {
     this.onBoard = const Value.absent(),
     this.dnp = const Value.absent(),
     this.fieldsHidden = const Value.absent(),
+    this.componentId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -1172,6 +1217,7 @@ class PartsCompanion extends UpdateCompanion<PartRow> {
     this.onBoard = const Value.absent(),
     this.dnp = const Value.absent(),
     this.fieldsHidden = const Value.absent(),
+    this.componentId = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -1193,6 +1239,7 @@ class PartsCompanion extends UpdateCompanion<PartRow> {
     Expression<bool>? onBoard,
     Expression<bool>? dnp,
     Expression<bool>? fieldsHidden,
+    Expression<String>? componentId,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -1210,6 +1257,7 @@ class PartsCompanion extends UpdateCompanion<PartRow> {
       if (onBoard != null) 'on_board': onBoard,
       if (dnp != null) 'dnp': dnp,
       if (fieldsHidden != null) 'fields_hidden': fieldsHidden,
+      if (componentId != null) 'component_id': componentId,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -1229,6 +1277,7 @@ class PartsCompanion extends UpdateCompanion<PartRow> {
     Value<bool>? onBoard,
     Value<bool>? dnp,
     Value<bool>? fieldsHidden,
+    Value<String>? componentId,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -1246,6 +1295,7 @@ class PartsCompanion extends UpdateCompanion<PartRow> {
       onBoard: onBoard ?? this.onBoard,
       dnp: dnp ?? this.dnp,
       fieldsHidden: fieldsHidden ?? this.fieldsHidden,
+      componentId: componentId ?? this.componentId,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -1293,6 +1343,9 @@ class PartsCompanion extends UpdateCompanion<PartRow> {
     if (fieldsHidden.present) {
       map['fields_hidden'] = Variable<bool>(fieldsHidden.value);
     }
+    if (componentId.present) {
+      map['component_id'] = Variable<String>(componentId.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -1318,6 +1371,7 @@ class PartsCompanion extends UpdateCompanion<PartRow> {
           ..write('onBoard: $onBoard, ')
           ..write('dnp: $dnp, ')
           ..write('fieldsHidden: $fieldsHidden, ')
+          ..write('componentId: $componentId, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -19322,6 +19376,7 @@ typedef $$PartsTableCreateCompanionBuilder =
       Value<bool> onBoard,
       Value<bool> dnp,
       Value<bool> fieldsHidden,
+      Value<String> componentId,
       required DateTime createdAt,
       Value<int> rowid,
     });
@@ -19340,6 +19395,7 @@ typedef $$PartsTableUpdateCompanionBuilder =
       Value<bool> onBoard,
       Value<bool> dnp,
       Value<bool> fieldsHidden,
+      Value<String> componentId,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -19487,6 +19543,11 @@ class $$PartsTableFilterComposer extends Composer<_$AppDatabase, $PartsTable> {
 
   ColumnFilters<bool> get fieldsHidden => $composableBuilder(
     column: $table.fieldsHidden,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get componentId => $composableBuilder(
+    column: $table.componentId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -19663,6 +19724,11 @@ class $$PartsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get componentId => $composableBuilder(
+    column: $table.componentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -19738,6 +19804,11 @@ class $$PartsTableAnnotationComposer
 
   GeneratedColumn<bool> get fieldsHidden => $composableBuilder(
     column: $table.fieldsHidden,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get componentId => $composableBuilder(
+    column: $table.componentId,
     builder: (column) => column,
   );
 
@@ -19889,6 +19960,7 @@ class $$PartsTableTableManager
                 Value<bool> onBoard = const Value.absent(),
                 Value<bool> dnp = const Value.absent(),
                 Value<bool> fieldsHidden = const Value.absent(),
+                Value<String> componentId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PartsCompanion(
@@ -19905,6 +19977,7 @@ class $$PartsTableTableManager
                 onBoard: onBoard,
                 dnp: dnp,
                 fieldsHidden: fieldsHidden,
+                componentId: componentId,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -19923,6 +19996,7 @@ class $$PartsTableTableManager
                 Value<bool> onBoard = const Value.absent(),
                 Value<bool> dnp = const Value.absent(),
                 Value<bool> fieldsHidden = const Value.absent(),
+                Value<String> componentId = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
               }) => PartsCompanion.insert(
@@ -19939,6 +20013,7 @@ class $$PartsTableTableManager
                 onBoard: onBoard,
                 dnp: dnp,
                 fieldsHidden: fieldsHidden,
+                componentId: componentId,
                 createdAt: createdAt,
                 rowid: rowid,
               ),

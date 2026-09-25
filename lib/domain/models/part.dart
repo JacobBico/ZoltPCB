@@ -22,6 +22,7 @@ class Part {
     this.onBoard = true,
     this.dnp = false,
     this.fieldsHidden = false,
+    this.componentId = '',
   });
 
   final String id;
@@ -51,6 +52,11 @@ class Part {
   /// Whether to leave the designator and value off the drawing. Display
   /// only: the fields are still exported, and still in the BOM.
   final bool fieldsHidden;
+
+  /// The supplier's or manufacturer's number for the part — a JLCPCB / LCSC
+  /// part number such as C25804 — which assembly services match the BOM by.
+  /// Empty when none has been given.
+  final String componentId;
 
   final DateTime createdAt;
 
@@ -96,6 +102,7 @@ class Part {
     bool? onBoard,
     bool? dnp,
     bool? fieldsHidden,
+    String? componentId,
   }) {
     return Part(
       id: id,
@@ -111,6 +118,7 @@ class Part {
       onBoard: onBoard ?? this.onBoard,
       dnp: dnp ?? this.dnp,
       fieldsHidden: fieldsHidden ?? this.fieldsHidden,
+      componentId: componentId ?? this.componentId,
       createdAt: createdAt,
     );
   }
@@ -131,6 +139,7 @@ class Part {
       other.onBoard == onBoard &&
       other.fieldsHidden == fieldsHidden &&
       other.dnp == dnp &&
+      other.componentId == componentId &&
       other.createdAt == createdAt;
 
   @override
@@ -147,6 +156,7 @@ class Part {
     inBom,
     onBoard,
     dnp,
+    componentId,
     createdAt,
   );
 

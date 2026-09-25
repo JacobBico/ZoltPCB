@@ -191,6 +191,7 @@ class PartRepository {
               unitCount: Value(unitCount),
               inBom: Value(spec.inBom),
               onBoard: Value(spec.onBoard),
+              componentId: Value(spec.componentId),
               createdAt: now,
             ),
           );
@@ -252,6 +253,7 @@ class PartRepository {
         onBoard: Value(part.onBoard),
         dnp: Value(part.dnp),
         fieldsHidden: Value(part.fieldsHidden),
+        componentId: Value(part.componentId),
       ),
     );
     await _touchProject(part.projectId);
@@ -417,6 +419,7 @@ class PartRepository {
               onBoard: Value(part.onBoard),
               dnp: Value(part.dnp),
               fieldsHidden: Value(part.fieldsHidden),
+              componentId: Value(part.componentId),
               createdAt: part.createdAt,
             ),
             mode: InsertMode.insertOrReplace,
