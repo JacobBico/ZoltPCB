@@ -203,8 +203,6 @@
 <text x="398" y="53" font-family="sans-serif" font-size="10" fill="#e6e8ee" text-anchor="end">Rail</text>
 <line x1="387" y1="172" x2="452" y2="150" stroke="#9aa3b5" stroke-width="1"/>
 <text x="456" y="146" font-family="sans-serif" font-size="12" fill="#e6e8ee" text-anchor="start">Mouse-bite tab</text>
-<line x1="428" y1="172" x2="452" y2="190" stroke="#9aa3b5" stroke-width="1"/>
-<text x="456" y="194" font-family="sans-serif" font-size="12" fill="#e6e8ee" text-anchor="start">Routed slot</text>
 <line x1="430" y1="120" x2="452" y2="104" stroke="#9aa3b5" stroke-width="1"/>
 <text x="456" y="100" font-family="sans-serif" font-size="12" fill="#e6e8ee" text-anchor="start">One board</text>
 <text x="300" y="342" font-family="sans-serif" font-size="12" fill="#9aa3b5" text-anchor="middle">Four boards on one panel, ready for assembly</text>

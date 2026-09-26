@@ -24,9 +24,6 @@
 <text x="150" y="190" font-family="sans-serif" font-size="12" fill="#cfe8d8" text-anchor="middle">Board</text>
 <line x1="196" y1="136" x2="236" y2="136" stroke="#9aa3b5" stroke-width="1"/>
 <text x="240" y="140" font-family="sans-serif" font-size="12" fill="#e6e8ee" text-anchor="start">Tab</text>
-<line x1="70" y1="136" x2="100" y2="136" stroke="#9aa3b5" stroke-width="1"/>
-<text x="64" y="132" font-family="sans-serif" font-size="11" fill="#9aa3b5" text-anchor="end">Routed</text>
-<text x="64" y="146" font-family="sans-serif" font-size="11" fill="#9aa3b5" text-anchor="end">slot</text>
 <text x="150" y="242" font-family="sans-serif" font-size="12" fill="#9aa3b5" text-anchor="middle">The holes sit on the board edge,</text>
 <text x="150" y="258" font-family="sans-serif" font-size="12" fill="#9aa3b5" text-anchor="middle">so it snaps along them</text>
 <polygon points="330,110 438,110 450,126 462,110 570,110 570,152 462,152 450,136 438,152 330,152" fill="#2f8a55"/>
