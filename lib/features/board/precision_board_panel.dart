@@ -3820,8 +3820,8 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     // A part never put on the board has no placement yet, only the
     // footprint the schematic gave it.
     final placementOf = {for (final p in placements) p.partId: p};
-    // One with no footprint at all takes the original's: same symbol, and
-    // nothing chosen yet to say it should differ.
+    // A part not yet on the board takes the original's footprint, whatever
+    // the schematic says: a copy of the circuit is a copy of its layout.
     final symbolOf = {for (final part in parts) part.part.id: part.part.libId};
     final sourceFootprint = {
       for (final p in source) symbolOf[p.partId]: p.libId,
@@ -3829,18 +3829,17 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     final footprintOf = <String, String>{};
     for (final part in parts) {
       final placed = placementOf[part.part.id];
-      if (placed == null) {
-        final footprint = part.part.footprint.trim();
-        final fallback = sourceFootprint[part.part.libId];
-        if (!part.part.onBoard) continue;
-        if (footprint.isNotEmpty) {
-          footprintOf[part.part.id] = footprint;
-        } else if (fallback != null) {
-          footprintOf[part.part.id] = fallback;
-        }
-      } else if (!placed.placed || _selected.footprintIds.contains(placed.id)) {
+      if (placed != null && _selected.footprintIds.contains(placed.id)) {
         footprintOf[part.part.id] = placed.libId;
+        continue;
       }
+      if (placed?.placed ?? false) continue;
+      if (!part.part.onBoard) continue;
+      final footprint =
+          sourceFootprint[part.part.libId] ??
+          placed?.libId ??
+          part.part.footprint.trim();
+      if (footprint.isNotEmpty) footprintOf[part.part.id] = footprint;
     }
     final channels = findReplicaChannels(
       sourcePartIds: {for (final p in source) p.partId},
@@ -3946,18 +3945,24 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
     final before = <PlacedFootprintRef>[];
     final after = <PlacedFootprintRef>[];
+    // Parts that had a different footprint, put back by undo.
+    final swappedFrom = <String, String>{};
     for (final original in source.placements) {
       final partId = channel.parts[original.partId];
       if (partId == null) continue;
       // Never on the board: it gets the original's footprint, which is the
       // one its schematic footprint matched.
-      final target =
-          placements.where((p) => p.partId == partId).firstOrNull ??
-          await repository.assignFootprint(
-            projectId: widget.project.id,
-            partId: partId,
-            libId: original.libId,
-          );
+      final existing = placements.where((p) => p.partId == partId).firstOrNull;
+      final target = existing?.libId == original.libId
+          ? existing!
+          : await repository.assignFootprint(
+              projectId: widget.project.id,
+              partId: partId,
+              libId: original.libId,
+            );
+      if (existing != null && existing.libId != original.libId) {
+        swappedFrom[partId] = existing.libId;
+      }
       before.add(target);
       after.add(
         target.copyWith(
@@ -4002,6 +4007,13 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     ];
 
     Future<void> apply() => ref.read(editTransactionProvider)(() async {
+      for (final partId in swappedFrom.keys) {
+        await repository.assignFootprint(
+          projectId: widget.project.id,
+          partId: partId,
+          libId: after.firstWhere((p) => p.partId == partId).libId,
+        );
+      }
       for (final placement in after) {
         await repository.updatePlacement(placement);
       }
@@ -4016,6 +4028,13 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         await repository.deleteVias(vias.map((v) => v.id));
         for (final placement in before) {
           await repository.updatePlacement(placement);
+        }
+        for (final entry in swappedFrom.entries) {
+          await repository.assignFootprint(
+            projectId: widget.project.id,
+            partId: entry.key,
+            libId: entry.value,
+          );
         }
       }),
       redo: apply,

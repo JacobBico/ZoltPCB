@@ -690,11 +690,10 @@ void main() {
       final r3 = await parts.addPart(project.id, resistorSpec());
       final r4 = await parts.addPart(project.id, resistorSpec());
       await NetRepository(db).connectPins(r3.pins.first.id, r4.pins.first.id);
-      // Never put on the board, and no footprint chosen on the schematic
-      // either: they take the original's.
-      for (final part in [r3, r4]) {
-        await parts.updatePart(part.part.copyWith(footprint: ''));
-      }
+      // Never put on the board, one with no footprint and one with another:
+      // both take the original's.
+      await parts.updatePart(r3.part.copyWith(footprint: ''));
+      await parts.updatePart(r4.part.copyWith(footprint: 'Other:R_1206'));
       final placed = await boards.getFootprints(project.id);
       final r1 = placed.firstWhere((p) => p.x == 30);
       final net = await NetRepository(db).netIdForPin(
@@ -741,6 +740,7 @@ void main() {
         project.id,
       )).where((p) => p.partId == r3.part.id || p.partId == r4.part.id);
       expect(copies.every((p) => p.placed), isTrue);
+      expect(copies.every((p) => p.libId == 'Test:TwoPad'), isTrue);
     });
 
     testAppWithStorage('everything inside it can be deleted at once', (
