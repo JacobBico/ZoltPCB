@@ -8,6 +8,7 @@ import 'board_layer.dart';
 import 'net_class.dart';
 import 'board_outline.dart';
 import 'board_feature.dart';
+import 'board_image.dart';
 import 'board_text.dart';
 import 'board_zone.dart';
 import 'pour_copper.dart';
@@ -175,6 +176,7 @@ class BoardScene {
     this.edges = const [],
     this.zones = const [],
     this.texts = const [],
+    this.images = const [],
     this.staleTrackIds = const {},
     this.staleViaIds = const {},
     this.netClasses = const [],
@@ -243,6 +245,7 @@ class BoardScene {
     List<BoardEdge> edges = const [],
     List<BoardZone> zones = const [],
     List<BoardText> texts = const [],
+    List<BoardImage> images = const [],
     List<NetClass> netClasses = const [],
     List<BoardFeature> features = const [],
     List<BoardDimension> dimensions = const [],
@@ -387,6 +390,7 @@ class BoardScene {
       edges: edges,
       zones: zones,
       texts: texts,
+      images: images,
       netClasses: netClasses,
       netClassByNet: netClassByNet,
       features: features,
@@ -432,6 +436,9 @@ class BoardScene {
 
   /// Free text on the silkscreen, front and back.
   final List<BoardText> texts;
+
+  /// Pictures printed in the silkscreen.
+  final List<BoardImage> images;
 
   final List<PlacedFootprint> footprints;
   final List<PlacedPad> pads;

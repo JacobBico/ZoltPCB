@@ -471,6 +471,77 @@ void main() {
     });
   });
 
+  group('arcs are drawn by their centre', () {
+    Future<BoardEdge> drawArc(
+      WidgetTester tester,
+      BoardRepository boards,
+      String projectId, {
+      bool otherWay = false,
+    }) async {
+      await _edgeTool(tester, EdgeStyle.arc);
+      await _aimAt(tester, const Offset(40, 44));
+      await tester.tap(find.text('CENTRE'));
+      await settleApp(tester);
+      await _aimAt(tester, const Offset(43, 44));
+      await tester.tap(find.text('START'));
+      await settleApp(tester);
+      if (otherWay) {
+        await tester.tap(find.byKey(const ValueKey('arc-other-way')));
+        await settleApp(tester);
+      }
+      await _aimAt(tester, const Offset(40, 41));
+      await tester.tap(find.text('END'));
+      await settleApp(tester);
+      return (await boards.getEdges(projectId)).single;
+    }
+
+    testAppWithStorage('centre, start, end: the short way round', (
+      tester,
+      db,
+      storage,
+    ) async {
+      final footprintStorage = InMemoryLibraryStorageFor();
+      final (project, boards) = await _board(db, footprintStorage);
+      await _drawnOutline(boards, project.id);
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+
+      final arc = await drawArc(tester, boards, project.id);
+      expect(arc.kind, BoardEdgeKind.arc);
+      expect(arc.start, const Offset(43, 44));
+      expect(arc.end.dx, closeTo(40, 1e-6));
+      expect(arc.end.dy, closeTo(41, 1e-6));
+      // A quarter turn, so its middle is halfway round, up and to the right.
+      expect(arc.mid.dx, closeTo(40 + 3 * 0.70710678, 1e-6));
+      expect(arc.mid.dy, closeTo(44 - 3 * 0.70710678, 1e-6));
+    });
+
+    testAppWithStorage('and Other way takes the long way', (
+      tester,
+      db,
+      storage,
+    ) async {
+      final footprintStorage = InMemoryLibraryStorageFor();
+      final (project, boards) = await _board(db, footprintStorage);
+      await _drawnOutline(boards, project.id);
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+
+      final arc = await drawArc(tester, boards, project.id, otherWay: true);
+      // Three quarters round: the middle is down and to the left.
+      expect(arc.mid.dx, closeTo(40 - 3 * 0.70710678, 1e-6));
+      expect(arc.mid.dy, closeTo(44 + 3 * 0.70710678, 1e-6));
+    });
+  });
+
   group('sizes set up in advance', () {
     test('the design rule is always offered, listed or not', () {
       final board = Board(

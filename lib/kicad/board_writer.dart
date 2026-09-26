@@ -4,6 +4,7 @@ import 'dart:ui' show Offset;
 import '../core/util/ids.dart';
 import '../domain/export/board_document.dart';
 import '../domain/pcb/pcb.dart';
+import '../fab/silk_fonts.dart';
 import 'sexpr/sexpr.dart';
 import 'sexpr/sexpr_writer.dart';
 
@@ -59,6 +60,7 @@ class BoardWriter {
       ..._vias(document, netNumbers),
       ..._zones(document, netNumbers),
       ..._texts(document),
+      ..._images(document),
       ..._dimensions(document),
     ]);
   }
@@ -579,11 +581,35 @@ class BoardWriter {
           SList([SAtom('uuid'), S.text(derivedId('text:${text.id}'))]),
           S.list('effects', [
             S.list('font', [
+              // A TrueType font by its family name, which KiCad draws the
+              // text in when the desktop has it installed.
+              if (SilkFonts.byId(text.font) case final font?)
+                SList([SAtom('face'), S.text(font.family)]),
               S.of('size', [text.size, text.size]),
               S.of('thickness', [_stroke(text.size)]),
             ]),
             if (text.back) SList([SAtom('justify'), SAtom('mirror')]),
           ]),
+        ]),
+  ];
+
+  /// Silkscreen pictures, as the filled blocks their ink is printed as.
+  /// KiCad has no printed-bitmap object, so this is the form that reaches
+  /// its Gerbers unchanged.
+  List<SList> _images(BoardDocument document) => [
+    for (final image in document.scene.images)
+      for (var i = 0; i < image.inkPolygons.length; i++)
+        S.list('gr_poly', [
+          S.list('pts', [
+            for (final p in image.inkPolygons[i]) S.of('xy', [p.dx, p.dy]),
+          ]),
+          S.list('stroke', [
+            S.of('width', [0]),
+            S.of('type', [SAtom('solid')]),
+          ]),
+          S.flag('fill', true),
+          SList([SAtom('layer'), S.text(image.layer.token)]),
+          SList([SAtom('uuid'), S.text(derivedId('image:${image.id}:$i'))]),
         ]),
   ];
 

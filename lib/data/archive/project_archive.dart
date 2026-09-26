@@ -154,6 +154,7 @@ class ProjectArchiver {
     'board_edges',
     'board_zones',
     'board_texts',
+    'board_images',
     'board_features',
     'board_dimensions',
   ];

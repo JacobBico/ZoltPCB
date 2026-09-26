@@ -655,6 +655,72 @@ class BoardTexts extends Table {
 
   /// `F.SilkS` or `B.SilkS`.
   TextColumn get layer => text()();
+
+  /// The font it is drawn in: a bundled font's id, `user:<id>` for one the
+  /// user imported, or empty for the plain stroke font KiCad uses.
+  TextColumn get font => text().withDefault(const Constant(''))();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// A picture in the silkscreen, as one bit a pixel.
+@TableIndex(name: 'idx_board_images_project', columns: {#projectId})
+@DataClassName('BoardImageRow')
+class BoardImages extends Table {
+  TextColumn get id => text()();
+  TextColumn get projectId =>
+      text().references(Projects, #id, onDelete: KeyAction.cascade)();
+  TextColumn get name => text().withDefault(const Constant(''))();
+  RealColumn get x => real()();
+  RealColumn get y => real()();
+
+  /// Printed width in millimetres.
+  RealColumn get width => real()();
+  RealColumn get rotation => real().withDefault(const Constant(0))();
+
+  /// `F.SilkS` or `B.SilkS`.
+  TextColumn get layer => text()();
+  IntColumn get columns => integer()();
+  IntColumn get rows => integer()();
+
+  /// The pixels, packed a bit each and base64-encoded.
+  TextColumn get bits => text()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// A picture saved for the silkscreen, ready to put on any board. Belongs
+/// to the phone, not to a project.
+@DataClassName('SilkPictureRow')
+class SilkPictures extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+
+  /// The width it is placed at, in millimetres, unless changed.
+  RealColumn get width => real()();
+  IntColumn get columns => integer()();
+  IntColumn get rows => integer()();
+
+  /// The pixels, packed a bit each and base64-encoded.
+  TextColumn get bits => text()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// A font the user added for silkscreen text. Belongs to the phone, not to
+/// a project: once added, every board can use it.
+@DataClassName('UserFontRow')
+class UserFonts extends Table {
+  TextColumn get id => text()();
+  TextColumn get family => text()();
+  TextColumn get fileName => text()();
+  BlobColumn get bytes => blob()();
   DateTimeColumn get createdAt => dateTime()();
 
   @override

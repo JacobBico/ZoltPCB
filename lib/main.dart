@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +14,8 @@ import 'app/appearance.dart';
 import 'app/error_log.dart';
 import 'app/providers.dart';
 import 'data/libraries/library_file_storage.dart';
+import 'fab/silk_fonts.dart';
+import 'features/pictures/picture_library.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -78,6 +82,27 @@ Future<void> main() async {
   // The chosen theme is read before the first frame, so the app opens in
   // it rather than flashing the default on the way.
   await container.read(appearanceProvider.notifier).load();
+
+  // Silkscreen fonts: the bundled ones and any the user added. A font
+  // that will not load leaves text in it drawn in the stroke font.
+  for (final font in SilkFonts.bundled) {
+    try {
+      final data = await rootBundle.load('assets/fonts/${font.asset}');
+      SilkFonts.register(font.id, data.buffer.asUint8List());
+    } on Object catch (error, stack) {
+      errorLog.record(error, stack, context: 'font ${font.asset}');
+    }
+  }
+  await container.read(fontRepositoryProvider).loadAll();
+  // The built-in silkscreen pictures, drawn now so the picture library has
+  // them ready the first time it opens.
+  unawaited(PictureLibrary.builtIns());
+  LicenseRegistry.addLicense(() async* {
+    final text = await rootBundle.loadString('assets/fonts/LICENSES.txt');
+    yield LicenseEntryWithLineBreaks([
+      for (final font in SilkFonts.bundled) font.name,
+    ], text);
+  });
 
   runApp(
     UncontrolledProviderScope(container: container, child: const ZoltApp()),

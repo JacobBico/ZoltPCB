@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/db/database.dart';
+import '../data/repositories/font_repository.dart';
+import '../data/repositories/picture_repository.dart';
 import '../data/repositories/net_repository.dart';
 import '../data/repositories/pin_swap.dart';
 import '../data/repositories/active_sheet.dart';
@@ -410,6 +412,7 @@ final boardSceneProvider = FutureProvider.family<BoardScene, String>((
   final edges = await ref.watch(boardEdgesProvider(projectId).future);
   final zones = await ref.watch(boardZonesProvider(projectId).future);
   final texts = await ref.watch(boardTextsProvider(projectId).future);
+  final images = await ref.watch(boardImagesProvider(projectId).future);
   final netClasses = await ref.watch(netClassesProvider(projectId).future);
   final features = await ref.watch(boardFeaturesProvider(projectId).future);
   final dimensions = await ref.watch(boardDimensionsProvider(projectId).future);
@@ -425,6 +428,7 @@ final boardSceneProvider = FutureProvider.family<BoardScene, String>((
     edges: edges,
     zones: zones,
     texts: texts,
+    images: images,
     netClasses: netClasses,
     features: features,
     dimensions: dimensions,
@@ -454,6 +458,23 @@ final netClassesProvider = StreamProvider.family<List<NetClass>, String>(
 );
 
 /// Free silkscreen text on the board.
+final boardImagesProvider = StreamProvider.family<List<BoardImage>, String>(
+  (ref, projectId) => ref.watch(boardRepositoryProvider).watchImages(projectId),
+);
+
+final pictureRepositoryProvider = Provider<PictureRepository>(
+  (ref) => PictureRepository(ref.watch(databaseProvider)),
+);
+
+/// The pictures saved for the silkscreen, newest last.
+final silkPicturesProvider = StreamProvider<List<SilkPicture>>(
+  (ref) => ref.watch(pictureRepositoryProvider).watchAll(),
+);
+
+final fontRepositoryProvider = Provider<FontRepository>(
+  (ref) => FontRepository(ref.watch(databaseProvider)),
+);
+
 final boardTextsProvider = StreamProvider.family<List<BoardText>, String>(
   (ref, projectId) => ref.watch(boardRepositoryProvider).watchTexts(projectId),
   isAutoDispose: true,

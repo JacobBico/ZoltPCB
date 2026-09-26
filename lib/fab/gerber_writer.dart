@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import '../domain/pcb/pcb.dart';
 import '../domain/symbols/symbols.dart' show FillType;
+import 'silk_fonts.dart';
 import 'stroke_font.dart';
 
 /// One file of a fabrication set.
@@ -491,6 +492,23 @@ abstract final class FabricationWriter {
 
     for (final text in scene.texts) {
       if (text.back == front) continue;
+      // In a font: filled letters, holes and all, exactly as drawn.
+      final font = SilkFonts.byId(text.font);
+      if (font != null) {
+        for (final (outer, holes) in SilkText.shapes(
+          SilkText.contours(
+            text.content,
+            font,
+            centre: text.position,
+            height: text.size,
+            rotation: text.rotation,
+            mirror: text.back,
+          ),
+        )) {
+          g.regionWithHoles(outer, holes);
+        }
+        continue;
+      }
       for (final stroke in StrokeFont.strokes(
         text.content,
         centre: text.position,
@@ -499,6 +517,14 @@ abstract final class FabricationWriter {
         mirror: text.back,
       )) {
         g.stroke(stroke, StrokeFont.strokeWidth(text.size));
+      }
+    }
+
+    // Pictures: their ink, as the rectangles it is drawn with.
+    for (final image in scene.images) {
+      if (image.back == front) continue;
+      for (final block in image.inkPolygons) {
+        g.region(block);
       }
     }
   }
@@ -811,6 +837,52 @@ class _Gerber {
         ? hole.reversed.toList()
         : hole;
     region([...outer, outer.first, ...inner, inner.first]);
+  }
+
+  /// A region with any number of holes, each joined by its own cut-in to
+  /// the nearest corner of what has been joined so far — a letter B's two
+  /// counters, say.
+  void regionWithHoles(List<Offset> outer, List<List<Offset>> holes) {
+    if (holes.isEmpty) return region(outer);
+    double area(List<Offset> p) {
+      var sum = 0.0;
+      for (var i = 0; i < p.length; i++) {
+        final a = p[i];
+        final b = p[(i + 1) % p.length];
+        sum += a.dx * b.dy - b.dx * a.dy;
+      }
+      return sum;
+    }
+
+    final outward = area(outer) > 0;
+    var merged = [...outer];
+    for (final hole in holes) {
+      if (hole.length < 3) continue;
+      final inner = (area(hole) > 0) == outward
+          ? hole.reversed.toList()
+          : hole;
+      // The shortest bridge: the closest pair of corners, one each side.
+      var bestA = 0;
+      var bestB = 0;
+      var best = double.infinity;
+      for (var i = 0; i < merged.length; i++) {
+        for (var j = 0; j < inner.length; j++) {
+          final d = (merged[i] - inner[j]).distanceSquared;
+          if (d < best) {
+            best = d;
+            bestA = i;
+            bestB = j;
+          }
+        }
+      }
+      merged = [
+        ...merged.sublist(0, bestA + 1),
+        ...inner.sublist(bestB),
+        ...inner.sublist(0, bestB + 1),
+        ...merged.sublist(bestA),
+      ];
+    }
+    region(merged);
   }
 
   void region(List<Offset> points) {

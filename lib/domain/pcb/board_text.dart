@@ -13,6 +13,7 @@ class BoardText {
     this.rotation = 0,
     this.size = 1.0,
     this.back = false,
+    this.font = '',
   });
 
   final String id;
@@ -32,6 +33,10 @@ class BoardText {
   /// written mirrored — which KiCad's DRC insists on.
   final bool back;
 
+  /// The font it is drawn in: a bundled font's id, `user:<id>` for one the
+  /// user imported, or empty for the plain stroke font KiCad uses.
+  final String font;
+
   BoardLayer get layer => back ? BoardLayer.backSilk : BoardLayer.frontSilk;
 
   BoardText copyWith({
@@ -40,6 +45,7 @@ class BoardText {
     double? rotation,
     double? size,
     bool? back,
+    String? font,
   }) => BoardText(
     id: id,
     projectId: projectId,
@@ -48,5 +54,6 @@ class BoardText {
     rotation: rotation ?? this.rotation,
     size: size ?? this.size,
     back: back ?? this.back,
+    font: font ?? this.font,
   );
 }

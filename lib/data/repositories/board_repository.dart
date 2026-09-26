@@ -604,6 +604,7 @@ class BoardRepository {
     double rotation = 0,
     double size = 1.0,
     bool back = false,
+    String font = '',
   }) async {
     final text = BoardText(
       id: newId(),
@@ -613,6 +614,7 @@ class BoardRepository {
       rotation: rotation,
       size: size,
       back: back,
+      font: font,
     );
     await restoreText(text);
     return text;
@@ -629,6 +631,7 @@ class BoardRepository {
         rotation: Value(text.rotation),
         size: Value(text.size),
         layer: Value(text.layer.token),
+        font: Value(text.font),
       ),
     );
   }
@@ -652,6 +655,7 @@ class BoardRepository {
             rotation: Value(text.rotation),
             size: Value(text.size),
             layer: text.layer.token,
+            font: Value(text.font),
             createdAt: DateTime.now(),
           ),
           mode: InsertMode.insertOrReplace,
@@ -666,6 +670,99 @@ class BoardRepository {
     rotation: row.rotation,
     size: row.size,
     back: row.layer == BoardLayer.backSilk.token,
+    font: row.font,
+  );
+
+  // --- silkscreen pictures ---------------------------------------------
+
+  Future<List<BoardImage>> getImages(String projectId) async {
+    final query = _db.select(_db.boardImages)
+      ..where((t) => t.projectId.equals(projectId))
+      ..orderBy([(t) => OrderingTerm(expression: t.createdAt)]);
+    return (await query.get()).map(_toImage).toList();
+  }
+
+  Stream<List<BoardImage>> watchImages(String projectId) =>
+      _db.watchAggregate({_db.boardImages}, () => getImages(projectId));
+
+  Future<BoardImage> addImage({
+    required String projectId,
+    required String name,
+    required Offset position,
+    required double width,
+    required int columns,
+    required int rows,
+    required Uint8List bits,
+    bool back = false,
+  }) async {
+    final image = BoardImage(
+      id: newId(),
+      projectId: projectId,
+      name: name,
+      position: position,
+      width: width,
+      columns: columns,
+      rows: rows,
+      bits: bits,
+      back: back,
+    );
+    await restoreImage(image);
+    return image;
+  }
+
+  Future<void> updateImage(BoardImage image) async {
+    await (_db.update(
+      _db.boardImages,
+    )..where((t) => t.id.equals(image.id))).write(
+      BoardImagesCompanion(
+        x: Value(image.position.dx),
+        y: Value(image.position.dy),
+        width: Value(image.width),
+        rotation: Value(image.rotation),
+        layer: Value(image.layer.token),
+      ),
+    );
+  }
+
+  Future<void> deleteImage(String id) async {
+    await (_db.delete(_db.boardImages)..where((t) => t.id.equals(id))).go();
+  }
+
+  /// Writes a picture exactly as given, for adding one and for undoing its
+  /// deletion alike.
+  Future<void> restoreImage(BoardImage image) async {
+    await _db
+        .into(_db.boardImages)
+        .insert(
+          BoardImagesCompanion.insert(
+            id: image.id,
+            projectId: image.projectId,
+            name: Value(image.name),
+            x: image.position.dx,
+            y: image.position.dy,
+            width: image.width,
+            rotation: Value(image.rotation),
+            layer: image.layer.token,
+            columns: image.columns,
+            rows: image.rows,
+            bits: image.encodedBits,
+            createdAt: DateTime.now(),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+  }
+
+  static BoardImage _toImage(BoardImageRow row) => BoardImage(
+    id: row.id,
+    projectId: row.projectId,
+    name: row.name,
+    position: Offset(row.x, row.y),
+    width: row.width,
+    rotation: row.rotation,
+    back: row.layer == BoardLayer.backSilk.token,
+    columns: row.columns,
+    rows: row.rows,
+    bits: BoardImage.decodeBits(row.bits),
   );
 
   // --- copper pours ----------------------------------------------------

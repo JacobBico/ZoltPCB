@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +13,7 @@ import '../../core/theme/kicad_palette.dart';
 import '../../core/widgets/panel.dart';
 import '../../domain/models/models.dart';
 import '../../domain/pcb/pcb.dart';
+import '../../fab/silk_fonts.dart';
 import '../../rendering/schematic_viewport.dart';
 import '../project/cross_probe_view.dart';
 import 'board_painter.dart';
@@ -31,6 +33,8 @@ import 'drc_sheet.dart';
 import 'footprint_sidebar.dart';
 import 'object_properties.dart';
 import 'net_classes_dialog.dart';
+import '../pictures/picture_library.dart';
+import 'silk_picture.dart';
 import 'silkscreen_dialogs.dart';
 import 'track_sizes_dialog.dart';
 import 'zone_editor.dart';
@@ -134,7 +138,7 @@ enum EdgeStyle {
   arc(
     'Arc',
     Icons.architecture,
-    'Place the start, a point it passes through, then the end',
+    'Place the centre, then where the arc starts, then where it ends',
     3,
   );
 
@@ -150,6 +154,22 @@ enum EdgeStyle {
 
   /// Whether the shape encloses an area — a board, or a hole in one.
   bool get closed => this != lines && this != arc;
+}
+
+/// What the Text tool puts on the silkscreen.
+enum SilkStyle {
+  text('Text', Icons.text_fields, 'Aim where the text goes'),
+  picture(
+    'Picture',
+    Icons.image_outlined,
+    'Aim where the picture goes, then pick it from your pictures',
+  );
+
+  const SilkStyle(this.label, this.icon, this.hint);
+
+  final String label;
+  final IconData icon;
+  final String hint;
 }
 
 /// What the Via tool puts down.
@@ -297,6 +317,11 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
   /// Silkscreen riding on the crosshair: a text, or a part's designator.
   String? _carryingTextId;
+
+  /// The silkscreen picture picked, and the one riding on the crosshair.
+  String? _selectedImageId;
+  String? _carryingImageId;
+  SilkStyle _silkStyle = SilkStyle.text;
   String? _carryingLabelId;
 
   // Whatever is being drawn, corner by corner.
@@ -318,6 +343,31 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   ViaStyle _viaStyle = ViaStyle.via;
   PourStyle _pourStyle = PourStyle.copper;
   EdgeStyle _edgeStyle = EdgeStyle.rectangle;
+
+  /// An arc goes the short way round from its start to its end unless this
+  /// is set, when it goes the long way.
+  bool _arcLong = false;
+
+  /// The arc about [centre] from [start] towards [end], as the start, a
+  /// point on it and the end — the three points an arc is stored as. The
+  /// end is brought onto the circle [start] sets, and the arc turns the
+  /// short way unless [_arcLong] says otherwise.
+  List<Offset> arcThrough(Offset centre, Offset start, Offset end) {
+    final radius = (start - centre).distance;
+    final a0 = math.atan2(start.dy - centre.dy, start.dx - centre.dx);
+    final a1 = math.atan2(end.dy - centre.dy, end.dx - centre.dx);
+    var sweep = a1 - a0;
+    while (sweep > math.pi) {
+      sweep -= 2 * math.pi;
+    }
+    while (sweep <= -math.pi) {
+      sweep += 2 * math.pi;
+    }
+    if (_arcLong) sweep -= sweep.sign * 2 * math.pi;
+    Offset on(double angle) =>
+        centre + Offset(math.cos(angle), math.sin(angle)) * radius;
+    return [start, on(a0 + sweep / 2), on(a0 + sweep)];
+  }
 
   /// The loops a meander draws, while that is what the Route tool is set
   /// to. Kept between runs: the shape you want is a property of the board,
@@ -403,16 +453,6 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     final parts = partsAsync.value;
     if (scene == null || parts == null) return const SizedBox.shrink();
 
-    if (parts.isEmpty) {
-      return const EmptyState(
-        icon: Icons.developer_board_outlined,
-        title: 'Nothing to lay out yet',
-        message:
-            'A board is built from the schematic. Add components and wire '
-            'them up first, then come back.',
-      );
-    }
-
     final assigning = parts
         .where((p) => p.part.id == _assigningPartId)
         .firstOrNull;
@@ -469,6 +509,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                       selectedEdgeId: _selectedEdgeId,
                       selectedZoneId: _selectedZoneId,
                       selectedTextId: _carryingTextId ?? _selectedTextId,
+                      selectedImageId: _carryingImageId ?? _selectedImageId,
                       selectedLabelId: _carryingLabelId ?? _selectedLabelId,
                       highlightedNetId: _highlightedNetId,
                       pendingRoute: _routeStyle == RouteStyle.pair
@@ -531,6 +572,18 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                   ),
                 ),
               ),
+            // The middle of the board — or of the working area, before an
+            // outline is drawn — so there is always somewhere to aim from.
+            if (!_fabPreview)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: _CentreMarkPainter(
+                      viewport.toScreen(scene.outline.bounds.center),
+                    ),
+                  ),
+                ),
+              ),
             if (!_fabPreview)
               Positioned.fill(
                 child: CrosshairOverlay(
@@ -569,6 +622,27 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                     onPressed: () => _pickEdgeStyle(
                       _edgeStyle.closed ? _edgeStyle : EdgeStyle.rectangle,
                     ),
+                  ),
+                ),
+              ),
+            // No parts yet: the board is still here to shape, with a word
+            // on where parts come from.
+            if (parts.isEmpty && !_fabPreview)
+              Positioned(
+                top: scene.outline.isDrawn || _tool == AimTool.edge ? 52 : 100,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: ActionChip(
+                    key: const ValueKey('no-parts-chip'),
+                    avatar: const Icon(Icons.memory_outlined, size: 16),
+                    label: const Text(
+                      'No parts yet — add them on the schematic',
+                    ),
+                    backgroundColor: KicadPalette.surface.withValues(
+                      alpha: 0.94,
+                    ),
+                    onPressed: widget.onShowSchematic,
                   ),
                 ),
               ),
@@ -616,7 +690,9 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   BoardScene _withCarried(BoardScene committed, Offset at) {
     final delta = _carryAnchor == null ? Offset.zero : at - _carryAnchor!;
 
-    if (_carryingTextId != null || _carryingLabelId != null) {
+    if (_carryingTextId != null ||
+        _carryingLabelId != null ||
+        _carryingImageId != null) {
       return _withSilkMoved(committed, at);
     }
 
@@ -674,6 +750,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     return BoardScene.build(
       previewOf: committed,
       texts: committed.texts,
+      images: committed.images,
       netClasses: committed.netClasses,
       features: [
         for (final feature in committed.features)
@@ -727,6 +804,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     return BoardScene.build(
       previewOf: committed,
       texts: committed.texts,
+      images: committed.images,
       netClasses: committed.netClasses,
       features: committed.features,
       dimensions: committed.dimensions,
@@ -784,6 +862,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     return BoardScene.build(
       previewOf: committed,
       texts: committed.texts,
+      images: committed.images,
       netClasses: committed.netClasses,
       features: committed.features,
       dimensions: committed.dimensions,
@@ -898,6 +977,11 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       // against the board as it was, so the thing being moved would catch
       // its own old position and the drag would measure from there.
       snapToObjects: _tool != AimTool.region && !_isCarrying,
+      // Closing a shape on the point it started from.
+      extraPoints: [
+        if (_points.isNotEmpty && _tool != AimTool.route)
+          (_points.first, 'start'),
+      ],
     );
   }
 
@@ -958,7 +1042,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         return (BoardEdgeKind.polygon, points.sublist(0, 3));
       case EdgeStyle.arc:
         if (points.length < 3) return null;
-        return (BoardEdgeKind.arc, points.sublist(0, 3));
+        return (BoardEdgeKind.arc, arcThrough(points[0], points[1], points[2]));
     }
   }
 
@@ -1047,6 +1131,17 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
                           onPressed: _tool == AimTool.zone
                               ? _choosePourStyle
                               : () => _pickPourStyle(_pourStyle),
+                        )
+                      else if (tool == AimTool.text)
+                        _ToolChip(
+                          key: const ValueKey('tool-silk'),
+                          icon: _silkStyle.icon,
+                          label: _silkStyle.label,
+                          selected: _tool == AimTool.text,
+                          hasMenu: true,
+                          onPressed: _tool == AimTool.text
+                              ? _chooseSilkStyle
+                              : () => _pickSilkStyle(_silkStyle),
                         )
                       else if (tool == AimTool.edge)
                         _ToolChip(
@@ -1205,7 +1300,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         EdgeStyle.triangle => _points.isEmpty ? 'START' : 'CORNER',
         EdgeStyle.rectangle => _points.isEmpty ? 'CORNER' : 'OPPOSITE',
         EdgeStyle.circle => _points.isEmpty ? 'CENTRE' : 'RIM',
-        EdgeStyle.arc => const ['START', 'THROUGH', 'END'][_points.length % 3],
+        EdgeStyle.arc => const ['CENTRE', 'START', 'END'][_points.length % 3],
       },
       AimTool.via => 'VIA',
       AimTool.measure => _measureFrom == null ? 'FROM' : 'TO',
@@ -1230,6 +1325,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       _slidingTrackId != null ||
       _carryingTextId != null ||
       _carryingLabelId != null ||
+      _carryingImageId != null ||
       _carryingOutlineHandle != null ||
       _carryingOutline ||
       _carryingSelection;
@@ -1260,6 +1356,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         _slidingTrackId != null ||
         _carryingTextId != null ||
         _carryingLabelId != null ||
+        _carryingImageId != null ||
         _carryingOutlineHandle != null ||
         _carryingOutline ||
         _carryingSelection) {
@@ -1307,6 +1404,15 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     if (_points.isNotEmpty) {
       return [
         _Chip(icon: Icons.undo, label: 'Back', onPressed: _undoPoint),
+        if (_tool == AimTool.edge &&
+            _edgeStyle == EdgeStyle.arc &&
+            _points.length == 2)
+          _Chip(
+            key: const ValueKey('arc-other-way'),
+            icon: Icons.swap_horiz,
+            label: 'Other way',
+            onPressed: () => setState(() => _arcLong = !_arcLong),
+          ),
         if (_tool == AimTool.route && _routeStyle == RouteStyle.meander)
           _meanderChip(scene)
         else if (_tool == AimTool.route && _routeStyle == RouteStyle.pair)
@@ -1381,6 +1487,33 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           label: 'Delete',
           danger: true,
           onPressed: () => _deleteText(selectedText),
+        ),
+      ];
+    }
+
+    final selectedImage = scene.images
+        .where((i) => i.id == _selectedImageId)
+        .firstOrNull;
+    if (selectedImage != null) {
+      return [
+        _Chip(
+          icon: Icons.open_with,
+          label: 'Move',
+          onPressed: () => setState(() {
+            _carryingImageId = selectedImage.id;
+            _carryAnchor = null;
+          }),
+        ),
+        _Chip(
+          icon: Icons.tune,
+          label: 'Edit',
+          onPressed: () => _editPicture(selectedImage),
+        ),
+        _Chip(
+          icon: Icons.delete_outline,
+          label: 'Delete',
+          danger: true,
+          onPressed: () => _deletePicture(selectedImage),
         ),
       ];
     }
@@ -2139,7 +2272,13 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         return;
 
       case AimTool.text:
-        await _addText(at);
+        switch (_silkStyle) {
+          case SilkStyle.text:
+            await _addText(at);
+          case SilkStyle.picture:
+            final picture = await showPictureLibrary(context);
+            if (picture != null && mounted) await _placePicture(at, picture);
+        }
         return;
 
       case AimTool.feature:
@@ -2481,6 +2620,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     _busLanes = const [];
     _routeNetId = null;
     _routeLayer = null;
+    _arcLong = false;
   }
 
   /// Writes whatever was being drawn.
@@ -2644,9 +2784,10 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   /// Typing exact dimensions into a form is still there for when the number
   /// is what you have, but it is no longer the only way in.
   Future<void> _finishEdge(BoardScene scene) async {
-    final points = List<Offset>.from(_points);
+    // Worked out before the drawing is cleared: clearing also forgets which
+    // way round an arc was to go.
+    final shape = _edgeShape(List<Offset>.from(_points));
     setState(_clearDrawing);
-    final shape = _edgeShape(points);
     if (shape == null) return;
     var (kind, at) = shape;
 
@@ -2888,7 +3029,9 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   /// Puts down whatever was picked up, wherever it was picked up from.
   Future<void> _drop(BoardScene scene, Offset at) async {
     final anchor = _carryAnchor;
-    if (_carryingTextId != null || _carryingLabelId != null) {
+    if (_carryingTextId != null ||
+        _carryingLabelId != null ||
+        _carryingImageId != null) {
       await _dropSilk(scene, at);
       return;
     }
@@ -3153,6 +3296,10 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       for (final text in committed.texts)
         text.id == _carryingTextId ? text.copyWith(position: at) : text,
     ],
+    images: [
+      for (final image in committed.images)
+        image.id == _carryingImageId ? image.copyWith(position: at) : image,
+    ],
     features: committed.features,
     dimensions: committed.dimensions,
     staleTrackIds: committed.staleTrackIds,
@@ -3166,11 +3313,27 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   Future<void> _dropSilk(BoardScene scene, Offset at) async {
     final textId = _carryingTextId;
     final labelId = _carryingLabelId;
+    final imageId = _carryingImageId;
     setState(() {
       _carryingTextId = null;
       _carryingLabelId = null;
+      _carryingImageId = null;
     });
     final repository = ref.read(boardRepositoryProvider);
+
+    if (imageId != null) {
+      final before = scene.images.where((i) => i.id == imageId).firstOrNull;
+      if (before == null) return;
+      final after = before.copyWith(position: at);
+      await repository.updateImage(after);
+      unawaited(HapticFeedback.lightImpact());
+      _record(
+        'Move ${before.name}',
+        undo: () => repository.updateImage(before),
+        redo: () => repository.updateImage(after),
+      );
+      return;
+    }
 
     if (textId != null) {
       final before = scene.texts.where((t) => t.id == textId).firstOrNull;
@@ -3209,6 +3372,8 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       // On whichever side is being worked on, which is nearly always the
       // side the text was meant for.
       back: ref.read(activeLayerProvider) == CopperLayer.back,
+      font: _lastFont,
+      onAddFont: _addFont,
     );
     if (result == null || result.deleted || !mounted) return;
 
@@ -3220,7 +3385,9 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       rotation: result.rotation,
       size: result.size,
       back: result.back,
+      font: result.font,
     );
+    _lastFont = result.font;
     if (!mounted) return;
     setState(() {
       _clearSelection();
@@ -3241,6 +3408,8 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       rotation: text.rotation,
       back: text.back,
       existing: true,
+      font: text.font,
+      onAddFont: _addFont,
     );
     if (result == null || !mounted) return;
     if (result.deleted) {
@@ -3254,7 +3423,9 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       size: result.size,
       rotation: result.rotation,
       back: result.back,
+      font: result.font,
     );
+    _lastFont = result.font;
     await repository.updateText(after);
     _record(
       'Edit text',
@@ -3271,6 +3442,95 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       'Delete text',
       undo: () => repository.restoreText(text),
       redo: () => repository.deleteText(text.id),
+    );
+  }
+
+  /// The font the last text was given, offered for the next one.
+  String _lastFont = '';
+
+  /// Adds a TrueType font from the phone, for every board to use.
+  Future<SilkFontInfo?> _addFont() async {
+    try {
+      final picked = await FilePicker.pickFiles(
+        dialogTitle: 'Pick a .ttf font',
+        type: FileType.any,
+      );
+      if (picked.isEmpty) return null;
+      final file = picked.first;
+      final added = await ref
+          .read(fontRepositoryProvider)
+          .add(file.name, await file.readAsBytes());
+      _notify('Added ${added.name}');
+      return added;
+    } on FormatException catch (error) {
+      _notify(error.message);
+      return null;
+    }
+  }
+
+  void _pickSilkStyle(SilkStyle style) {
+    _pickTool(AimTool.text);
+    setState(() => _silkStyle = style);
+    _notify(style.hint);
+  }
+
+  Future<void> _chooseSilkStyle() async {
+    final chosen = await _pickFrom(
+      SilkStyle.values,
+      selected: _silkStyle,
+      icon: (s) => s.icon,
+      label: (s) => s.label,
+      hint: (s) => s.hint,
+    );
+    if (chosen == null || !mounted) return;
+    _pickSilkStyle(chosen);
+  }
+
+  Future<void> _placePicture(Offset at, PreparedPicture picture) async {
+    final repository = ref.read(boardRepositoryProvider);
+    final added = await repository.addImage(
+      projectId: widget.project.id,
+      name: picture.name,
+      position: at,
+      width: picture.width,
+      columns: picture.columns,
+      rows: picture.rows,
+      bits: picture.bits,
+      back: ref.read(activeLayerProvider) == CopperLayer.back,
+    );
+    if (!mounted) return;
+    unawaited(HapticFeedback.lightImpact());
+    setState(() {
+      _clearSelection();
+      _selectedImageId = added.id;
+    });
+    _record(
+      'Add ${picture.name}',
+      undo: () => repository.deleteImage(added.id),
+      redo: () => repository.restoreImage(added),
+    );
+  }
+
+  Future<void> _editPicture(BoardImage image) async {
+    final result = await showPicturePropertiesDialog(context, image);
+    if (result == null || !mounted) return;
+    final repository = ref.read(boardRepositoryProvider);
+    await repository.updateImage(result);
+    _record(
+      'Edit ${image.name}',
+      undo: () => repository.updateImage(image),
+      redo: () => repository.updateImage(result),
+    );
+  }
+
+  Future<void> _deletePicture(BoardImage image) async {
+    final repository = ref.read(boardRepositoryProvider);
+    await repository.deleteImage(image.id);
+    if (mounted) setState(() => _selectedImageId = null);
+    _record(
+      'Delete ${image.name}',
+      undo: () => repository.restoreImage(image),
+      redo: () => repository.deleteImage(image.id),
     );
   }
 
@@ -3401,6 +3661,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     _slidingTrackId = null;
     _carryingTextId = null;
     _carryingLabelId = null;
+    _carryingImageId = null;
     _carryingOutline = false;
     _carryingOutlineHandle = null;
   }
@@ -3486,6 +3747,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     edges: committed.edges,
     zones: committed.zones,
     texts: committed.texts,
+    images: committed.images,
     features: committed.features,
     dimensions: committed.dimensions,
     staleTrackIds: committed.staleTrackIds,
@@ -3861,6 +4123,16 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         select: () => _selectedTextId = text.id,
       );
     }
+    final image = scene.images.reversed
+        .where((i) => i.contains(board))
+        .firstOrNull;
+    if (image != null) {
+      return (
+        label: image.name.toUpperCase(),
+        id: 'image:${image.id}',
+        select: () => _selectedImageId = image.id,
+      );
+    }
     final labelled = _nearestLabel(scene, board, tolerance);
     if (labelled != null) {
       return (
@@ -4030,6 +4302,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     _highlightedNetId = null;
     _outlineSelected = false;
     _selectedTextId = null;
+    _selectedImageId = null;
     _selectedLabelId = null;
     _region = null;
     _regionFrom = null;
@@ -5215,6 +5488,28 @@ class _Chip extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A small red plus at the middle of the board.
+class _CentreMarkPainter extends CustomPainter {
+  _CentreMarkPainter(this.at);
+
+  final Offset at;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const arm = 9.0;
+    final paint = Paint()
+      ..color = const Color(0xFFFF4D4D)
+      ..strokeWidth = 1.6
+      ..strokeCap = StrokeCap.round;
+    canvas
+      ..drawLine(at - const Offset(arm, 0), at + const Offset(arm, 0), paint)
+      ..drawLine(at - const Offset(0, arm), at + const Offset(0, arm), paint);
+  }
+
+  @override
+  bool shouldRepaint(_CentreMarkPainter old) => old.at != at;
 }
 
 class _MeasurePainter extends CustomPainter {

@@ -293,6 +293,7 @@ class _BoardPanelState extends ConsumerState<BoardPanel> {
     return BoardScene.build(
       previewOf: committed,
       texts: committed.texts,
+      images: committed.images,
       netClasses: committed.netClasses,
       features: [
         for (final feature in committed.features)

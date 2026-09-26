@@ -56,6 +56,7 @@ SnapTarget resolveSnap({
   required double toleranceMm,
   CopperLayer? layer,
   bool snapToObjects = true,
+  List<(Offset, String)> extraPoints = const [],
 }) {
   // Sweeping a box round a track must not catch on the very track it is
   // meant to enclose — the corners would land on its ends and the box would
@@ -135,6 +136,26 @@ SnapTarget resolveSnap({
     );
   }
 
+  // The shape's own landmarks, for everything but routing: the corners,
+  // the middles of the sides and the centres of the outline, the edge cuts,
+  // the pours and the parts, and the start of whatever is being drawn. A
+  // soft pull, the way a drawing program's snaps are, so a cut lands
+  // exactly on the corner it was aimed at.
+  if (layer == null) {
+    (Offset, String)? bestKey;
+    bestDistance = double.infinity;
+    for (final key in [...extraPoints, ...boardKeypoints(scene)]) {
+      final distance = (key.$1 - at).distance;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestKey = key;
+      }
+    }
+    if (bestKey != null && bestDistance <= toleranceMm) {
+      return SnapTarget(at: bestKey.$1, label: bestKey.$2, strong: true);
+    }
+  }
+
   // Then anywhere along a track. This is the magnetic feel: a new branch
   // can leave an existing run at any point on it, the way it can in KiCad,
   // rather than only where two segments happen to meet.
@@ -176,6 +197,84 @@ SnapTarget resolveSnap({
   }
 
   return SnapTarget(at: at, label: 'free');
+}
+
+/// The points worth landing on exactly: every corner, the middle of every
+/// side and the centre of every shape on the board that is not copper.
+///
+/// Worked out once per scene: the scene is rebuilt only when the board
+/// changes, not as the crosshair moves.
+List<(Offset, String)> boardKeypoints(BoardScene scene) =>
+    _keypointCache[scene] ??= _keypoints(scene);
+
+final _keypointCache = Expando<List<(Offset, String)>>();
+
+List<(Offset, String)> _keypoints(BoardScene scene) {
+  final points = <(Offset, String)>[];
+  void polygon(List<Offset> corners, String what, {bool closed = true}) {
+    for (var i = 0; i < corners.length; i++) {
+      points.add((corners[i], '$what corner'));
+      if (!closed && i == corners.length - 1) break;
+      final next = corners[(i + 1) % corners.length];
+      points.add((Offset.lerp(corners[i], next, 0.5)!, '$what middle'));
+    }
+  }
+
+  void circle(Offset centre, double radius, String what) {
+    points
+      ..add((centre, '$what centre'))
+      ..add((centre + Offset(radius, 0), what))
+      ..add((centre - Offset(radius, 0), what))
+      ..add((centre + Offset(0, radius), what))
+      ..add((centre - Offset(0, radius), what));
+  }
+
+  final outline = scene.outline;
+  if (outline.isDrawn) {
+    if (outline.kind == BoardOutlineKind.circle) {
+      circle(outline.center, outline.radius, 'board');
+    } else {
+      polygon(outline.path, 'board');
+      points.add((outline.bounds.center, 'board centre'));
+    }
+  }
+
+  for (final edge in scene.edges) {
+    if (!edge.isValid) continue;
+    switch (edge.kind) {
+      case BoardEdgeKind.line:
+        polygon(edge.points, 'cut', closed: false);
+      case BoardEdgeKind.arc:
+        points
+          ..add((edge.start, 'arc end'))
+          ..add((edge.end, 'arc end'))
+          ..add((edge.mid, 'arc middle'));
+        final centre = BoardEdge.circumcentre(edge.start, edge.mid, edge.end);
+        if (centre != null) points.add((centre, 'arc centre'));
+      case BoardEdgeKind.rectangle:
+        final r = edge.bounds;
+        polygon([r.topLeft, r.topRight, r.bottomRight, r.bottomLeft], 'cut');
+        points.add((r.center, 'cut centre'));
+      case BoardEdgeKind.circle:
+        circle(edge.center, edge.radius, 'cut');
+      case BoardEdgeKind.polygon:
+        polygon(edge.points, 'cut');
+        points.add((edge.bounds.center, 'cut centre'));
+    }
+  }
+
+  for (final zone in scene.zones) {
+    polygon(zone.points, zone.keepout ? 'keepout' : 'pour');
+  }
+
+  for (final footprint in scene.footprints) {
+    if (!footprint.ref.placed) continue;
+    points.add((
+      Offset(footprint.ref.x, footprint.ref.y),
+      footprint.part.reference,
+    ));
+  }
+  return points;
 }
 
 /// Snaps something being carried onto the board's own landmarks.

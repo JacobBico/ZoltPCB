@@ -17,6 +17,7 @@ import 'package:zolt/data/repositories/project_repository.dart';
 import 'package:zolt/domain/export/board_document.dart';
 import 'package:zolt/domain/models/models.dart';
 import 'package:zolt/domain/pcb/pcb.dart';
+import 'package:zolt/fab/silk_fonts.dart';
 import 'package:zolt/kicad/board_project_writer.dart';
 import 'package:zolt/kicad/board_writer.dart';
 import 'package:zolt/kicad/footprint_writer.dart';
@@ -178,6 +179,37 @@ void main() {
         content: 'REV A',
         position: const Offset(40, 48),
         back: true,
+      );
+      // Text in a TrueType font, and a picture: an arrow of ink.
+      SilkFonts.register(
+        'fira-sans',
+        File('assets/fonts/FiraSans-Bold.ttf').readAsBytesSync(),
+      );
+      await boards.addText(
+        projectId: project.id,
+        content: 'Zolt',
+        position: const Offset(30, 46),
+        size: 1.5,
+        font: 'fira-sans',
+      );
+      const arrow = [
+        '..##....',
+        '.####...',
+        '######..',
+        '..##....',
+        '..##....',
+      ];
+      await boards.addImage(
+        projectId: project.id,
+        name: 'Arrow',
+        position: const Offset(52, 46),
+        width: 4,
+        columns: 8,
+        rows: arrow.length,
+        bits: BoardImage.pack([
+          for (final row in arrow)
+            for (final c in row.split('')) c == '#',
+        ]),
       );
 
       // A short route on the front, and one that changes layer through a via.
@@ -342,6 +374,7 @@ void main() {
         edges: await boards.getEdges(project.id),
         zones: await boards.getZones(project.id),
         texts: await boards.getTexts(project.id),
+        images: await boards.getImages(project.id),
         features: await boards.getFeatures(project.id),
         dimensions: await boards.getDimensions(project.id),
       );
@@ -428,6 +461,11 @@ void main() {
       expect(text, contains('np_thru_hole'));
       expect(text, contains('(solder_mask_margin 0.5)'));
       expect(RegExp(r'\(dimension\b').allMatches(text).length, 1);
+      expect(text, contains('(face "Fira Sans")'));
+      // The arrow's ink is five blocks: its point is three rows of
+      // different widths, and the shaft one tall block.
+      expect(RegExp(r'\(gr_poly\b').allMatches(text).length, 4);
+      expect(text, contains('(fill yes)'));
       expect(text, contains('(net_name "VCC")'));
       for (final corner in ['25 25', '59 25', '59 51', '25 51']) {
         expect(

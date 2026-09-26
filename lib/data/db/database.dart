@@ -32,6 +32,9 @@ part 'database.g.dart';
     BoardEdges,
     BoardZones,
     BoardTexts,
+    BoardImages,
+    UserFonts,
+    SilkPictures,
     AppSettings,
     ProjectSnapshots,
     SchematicNotes,
@@ -102,7 +105,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 22;
+  int get schemaVersion => 24;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -321,6 +324,17 @@ class AppDatabase extends _$AppDatabase {
       // v22: a part's component ID, for ordering and assembly.
       if (from < 22) {
         await m.addColumn(parts, parts.componentId);
+      }
+      // v23: silkscreen fonts and pictures.
+      if (from < 23) {
+        await m.addColumn(boardTexts, boardTexts.font);
+        await m.createTable(boardImages);
+        await m.createIndex(idxBoardImagesProject);
+        await m.createTable(userFonts);
+      }
+      // v24: the picture library.
+      if (from < 24) {
+        await m.createTable(silkPictures);
       }
     },
     beforeOpen: (details) async {

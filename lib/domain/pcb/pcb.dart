@@ -5,6 +5,7 @@ export 'board_layer.dart';
 export 'board_outline.dart';
 export 'board_scene.dart';
 export 'courtyard.dart';
+export 'board_image.dart';
 export 'board_text.dart';
 export 'board_zone.dart';
 export 'panel.dart';

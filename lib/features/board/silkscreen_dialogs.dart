@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/theme/kicad_palette.dart';
+import '../../fab/silk_fonts.dart';
+import '../../fab/truetype.dart';
 
 /// What a silkscreen text dialog came back with.
 class SilkscreenTextResult {
@@ -10,6 +12,7 @@ class SilkscreenTextResult {
     required this.size,
     required this.rotation,
     required this.back,
+    this.font = '',
     this.deleted = false,
   });
 
@@ -18,12 +21,16 @@ class SilkscreenTextResult {
       size = 0,
       rotation = 0,
       back = false,
+      font = '',
       deleted = true;
 
   final String content;
   final double size;
   final double rotation;
   final bool back;
+
+  /// The font's id; empty for the stroke font. See [SilkFonts].
+  final String font;
   final bool deleted;
 }
 
@@ -35,6 +42,8 @@ Future<SilkscreenTextResult?> showSilkscreenTextDialog(
   double rotation = 0,
   bool back = false,
   bool existing = false,
+  String font = '',
+  Future<SilkFontInfo?> Function()? onAddFont,
 }) => showDialog<SilkscreenTextResult>(
   context: context,
   builder: (context) => _SilkscreenTextDialog(
@@ -43,6 +52,8 @@ Future<SilkscreenTextResult?> showSilkscreenTextDialog(
     rotation: rotation,
     back: back,
     existing: existing,
+    font: font,
+    onAddFont: onAddFont,
   ),
 );
 
@@ -53,7 +64,13 @@ class _SilkscreenTextDialog extends StatefulWidget {
     required this.rotation,
     required this.back,
     required this.existing,
+    required this.font,
+    this.onAddFont,
   });
+
+  /// Adds a font from the phone, returning it, or null if none was added.
+  final Future<SilkFontInfo?> Function()? onAddFont;
+  final String font;
 
   final String content;
   final double size;
@@ -70,6 +87,7 @@ class _SilkscreenTextDialogState extends State<_SilkscreenTextDialog> {
   late final TextEditingController _size;
   late double _rotation;
   late bool _back;
+  late String _font;
 
   @override
   void initState() {
@@ -78,6 +96,19 @@ class _SilkscreenTextDialogState extends State<_SilkscreenTextDialog> {
     _size = TextEditingController(text: _mm(widget.size));
     _rotation = widget.rotation;
     _back = widget.back;
+    _font = widget.font;
+  }
+
+  static const _addFontValue = '\u0000add';
+
+  Future<void> _pickFont(String? value) async {
+    if (value == null) return;
+    if (value != _addFontValue) {
+      setState(() => _font = value);
+      return;
+    }
+    final added = await widget.onAddFont?.call();
+    if (added != null && mounted) setState(() => _font = added.id);
   }
 
   @override
@@ -156,6 +187,43 @@ class _SilkscreenTextDialogState extends State<_SilkscreenTextDialog> {
                   ),
                 ],
               ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                key: const ValueKey('silk-font'),
+                initialValue: SilkFonts.available.any((f) => f.id == _font)
+                    ? _font
+                    : '',
+                isDense: true,
+                decoration: const InputDecoration(labelText: 'Font'),
+                items: [
+                  for (final font in SilkFonts.available)
+                    DropdownMenuItem(value: font.id, child: Text(font.name)),
+                  if (widget.onAddFont != null)
+                    const DropdownMenuItem(
+                      value: _addFontValue,
+                      child: Text('Add a font from the phone…'),
+                    ),
+                ],
+                onChanged: _pickFont,
+              ),
+              // The text as it will print, in the font picked.
+              if (SilkFonts.byId(_font) case final font?)
+                Container(
+                  height: 44,
+                  margin: const EdgeInsets.only(top: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1B5E30),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: CustomPaint(
+                    painter: _FontPreview(
+                      _content.text.trim().isEmpty
+                          ? 'Zolt'
+                          : _content.text.trim(),
+                      font,
+                    ),
+                  ),
+                ),
               const SizedBox(height: 10),
               Wrap(
                 spacing: 6,
@@ -201,6 +269,7 @@ class _SilkscreenTextDialogState extends State<_SilkscreenTextDialog> {
                     size: _sizeValue!,
                     rotation: _rotation,
                     back: _back,
+                    font: _font,
                   ),
                 ),
           child: const Text('SAVE'),
@@ -208,6 +277,35 @@ class _SilkscreenTextDialogState extends State<_SilkscreenTextDialog> {
       ],
     );
   }
+}
+
+/// A line of text drawn in a silkscreen font, fitted to the box.
+class _FontPreview extends CustomPainter {
+  _FontPreview(this.text, this.font);
+
+  final String text;
+  final TrueTypeFont font;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final height = size.height * 0.5;
+    final width = SilkText.widthOf(text, font, height);
+    final fit = width > size.width * 0.9 ? size.width * 0.9 / width : 1.0;
+    final path = Path()..fillType = PathFillType.evenOdd;
+    for (final contour in SilkText.contours(
+      text,
+      font,
+      centre: size.center(Offset.zero),
+      height: height * fit,
+    )) {
+      path.addPolygon(contour, true);
+    }
+    canvas.drawPath(path, Paint()..color = const Color(0xFFF4F4F0));
+  }
+
+  @override
+  bool shouldRepaint(_FontPreview old) =>
+      old.text != text || !identical(old.font, font);
 }
 
 /// What the designator dialog came back with.

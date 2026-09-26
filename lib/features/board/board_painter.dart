@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import '../../core/theme/kicad_palette.dart';
 import '../../domain/pcb/pcb.dart';
 import '../../domain/symbols/symbols.dart' show FillType;
+import '../../fab/silk_fonts.dart';
+import '../../fab/truetype.dart';
 import '../../rendering/schematic_viewport.dart';
 
 /// Draws the board.
@@ -38,6 +40,7 @@ class BoardPainter extends CustomPainter {
     this.selectedEdgeId,
     this.selectedZoneId,
     this.selectedTextId,
+    this.selectedImageId,
     this.selectedLabelId,
     this.fabPreview = false,
     this.fabBack = false,
@@ -51,6 +54,9 @@ class BoardPainter extends CustomPainter {
 
   /// The free silkscreen text the user has hold of, if any.
   final String? selectedTextId;
+
+  /// The silkscreen picture picked or being carried, drawn highlighted.
+  final String? selectedImageId;
 
   /// The footprint whose designator the user has hold of, if any.
   final String? selectedLabelId;
@@ -147,6 +153,7 @@ class BoardPainter extends CustomPainter {
     _paintFootprints(canvas);
     _paintCollisions(canvas);
     _paintTexts(canvas);
+    _paintImages(canvas);
     _paintDimensions(canvas);
     if (showRatsnest) _paintRatsnest(canvas);
     _paintPendingRoute(canvas);
@@ -265,6 +272,7 @@ class BoardPainter extends CustomPainter {
       if (text.back != fabBack) continue;
       final height = viewport.lengthToScreen(text.size);
       if (height < 2) continue;
+      if (_paintFontText(canvas, text, _silk)) continue;
       _paintSilkText(
         canvas,
         text.content,
@@ -274,6 +282,13 @@ class BoardPainter extends CustomPainter {
         color: _silk,
         weight: FontWeight.w700,
         mirror: fabBack,
+      );
+    }
+    for (final image in scene.images) {
+      if (image.back != fabBack) continue;
+      canvas.drawPath(
+        _imagePath(image).transform(_toScreenMatrix()),
+        Paint()..color = _silk,
       );
     }
     canvas.restore();
@@ -1190,6 +1205,10 @@ class BoardPainter extends CustomPainter {
       final height = viewport.lengthToScreen(text.size);
       if (height < 3) continue;
       final selected = text.id == selectedTextId;
+      final color = selected
+          ? KicadPalette.highlight
+          : KicadPalette.silkscreen.withValues(alpha: text.back ? 0.45 : 0.95);
+      if (_paintFontText(canvas, text, color, boxed: selected)) continue;
       _paintSilkText(
         canvas,
         text.content,
@@ -1206,6 +1225,88 @@ class BoardPainter extends CustomPainter {
       );
     }
   }
+
+  /// Text in a TrueType font, drawn from the same outlines the Gerbers are
+  /// made from. False when the text has no font, or its font is not
+  /// loaded, and so is drawn in the stroke font instead.
+  bool _paintFontText(
+    Canvas canvas,
+    BoardText text,
+    Color color, {
+    bool boxed = false,
+  }) {
+    final font = SilkFonts.byId(text.font);
+    if (font == null) return false;
+    final path = (_fontPaths[text] ??= _fontPath(
+      text,
+      font,
+    )).transform(_toScreenMatrix());
+    canvas.drawPath(path, Paint()..color = color);
+    if (boxed) {
+      canvas.drawRect(
+        path.getBounds().inflate(2),
+        Paint()
+          ..color = KicadPalette.highlight
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1,
+      );
+    }
+    return true;
+  }
+
+  static final _fontPaths = Expando<Path>();
+
+  static Path _fontPath(BoardText text, TrueTypeFont font) {
+    final path = Path()..fillType = PathFillType.evenOdd;
+    for (final contour in SilkText.contours(
+      text.content,
+      font,
+      centre: text.position,
+      height: text.size,
+      rotation: text.rotation,
+      mirror: text.back,
+    )) {
+      path.addPolygon(contour, true);
+    }
+    return path;
+  }
+
+  /// Silkscreen pictures: their ink, and a frame round the one picked.
+  void _paintImages(Canvas canvas) {
+    for (final image in scene.images) {
+      final selected = image.id == selectedImageId;
+      canvas.drawPath(
+        _imagePath(image).transform(_toScreenMatrix()),
+        Paint()
+          ..color = selected
+              ? KicadPalette.highlight
+              : KicadPalette.silkscreen.withValues(
+                  alpha: image.back ? 0.45 : 0.95,
+                ),
+      );
+      if (selected) {
+        canvas.drawPath(
+          Path()..addPolygon([
+            for (final p in image.frame) viewport.toScreen(p),
+          ], true),
+          Paint()
+            ..color = KicadPalette.highlight
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1,
+        );
+      }
+    }
+  }
+
+  static final _imagePaths = Expando<Path>();
+
+  static Path _imagePath(BoardImage image) => _imagePaths[image] ??= () {
+    final path = Path();
+    for (final block in image.inkPolygons) {
+      path.addPolygon(block, true);
+    }
+    return path;
+  }();
 
   /// Text as silkscreen draws it: centred, turned by [rotation], and
   /// mirrored when it is on the back and being looked at through the board.
@@ -1428,5 +1529,6 @@ class BoardPainter extends CustomPainter {
       old.selectedEdgeId != selectedEdgeId ||
       old.selectedZoneId != selectedZoneId ||
       old.selectedTextId != selectedTextId ||
+      old.selectedImageId != selectedImageId ||
       old.selectedLabelId != selectedLabelId;
 }

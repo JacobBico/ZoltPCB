@@ -134,7 +134,8 @@ void main() {
     await tester.tap(find.text('Board').last);
     await settleApp(tester);
 
-    expect(find.text('Nothing to lay out yet'), findsOneWidget);
+    // The board itself shows, empty, with a word on where parts come from.
+    expect(find.byKey(const ValueKey('no-parts-chip')), findsOneWidget);
   });
 
   testAppWithStorage('board settings fit a landscape phone without clipping', (

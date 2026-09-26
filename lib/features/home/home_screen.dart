@@ -10,6 +10,7 @@ import '../libraries/libraries_panel.dart';
 import '../library_editors/footprint_editor_panel.dart';
 import '../library_editors/my_library_panel.dart';
 import '../library_editors/symbol_editor_panel.dart';
+import '../pictures/picture_library.dart';
 import '../pinout/pinout_panel.dart';
 import '../project/backup_actions.dart';
 import '../projects/projects_panel.dart';
@@ -23,6 +24,7 @@ enum HomeSection {
   footprints('Footprints'),
   myLibrary('My Library'),
   libraries('Libraries'),
+  pictures('Pictures'),
   settings('Settings');
 
   const HomeSection(this.label);
@@ -124,6 +126,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     badge: libraries == null ? null : '${libraries.length}',
                   ),
                   const RailEntry(
+                    label: 'Pictures',
+                    icon: Icons.photo_library_outlined,
+                  ),
+                  const RailEntry(
                     label: 'Settings',
                     icon: Icons.palette_outlined,
                   ),
@@ -169,6 +175,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     HomeSection.symbols ||
     HomeSection.footprints ||
     HomeSection.myLibrary => const SizedBox.shrink(),
+    HomeSection.pictures => FilledButton.icon(
+      key: const ValueKey('add-picture'),
+      onPressed: () => PictureLibrary.importFromPhone(context, ref),
+      icon: const Icon(Icons.add, size: 18),
+      label: const Text('ADD PICTURE'),
+    ),
     // The libraries panel has its own import button, which follows the
     // Symbols/Footprints tab. One up here would always import symbols —
     // wrong half the time, and a second button for the same job.
@@ -182,6 +194,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     HomeSection.symbols => const SymbolEditorPanel(),
     HomeSection.footprints => const FootprintEditorPanel(),
     HomeSection.myLibrary => const MyLibraryPanel(),
+    HomeSection.pictures => const PictureLibrary(),
     HomeSection.libraries => const LibrariesPanel(),
     HomeSection.settings => const SettingsPanel(),
   };

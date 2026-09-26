@@ -377,7 +377,14 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     return Row(
       children: [
         Expanded(
-          child: parts.isEmpty ? _emptySheet(pickerOpen) : _canvas(scene),
+          // An empty sheet is still the sheet: the page is drawn, with a
+          // note over it, rather than replaced by a message.
+          child: Stack(
+            children: [
+              Positioned.fill(child: _canvas(scene)),
+              if (parts.isEmpty) _emptySheet(pickerOpen),
+            ],
+          ),
         ),
         if (pickerOpen)
           ComponentSidebar(
@@ -468,20 +475,53 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   Map<String, List<double>> _routeHints() =>
       ref.watch(routeHintsProvider(widget.project.id)).value ?? const {};
 
-  Widget _emptySheet(bool pickerOpen) => EmptyState(
-    icon: Icons.grid_on_outlined,
-    title: 'Nothing on the sheet yet',
-    message: pickerOpen
-        ? 'Pick a component from the list to place it here.'
-        : 'Use ADD COMPONENT to place your first part.',
-    action: pickerOpen
-        ? null
-        : OutlinedButton.icon(
-            onPressed: () =>
-                ref.read(componentPickerOpenProvider.notifier).set(true),
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('ADD COMPONENT'),
+  Widget _emptySheet(bool pickerOpen) => Positioned(
+    top: 12,
+    left: 12,
+    right: 12,
+    child: Center(
+      child: Material(
+        color: KicadPalette.surface.withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(6),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Nothing on the sheet yet',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    Text(
+                      pickerOpen
+                          ? 'Pick a component from the list to place it here.'
+                          : 'Add your first part to get started.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: KicadPalette.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (!pickerOpen) ...[
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: () =>
+                      ref.read(componentPickerOpenProvider.notifier).set(true),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('ADD COMPONENT'),
+                ),
+              ],
+            ],
           ),
+        ),
+      ),
+    ),
   );
 
   /// Adds [entry] to the project, landing it where the user last tapped.

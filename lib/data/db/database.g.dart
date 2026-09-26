@@ -12723,6 +12723,16 @@ class $BoardTextsTable extends BoardTexts
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _fontMeta = const VerificationMeta('font');
+  @override
+  late final GeneratedColumn<String> font = GeneratedColumn<String>(
+    'font',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -12744,6 +12754,7 @@ class $BoardTextsTable extends BoardTexts
     rotation,
     size,
     layer,
+    font,
     createdAt,
   ];
   @override
@@ -12809,6 +12820,12 @@ class $BoardTextsTable extends BoardTexts
     } else if (isInserting) {
       context.missing(_layerMeta);
     }
+    if (data.containsKey('font')) {
+      context.handle(
+        _fontMeta,
+        font.isAcceptableOrUnknown(data['font']!, _fontMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -12858,6 +12875,10 @@ class $BoardTextsTable extends BoardTexts
         DriftSqlType.string,
         data['${effectivePrefix}layer'],
       )!,
+      font: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}font'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -12882,6 +12903,10 @@ class BoardTextRow extends DataClass implements Insertable<BoardTextRow> {
 
   /// `F.SilkS` or `B.SilkS`.
   final String layer;
+
+  /// The font it is drawn in: a bundled font's id, `user:<id>` for one the
+  /// user imported, or empty for the plain stroke font KiCad uses.
+  final String font;
   final DateTime createdAt;
   const BoardTextRow({
     required this.id,
@@ -12892,6 +12917,7 @@ class BoardTextRow extends DataClass implements Insertable<BoardTextRow> {
     required this.rotation,
     required this.size,
     required this.layer,
+    required this.font,
     required this.createdAt,
   });
   @override
@@ -12905,6 +12931,7 @@ class BoardTextRow extends DataClass implements Insertable<BoardTextRow> {
     map['rotation'] = Variable<double>(rotation);
     map['size'] = Variable<double>(size);
     map['layer'] = Variable<String>(layer);
+    map['font'] = Variable<String>(font);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -12919,6 +12946,7 @@ class BoardTextRow extends DataClass implements Insertable<BoardTextRow> {
       rotation: Value(rotation),
       size: Value(size),
       layer: Value(layer),
+      font: Value(font),
       createdAt: Value(createdAt),
     );
   }
@@ -12937,6 +12965,7 @@ class BoardTextRow extends DataClass implements Insertable<BoardTextRow> {
       rotation: serializer.fromJson<double>(json['rotation']),
       size: serializer.fromJson<double>(json['size']),
       layer: serializer.fromJson<String>(json['layer']),
+      font: serializer.fromJson<String>(json['font']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -12952,6 +12981,7 @@ class BoardTextRow extends DataClass implements Insertable<BoardTextRow> {
       'rotation': serializer.toJson<double>(rotation),
       'size': serializer.toJson<double>(size),
       'layer': serializer.toJson<String>(layer),
+      'font': serializer.toJson<String>(font),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -12965,6 +12995,7 @@ class BoardTextRow extends DataClass implements Insertable<BoardTextRow> {
     double? rotation,
     double? size,
     String? layer,
+    String? font,
     DateTime? createdAt,
   }) => BoardTextRow(
     id: id ?? this.id,
@@ -12975,6 +13006,7 @@ class BoardTextRow extends DataClass implements Insertable<BoardTextRow> {
     rotation: rotation ?? this.rotation,
     size: size ?? this.size,
     layer: layer ?? this.layer,
+    font: font ?? this.font,
     createdAt: createdAt ?? this.createdAt,
   );
   BoardTextRow copyWithCompanion(BoardTextsCompanion data) {
@@ -12987,6 +13019,7 @@ class BoardTextRow extends DataClass implements Insertable<BoardTextRow> {
       rotation: data.rotation.present ? data.rotation.value : this.rotation,
       size: data.size.present ? data.size.value : this.size,
       layer: data.layer.present ? data.layer.value : this.layer,
+      font: data.font.present ? data.font.value : this.font,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -13002,6 +13035,7 @@ class BoardTextRow extends DataClass implements Insertable<BoardTextRow> {
           ..write('rotation: $rotation, ')
           ..write('size: $size, ')
           ..write('layer: $layer, ')
+          ..write('font: $font, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -13017,6 +13051,7 @@ class BoardTextRow extends DataClass implements Insertable<BoardTextRow> {
     rotation,
     size,
     layer,
+    font,
     createdAt,
   );
   @override
@@ -13031,6 +13066,7 @@ class BoardTextRow extends DataClass implements Insertable<BoardTextRow> {
           other.rotation == this.rotation &&
           other.size == this.size &&
           other.layer == this.layer &&
+          other.font == this.font &&
           other.createdAt == this.createdAt);
 }
 
@@ -13043,6 +13079,7 @@ class BoardTextsCompanion extends UpdateCompanion<BoardTextRow> {
   final Value<double> rotation;
   final Value<double> size;
   final Value<String> layer;
+  final Value<String> font;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const BoardTextsCompanion({
@@ -13054,6 +13091,7 @@ class BoardTextsCompanion extends UpdateCompanion<BoardTextRow> {
     this.rotation = const Value.absent(),
     this.size = const Value.absent(),
     this.layer = const Value.absent(),
+    this.font = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -13066,6 +13104,7 @@ class BoardTextsCompanion extends UpdateCompanion<BoardTextRow> {
     this.rotation = const Value.absent(),
     this.size = const Value.absent(),
     required String layer,
+    this.font = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -13084,6 +13123,7 @@ class BoardTextsCompanion extends UpdateCompanion<BoardTextRow> {
     Expression<double>? rotation,
     Expression<double>? size,
     Expression<String>? layer,
+    Expression<String>? font,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -13096,6 +13136,7 @@ class BoardTextsCompanion extends UpdateCompanion<BoardTextRow> {
       if (rotation != null) 'rotation': rotation,
       if (size != null) 'size': size,
       if (layer != null) 'layer': layer,
+      if (font != null) 'font': font,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -13110,6 +13151,7 @@ class BoardTextsCompanion extends UpdateCompanion<BoardTextRow> {
     Value<double>? rotation,
     Value<double>? size,
     Value<String>? layer,
+    Value<String>? font,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -13122,6 +13164,7 @@ class BoardTextsCompanion extends UpdateCompanion<BoardTextRow> {
       rotation: rotation ?? this.rotation,
       size: size ?? this.size,
       layer: layer ?? this.layer,
+      font: font ?? this.font,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -13154,6 +13197,9 @@ class BoardTextsCompanion extends UpdateCompanion<BoardTextRow> {
     if (layer.present) {
       map['layer'] = Variable<String>(layer.value);
     }
+    if (font.present) {
+      map['font'] = Variable<String>(font.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -13174,6 +13220,1513 @@ class BoardTextsCompanion extends UpdateCompanion<BoardTextRow> {
           ..write('rotation: $rotation, ')
           ..write('size: $size, ')
           ..write('layer: $layer, ')
+          ..write('font: $font, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $BoardImagesTable extends BoardImages
+    with TableInfo<$BoardImagesTable, BoardImageRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $BoardImagesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _projectIdMeta = const VerificationMeta(
+    'projectId',
+  );
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+    'project_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES projects (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _xMeta = const VerificationMeta('x');
+  @override
+  late final GeneratedColumn<double> x = GeneratedColumn<double>(
+    'x',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _yMeta = const VerificationMeta('y');
+  @override
+  late final GeneratedColumn<double> y = GeneratedColumn<double>(
+    'y',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _widthMeta = const VerificationMeta('width');
+  @override
+  late final GeneratedColumn<double> width = GeneratedColumn<double>(
+    'width',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _rotationMeta = const VerificationMeta(
+    'rotation',
+  );
+  @override
+  late final GeneratedColumn<double> rotation = GeneratedColumn<double>(
+    'rotation',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _layerMeta = const VerificationMeta('layer');
+  @override
+  late final GeneratedColumn<String> layer = GeneratedColumn<String>(
+    'layer',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _columnsMeta = const VerificationMeta(
+    'columns',
+  );
+  @override
+  late final GeneratedColumn<int> columns = GeneratedColumn<int>(
+    'columns',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _rowsMeta = const VerificationMeta('rows');
+  @override
+  late final GeneratedColumn<int> rows = GeneratedColumn<int>(
+    'rows',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bitsMeta = const VerificationMeta('bits');
+  @override
+  late final GeneratedColumn<String> bits = GeneratedColumn<String>(
+    'bits',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    projectId,
+    name,
+    x,
+    y,
+    width,
+    rotation,
+    layer,
+    columns,
+    rows,
+    bits,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'board_images';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<BoardImageRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('project_id')) {
+      context.handle(
+        _projectIdMeta,
+        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_projectIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    }
+    if (data.containsKey('x')) {
+      context.handle(_xMeta, x.isAcceptableOrUnknown(data['x']!, _xMeta));
+    } else if (isInserting) {
+      context.missing(_xMeta);
+    }
+    if (data.containsKey('y')) {
+      context.handle(_yMeta, y.isAcceptableOrUnknown(data['y']!, _yMeta));
+    } else if (isInserting) {
+      context.missing(_yMeta);
+    }
+    if (data.containsKey('width')) {
+      context.handle(
+        _widthMeta,
+        width.isAcceptableOrUnknown(data['width']!, _widthMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_widthMeta);
+    }
+    if (data.containsKey('rotation')) {
+      context.handle(
+        _rotationMeta,
+        rotation.isAcceptableOrUnknown(data['rotation']!, _rotationMeta),
+      );
+    }
+    if (data.containsKey('layer')) {
+      context.handle(
+        _layerMeta,
+        layer.isAcceptableOrUnknown(data['layer']!, _layerMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_layerMeta);
+    }
+    if (data.containsKey('columns')) {
+      context.handle(
+        _columnsMeta,
+        columns.isAcceptableOrUnknown(data['columns']!, _columnsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_columnsMeta);
+    }
+    if (data.containsKey('rows')) {
+      context.handle(
+        _rowsMeta,
+        rows.isAcceptableOrUnknown(data['rows']!, _rowsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_rowsMeta);
+    }
+    if (data.containsKey('bits')) {
+      context.handle(
+        _bitsMeta,
+        bits.isAcceptableOrUnknown(data['bits']!, _bitsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bitsMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  BoardImageRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return BoardImageRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      projectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      x: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}x'],
+      )!,
+      y: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}y'],
+      )!,
+      width: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}width'],
+      )!,
+      rotation: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}rotation'],
+      )!,
+      layer: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}layer'],
+      )!,
+      columns: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}columns'],
+      )!,
+      rows: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}rows'],
+      )!,
+      bits: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}bits'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $BoardImagesTable createAlias(String alias) {
+    return $BoardImagesTable(attachedDatabase, alias);
+  }
+}
+
+class BoardImageRow extends DataClass implements Insertable<BoardImageRow> {
+  final String id;
+  final String projectId;
+  final String name;
+  final double x;
+  final double y;
+
+  /// Printed width in millimetres.
+  final double width;
+  final double rotation;
+
+  /// `F.SilkS` or `B.SilkS`.
+  final String layer;
+  final int columns;
+  final int rows;
+
+  /// The pixels, packed a bit each and base64-encoded.
+  final String bits;
+  final DateTime createdAt;
+  const BoardImageRow({
+    required this.id,
+    required this.projectId,
+    required this.name,
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.rotation,
+    required this.layer,
+    required this.columns,
+    required this.rows,
+    required this.bits,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['project_id'] = Variable<String>(projectId);
+    map['name'] = Variable<String>(name);
+    map['x'] = Variable<double>(x);
+    map['y'] = Variable<double>(y);
+    map['width'] = Variable<double>(width);
+    map['rotation'] = Variable<double>(rotation);
+    map['layer'] = Variable<String>(layer);
+    map['columns'] = Variable<int>(columns);
+    map['rows'] = Variable<int>(rows);
+    map['bits'] = Variable<String>(bits);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  BoardImagesCompanion toCompanion(bool nullToAbsent) {
+    return BoardImagesCompanion(
+      id: Value(id),
+      projectId: Value(projectId),
+      name: Value(name),
+      x: Value(x),
+      y: Value(y),
+      width: Value(width),
+      rotation: Value(rotation),
+      layer: Value(layer),
+      columns: Value(columns),
+      rows: Value(rows),
+      bits: Value(bits),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory BoardImageRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return BoardImageRow(
+      id: serializer.fromJson<String>(json['id']),
+      projectId: serializer.fromJson<String>(json['projectId']),
+      name: serializer.fromJson<String>(json['name']),
+      x: serializer.fromJson<double>(json['x']),
+      y: serializer.fromJson<double>(json['y']),
+      width: serializer.fromJson<double>(json['width']),
+      rotation: serializer.fromJson<double>(json['rotation']),
+      layer: serializer.fromJson<String>(json['layer']),
+      columns: serializer.fromJson<int>(json['columns']),
+      rows: serializer.fromJson<int>(json['rows']),
+      bits: serializer.fromJson<String>(json['bits']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'projectId': serializer.toJson<String>(projectId),
+      'name': serializer.toJson<String>(name),
+      'x': serializer.toJson<double>(x),
+      'y': serializer.toJson<double>(y),
+      'width': serializer.toJson<double>(width),
+      'rotation': serializer.toJson<double>(rotation),
+      'layer': serializer.toJson<String>(layer),
+      'columns': serializer.toJson<int>(columns),
+      'rows': serializer.toJson<int>(rows),
+      'bits': serializer.toJson<String>(bits),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  BoardImageRow copyWith({
+    String? id,
+    String? projectId,
+    String? name,
+    double? x,
+    double? y,
+    double? width,
+    double? rotation,
+    String? layer,
+    int? columns,
+    int? rows,
+    String? bits,
+    DateTime? createdAt,
+  }) => BoardImageRow(
+    id: id ?? this.id,
+    projectId: projectId ?? this.projectId,
+    name: name ?? this.name,
+    x: x ?? this.x,
+    y: y ?? this.y,
+    width: width ?? this.width,
+    rotation: rotation ?? this.rotation,
+    layer: layer ?? this.layer,
+    columns: columns ?? this.columns,
+    rows: rows ?? this.rows,
+    bits: bits ?? this.bits,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  BoardImageRow copyWithCompanion(BoardImagesCompanion data) {
+    return BoardImageRow(
+      id: data.id.present ? data.id.value : this.id,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      name: data.name.present ? data.name.value : this.name,
+      x: data.x.present ? data.x.value : this.x,
+      y: data.y.present ? data.y.value : this.y,
+      width: data.width.present ? data.width.value : this.width,
+      rotation: data.rotation.present ? data.rotation.value : this.rotation,
+      layer: data.layer.present ? data.layer.value : this.layer,
+      columns: data.columns.present ? data.columns.value : this.columns,
+      rows: data.rows.present ? data.rows.value : this.rows,
+      bits: data.bits.present ? data.bits.value : this.bits,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BoardImageRow(')
+          ..write('id: $id, ')
+          ..write('projectId: $projectId, ')
+          ..write('name: $name, ')
+          ..write('x: $x, ')
+          ..write('y: $y, ')
+          ..write('width: $width, ')
+          ..write('rotation: $rotation, ')
+          ..write('layer: $layer, ')
+          ..write('columns: $columns, ')
+          ..write('rows: $rows, ')
+          ..write('bits: $bits, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    projectId,
+    name,
+    x,
+    y,
+    width,
+    rotation,
+    layer,
+    columns,
+    rows,
+    bits,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is BoardImageRow &&
+          other.id == this.id &&
+          other.projectId == this.projectId &&
+          other.name == this.name &&
+          other.x == this.x &&
+          other.y == this.y &&
+          other.width == this.width &&
+          other.rotation == this.rotation &&
+          other.layer == this.layer &&
+          other.columns == this.columns &&
+          other.rows == this.rows &&
+          other.bits == this.bits &&
+          other.createdAt == this.createdAt);
+}
+
+class BoardImagesCompanion extends UpdateCompanion<BoardImageRow> {
+  final Value<String> id;
+  final Value<String> projectId;
+  final Value<String> name;
+  final Value<double> x;
+  final Value<double> y;
+  final Value<double> width;
+  final Value<double> rotation;
+  final Value<String> layer;
+  final Value<int> columns;
+  final Value<int> rows;
+  final Value<String> bits;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const BoardImagesCompanion({
+    this.id = const Value.absent(),
+    this.projectId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.x = const Value.absent(),
+    this.y = const Value.absent(),
+    this.width = const Value.absent(),
+    this.rotation = const Value.absent(),
+    this.layer = const Value.absent(),
+    this.columns = const Value.absent(),
+    this.rows = const Value.absent(),
+    this.bits = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  BoardImagesCompanion.insert({
+    required String id,
+    required String projectId,
+    this.name = const Value.absent(),
+    required double x,
+    required double y,
+    required double width,
+    this.rotation = const Value.absent(),
+    required String layer,
+    required int columns,
+    required int rows,
+    required String bits,
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       projectId = Value(projectId),
+       x = Value(x),
+       y = Value(y),
+       width = Value(width),
+       layer = Value(layer),
+       columns = Value(columns),
+       rows = Value(rows),
+       bits = Value(bits),
+       createdAt = Value(createdAt);
+  static Insertable<BoardImageRow> custom({
+    Expression<String>? id,
+    Expression<String>? projectId,
+    Expression<String>? name,
+    Expression<double>? x,
+    Expression<double>? y,
+    Expression<double>? width,
+    Expression<double>? rotation,
+    Expression<String>? layer,
+    Expression<int>? columns,
+    Expression<int>? rows,
+    Expression<String>? bits,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (projectId != null) 'project_id': projectId,
+      if (name != null) 'name': name,
+      if (x != null) 'x': x,
+      if (y != null) 'y': y,
+      if (width != null) 'width': width,
+      if (rotation != null) 'rotation': rotation,
+      if (layer != null) 'layer': layer,
+      if (columns != null) 'columns': columns,
+      if (rows != null) 'rows': rows,
+      if (bits != null) 'bits': bits,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  BoardImagesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? projectId,
+    Value<String>? name,
+    Value<double>? x,
+    Value<double>? y,
+    Value<double>? width,
+    Value<double>? rotation,
+    Value<String>? layer,
+    Value<int>? columns,
+    Value<int>? rows,
+    Value<String>? bits,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return BoardImagesCompanion(
+      id: id ?? this.id,
+      projectId: projectId ?? this.projectId,
+      name: name ?? this.name,
+      x: x ?? this.x,
+      y: y ?? this.y,
+      width: width ?? this.width,
+      rotation: rotation ?? this.rotation,
+      layer: layer ?? this.layer,
+      columns: columns ?? this.columns,
+      rows: rows ?? this.rows,
+      bits: bits ?? this.bits,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (x.present) {
+      map['x'] = Variable<double>(x.value);
+    }
+    if (y.present) {
+      map['y'] = Variable<double>(y.value);
+    }
+    if (width.present) {
+      map['width'] = Variable<double>(width.value);
+    }
+    if (rotation.present) {
+      map['rotation'] = Variable<double>(rotation.value);
+    }
+    if (layer.present) {
+      map['layer'] = Variable<String>(layer.value);
+    }
+    if (columns.present) {
+      map['columns'] = Variable<int>(columns.value);
+    }
+    if (rows.present) {
+      map['rows'] = Variable<int>(rows.value);
+    }
+    if (bits.present) {
+      map['bits'] = Variable<String>(bits.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BoardImagesCompanion(')
+          ..write('id: $id, ')
+          ..write('projectId: $projectId, ')
+          ..write('name: $name, ')
+          ..write('x: $x, ')
+          ..write('y: $y, ')
+          ..write('width: $width, ')
+          ..write('rotation: $rotation, ')
+          ..write('layer: $layer, ')
+          ..write('columns: $columns, ')
+          ..write('rows: $rows, ')
+          ..write('bits: $bits, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $UserFontsTable extends UserFonts
+    with TableInfo<$UserFontsTable, UserFontRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $UserFontsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _familyMeta = const VerificationMeta('family');
+  @override
+  late final GeneratedColumn<String> family = GeneratedColumn<String>(
+    'family',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _fileNameMeta = const VerificationMeta(
+    'fileName',
+  );
+  @override
+  late final GeneratedColumn<String> fileName = GeneratedColumn<String>(
+    'file_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bytesMeta = const VerificationMeta('bytes');
+  @override
+  late final GeneratedColumn<Uint8List> bytes = GeneratedColumn<Uint8List>(
+    'bytes',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    family,
+    fileName,
+    bytes,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'user_fonts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<UserFontRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('family')) {
+      context.handle(
+        _familyMeta,
+        family.isAcceptableOrUnknown(data['family']!, _familyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_familyMeta);
+    }
+    if (data.containsKey('file_name')) {
+      context.handle(
+        _fileNameMeta,
+        fileName.isAcceptableOrUnknown(data['file_name']!, _fileNameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_fileNameMeta);
+    }
+    if (data.containsKey('bytes')) {
+      context.handle(
+        _bytesMeta,
+        bytes.isAcceptableOrUnknown(data['bytes']!, _bytesMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bytesMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  UserFontRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return UserFontRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      family: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}family'],
+      )!,
+      fileName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}file_name'],
+      )!,
+      bytes: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}bytes'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $UserFontsTable createAlias(String alias) {
+    return $UserFontsTable(attachedDatabase, alias);
+  }
+}
+
+class UserFontRow extends DataClass implements Insertable<UserFontRow> {
+  final String id;
+  final String family;
+  final String fileName;
+  final Uint8List bytes;
+  final DateTime createdAt;
+  const UserFontRow({
+    required this.id,
+    required this.family,
+    required this.fileName,
+    required this.bytes,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['family'] = Variable<String>(family);
+    map['file_name'] = Variable<String>(fileName);
+    map['bytes'] = Variable<Uint8List>(bytes);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  UserFontsCompanion toCompanion(bool nullToAbsent) {
+    return UserFontsCompanion(
+      id: Value(id),
+      family: Value(family),
+      fileName: Value(fileName),
+      bytes: Value(bytes),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory UserFontRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return UserFontRow(
+      id: serializer.fromJson<String>(json['id']),
+      family: serializer.fromJson<String>(json['family']),
+      fileName: serializer.fromJson<String>(json['fileName']),
+      bytes: serializer.fromJson<Uint8List>(json['bytes']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'family': serializer.toJson<String>(family),
+      'fileName': serializer.toJson<String>(fileName),
+      'bytes': serializer.toJson<Uint8List>(bytes),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  UserFontRow copyWith({
+    String? id,
+    String? family,
+    String? fileName,
+    Uint8List? bytes,
+    DateTime? createdAt,
+  }) => UserFontRow(
+    id: id ?? this.id,
+    family: family ?? this.family,
+    fileName: fileName ?? this.fileName,
+    bytes: bytes ?? this.bytes,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  UserFontRow copyWithCompanion(UserFontsCompanion data) {
+    return UserFontRow(
+      id: data.id.present ? data.id.value : this.id,
+      family: data.family.present ? data.family.value : this.family,
+      fileName: data.fileName.present ? data.fileName.value : this.fileName,
+      bytes: data.bytes.present ? data.bytes.value : this.bytes,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UserFontRow(')
+          ..write('id: $id, ')
+          ..write('family: $family, ')
+          ..write('fileName: $fileName, ')
+          ..write('bytes: $bytes, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    family,
+    fileName,
+    $driftBlobEquality.hash(bytes),
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is UserFontRow &&
+          other.id == this.id &&
+          other.family == this.family &&
+          other.fileName == this.fileName &&
+          $driftBlobEquality.equals(other.bytes, this.bytes) &&
+          other.createdAt == this.createdAt);
+}
+
+class UserFontsCompanion extends UpdateCompanion<UserFontRow> {
+  final Value<String> id;
+  final Value<String> family;
+  final Value<String> fileName;
+  final Value<Uint8List> bytes;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const UserFontsCompanion({
+    this.id = const Value.absent(),
+    this.family = const Value.absent(),
+    this.fileName = const Value.absent(),
+    this.bytes = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  UserFontsCompanion.insert({
+    required String id,
+    required String family,
+    required String fileName,
+    required Uint8List bytes,
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       family = Value(family),
+       fileName = Value(fileName),
+       bytes = Value(bytes),
+       createdAt = Value(createdAt);
+  static Insertable<UserFontRow> custom({
+    Expression<String>? id,
+    Expression<String>? family,
+    Expression<String>? fileName,
+    Expression<Uint8List>? bytes,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (family != null) 'family': family,
+      if (fileName != null) 'file_name': fileName,
+      if (bytes != null) 'bytes': bytes,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  UserFontsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? family,
+    Value<String>? fileName,
+    Value<Uint8List>? bytes,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return UserFontsCompanion(
+      id: id ?? this.id,
+      family: family ?? this.family,
+      fileName: fileName ?? this.fileName,
+      bytes: bytes ?? this.bytes,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (family.present) {
+      map['family'] = Variable<String>(family.value);
+    }
+    if (fileName.present) {
+      map['file_name'] = Variable<String>(fileName.value);
+    }
+    if (bytes.present) {
+      map['bytes'] = Variable<Uint8List>(bytes.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UserFontsCompanion(')
+          ..write('id: $id, ')
+          ..write('family: $family, ')
+          ..write('fileName: $fileName, ')
+          ..write('bytes: $bytes, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SilkPicturesTable extends SilkPictures
+    with TableInfo<$SilkPicturesTable, SilkPictureRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SilkPicturesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _widthMeta = const VerificationMeta('width');
+  @override
+  late final GeneratedColumn<double> width = GeneratedColumn<double>(
+    'width',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _columnsMeta = const VerificationMeta(
+    'columns',
+  );
+  @override
+  late final GeneratedColumn<int> columns = GeneratedColumn<int>(
+    'columns',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _rowsMeta = const VerificationMeta('rows');
+  @override
+  late final GeneratedColumn<int> rows = GeneratedColumn<int>(
+    'rows',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bitsMeta = const VerificationMeta('bits');
+  @override
+  late final GeneratedColumn<String> bits = GeneratedColumn<String>(
+    'bits',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    width,
+    columns,
+    rows,
+    bits,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'silk_pictures';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SilkPictureRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('width')) {
+      context.handle(
+        _widthMeta,
+        width.isAcceptableOrUnknown(data['width']!, _widthMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_widthMeta);
+    }
+    if (data.containsKey('columns')) {
+      context.handle(
+        _columnsMeta,
+        columns.isAcceptableOrUnknown(data['columns']!, _columnsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_columnsMeta);
+    }
+    if (data.containsKey('rows')) {
+      context.handle(
+        _rowsMeta,
+        rows.isAcceptableOrUnknown(data['rows']!, _rowsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_rowsMeta);
+    }
+    if (data.containsKey('bits')) {
+      context.handle(
+        _bitsMeta,
+        bits.isAcceptableOrUnknown(data['bits']!, _bitsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bitsMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SilkPictureRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SilkPictureRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      width: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}width'],
+      )!,
+      columns: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}columns'],
+      )!,
+      rows: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}rows'],
+      )!,
+      bits: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}bits'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SilkPicturesTable createAlias(String alias) {
+    return $SilkPicturesTable(attachedDatabase, alias);
+  }
+}
+
+class SilkPictureRow extends DataClass implements Insertable<SilkPictureRow> {
+  final String id;
+  final String name;
+
+  /// The width it is placed at, in millimetres, unless changed.
+  final double width;
+  final int columns;
+  final int rows;
+
+  /// The pixels, packed a bit each and base64-encoded.
+  final String bits;
+  final DateTime createdAt;
+  const SilkPictureRow({
+    required this.id,
+    required this.name,
+    required this.width,
+    required this.columns,
+    required this.rows,
+    required this.bits,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['width'] = Variable<double>(width);
+    map['columns'] = Variable<int>(columns);
+    map['rows'] = Variable<int>(rows);
+    map['bits'] = Variable<String>(bits);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  SilkPicturesCompanion toCompanion(bool nullToAbsent) {
+    return SilkPicturesCompanion(
+      id: Value(id),
+      name: Value(name),
+      width: Value(width),
+      columns: Value(columns),
+      rows: Value(rows),
+      bits: Value(bits),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory SilkPictureRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SilkPictureRow(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      width: serializer.fromJson<double>(json['width']),
+      columns: serializer.fromJson<int>(json['columns']),
+      rows: serializer.fromJson<int>(json['rows']),
+      bits: serializer.fromJson<String>(json['bits']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'width': serializer.toJson<double>(width),
+      'columns': serializer.toJson<int>(columns),
+      'rows': serializer.toJson<int>(rows),
+      'bits': serializer.toJson<String>(bits),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  SilkPictureRow copyWith({
+    String? id,
+    String? name,
+    double? width,
+    int? columns,
+    int? rows,
+    String? bits,
+    DateTime? createdAt,
+  }) => SilkPictureRow(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    width: width ?? this.width,
+    columns: columns ?? this.columns,
+    rows: rows ?? this.rows,
+    bits: bits ?? this.bits,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  SilkPictureRow copyWithCompanion(SilkPicturesCompanion data) {
+    return SilkPictureRow(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      width: data.width.present ? data.width.value : this.width,
+      columns: data.columns.present ? data.columns.value : this.columns,
+      rows: data.rows.present ? data.rows.value : this.rows,
+      bits: data.bits.present ? data.bits.value : this.bits,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SilkPictureRow(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('width: $width, ')
+          ..write('columns: $columns, ')
+          ..write('rows: $rows, ')
+          ..write('bits: $bits, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, name, width, columns, rows, bits, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SilkPictureRow &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.width == this.width &&
+          other.columns == this.columns &&
+          other.rows == this.rows &&
+          other.bits == this.bits &&
+          other.createdAt == this.createdAt);
+}
+
+class SilkPicturesCompanion extends UpdateCompanion<SilkPictureRow> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<double> width;
+  final Value<int> columns;
+  final Value<int> rows;
+  final Value<String> bits;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const SilkPicturesCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.width = const Value.absent(),
+    this.columns = const Value.absent(),
+    this.rows = const Value.absent(),
+    this.bits = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SilkPicturesCompanion.insert({
+    required String id,
+    required String name,
+    required double width,
+    required int columns,
+    required int rows,
+    required String bits,
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       width = Value(width),
+       columns = Value(columns),
+       rows = Value(rows),
+       bits = Value(bits),
+       createdAt = Value(createdAt);
+  static Insertable<SilkPictureRow> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<double>? width,
+    Expression<int>? columns,
+    Expression<int>? rows,
+    Expression<String>? bits,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (width != null) 'width': width,
+      if (columns != null) 'columns': columns,
+      if (rows != null) 'rows': rows,
+      if (bits != null) 'bits': bits,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SilkPicturesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<double>? width,
+    Value<int>? columns,
+    Value<int>? rows,
+    Value<String>? bits,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return SilkPicturesCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      width: width ?? this.width,
+      columns: columns ?? this.columns,
+      rows: rows ?? this.rows,
+      bits: bits ?? this.bits,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (width.present) {
+      map['width'] = Variable<double>(width.value);
+    }
+    if (columns.present) {
+      map['columns'] = Variable<int>(columns.value);
+    }
+    if (rows.present) {
+      map['rows'] = Variable<int>(rows.value);
+    }
+    if (bits.present) {
+      map['bits'] = Variable<String>(bits.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SilkPicturesCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('width: $width, ')
+          ..write('columns: $columns, ')
+          ..write('rows: $rows, ')
+          ..write('bits: $bits, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -16961,6 +18514,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $BoardEdgesTable boardEdges = $BoardEdgesTable(this);
   late final $BoardZonesTable boardZones = $BoardZonesTable(this);
   late final $BoardTextsTable boardTexts = $BoardTextsTable(this);
+  late final $BoardImagesTable boardImages = $BoardImagesTable(this);
+  late final $UserFontsTable userFonts = $UserFontsTable(this);
+  late final $SilkPicturesTable silkPictures = $SilkPicturesTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
   late final $ProjectSnapshotsTable projectSnapshots = $ProjectSnapshotsTable(
     this,
@@ -17049,6 +18605,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'idx_board_texts_project',
     'CREATE INDEX idx_board_texts_project ON board_texts (project_id)',
   );
+  late final Index idxBoardImagesProject = Index(
+    'idx_board_images_project',
+    'CREATE INDEX idx_board_images_project ON board_images (project_id)',
+  );
   late final Index idxProjectSnapshotsProject = Index(
     'idx_project_snapshots_project',
     'CREATE INDEX idx_project_snapshots_project ON project_snapshots (project_id)',
@@ -17094,6 +18654,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     boardEdges,
     boardZones,
     boardTexts,
+    boardImages,
+    userFonts,
+    silkPictures,
     appSettings,
     projectSnapshots,
     schematicNotes,
@@ -17120,6 +18683,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     idxBoardEdgesProject,
     idxBoardZonesProject,
     idxBoardTextsProject,
+    idxBoardImagesProject,
     idxProjectSnapshotsProject,
     idxSchematicNotesProject,
     idxBoardFeaturesProject,
@@ -17323,6 +18887,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('board_texts', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'projects',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('board_images', kind: UpdateKind.delete)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -17627,6 +19198,24 @@ final class $$ProjectsTableReferences
     ).filter((f) => f.projectId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_boardTextsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$BoardImagesTable, List<BoardImageRow>>
+  _boardImagesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.boardImages,
+    aliasName: $_aliasNameGenerator(db.projects.id, db.boardImages.projectId),
+  );
+
+  $$BoardImagesTableProcessedTableManager get boardImagesRefs {
+    final manager = $$BoardImagesTableTableManager(
+      $_db,
+      $_db.boardImages,
+    ).filter((f) => f.projectId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_boardImagesRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -18105,6 +19694,31 @@ class $$ProjectsTableFilterComposer
           }) => $$BoardTextsTableFilterComposer(
             $db: $db,
             $table: $db.boardTexts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> boardImagesRefs(
+    Expression<bool> Function($$BoardImagesTableFilterComposer f) f,
+  ) {
+    final $$BoardImagesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.boardImages,
+      getReferencedColumn: (t) => t.projectId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BoardImagesTableFilterComposer(
+            $db: $db,
+            $table: $db.boardImages,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -18652,6 +20266,31 @@ class $$ProjectsTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> boardImagesRefs<T extends Object>(
+    Expression<T> Function($$BoardImagesTableAnnotationComposer a) f,
+  ) {
+    final $$BoardImagesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.boardImages,
+      getReferencedColumn: (t) => t.projectId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BoardImagesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.boardImages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> projectSnapshotsRefs<T extends Object>(
     Expression<T> Function($$ProjectSnapshotsTableAnnotationComposer a) f,
   ) {
@@ -18829,6 +20468,7 @@ class $$ProjectsTableTableManager
             bool boardEdgesRefs,
             bool boardZonesRefs,
             bool boardTextsRefs,
+            bool boardImagesRefs,
             bool projectSnapshotsRefs,
             bool schematicNotesRefs,
             bool projectSettingsRefs,
@@ -18914,6 +20554,7 @@ class $$ProjectsTableTableManager
                 boardEdgesRefs = false,
                 boardZonesRefs = false,
                 boardTextsRefs = false,
+                boardImagesRefs = false,
                 projectSnapshotsRefs = false,
                 schematicNotesRefs = false,
                 projectSettingsRefs = false,
@@ -18936,6 +20577,7 @@ class $$ProjectsTableTableManager
                     if (boardEdgesRefs) db.boardEdges,
                     if (boardZonesRefs) db.boardZones,
                     if (boardTextsRefs) db.boardTexts,
+                    if (boardImagesRefs) db.boardImages,
                     if (projectSnapshotsRefs) db.projectSnapshots,
                     if (schematicNotesRefs) db.schematicNotes,
                     if (projectSettingsRefs) db.projectSettings,
@@ -19194,6 +20836,27 @@ class $$ProjectsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (boardImagesRefs)
+                        await $_getPrefetchedData<
+                          ProjectRow,
+                          $ProjectsTable,
+                          BoardImageRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProjectsTableReferences
+                              ._boardImagesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProjectsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).boardImagesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.projectId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (projectSnapshotsRefs)
                         await $_getPrefetchedData<
                           ProjectRow,
@@ -19353,6 +21016,7 @@ typedef $$ProjectsTableProcessedTableManager =
         bool boardEdgesRefs,
         bool boardZonesRefs,
         bool boardTextsRefs,
+        bool boardImagesRefs,
         bool projectSnapshotsRefs,
         bool schematicNotesRefs,
         bool projectSettingsRefs,
@@ -29384,6 +31048,7 @@ typedef $$BoardTextsTableCreateCompanionBuilder =
       Value<double> rotation,
       Value<double> size,
       required String layer,
+      Value<String> font,
       required DateTime createdAt,
       Value<int> rowid,
     });
@@ -29397,6 +31062,7 @@ typedef $$BoardTextsTableUpdateCompanionBuilder =
       Value<double> rotation,
       Value<double> size,
       Value<String> layer,
+      Value<String> font,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -29466,6 +31132,11 @@ class $$BoardTextsTableFilterComposer
 
   ColumnFilters<String> get layer => $composableBuilder(
     column: $table.layer,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get font => $composableBuilder(
+    column: $table.font,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -29542,6 +31213,11 @@ class $$BoardTextsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get font => $composableBuilder(
+    column: $table.font,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -29600,6 +31276,9 @@ class $$BoardTextsTableAnnotationComposer
 
   GeneratedColumn<String> get layer =>
       $composableBuilder(column: $table.layer, builder: (column) => column);
+
+  GeneratedColumn<String> get font =>
+      $composableBuilder(column: $table.font, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -29664,6 +31343,7 @@ class $$BoardTextsTableTableManager
                 Value<double> rotation = const Value.absent(),
                 Value<double> size = const Value.absent(),
                 Value<String> layer = const Value.absent(),
+                Value<String> font = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BoardTextsCompanion(
@@ -29675,6 +31355,7 @@ class $$BoardTextsTableTableManager
                 rotation: rotation,
                 size: size,
                 layer: layer,
+                font: font,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -29688,6 +31369,7 @@ class $$BoardTextsTableTableManager
                 Value<double> rotation = const Value.absent(),
                 Value<double> size = const Value.absent(),
                 required String layer,
+                Value<String> font = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
               }) => BoardTextsCompanion.insert(
@@ -29699,6 +31381,7 @@ class $$BoardTextsTableTableManager
                 rotation: rotation,
                 size: size,
                 layer: layer,
+                font: font,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -29768,6 +31451,896 @@ typedef $$BoardTextsTableProcessedTableManager =
       (BoardTextRow, $$BoardTextsTableReferences),
       BoardTextRow,
       PrefetchHooks Function({bool projectId})
+    >;
+typedef $$BoardImagesTableCreateCompanionBuilder =
+    BoardImagesCompanion Function({
+      required String id,
+      required String projectId,
+      Value<String> name,
+      required double x,
+      required double y,
+      required double width,
+      Value<double> rotation,
+      required String layer,
+      required int columns,
+      required int rows,
+      required String bits,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$BoardImagesTableUpdateCompanionBuilder =
+    BoardImagesCompanion Function({
+      Value<String> id,
+      Value<String> projectId,
+      Value<String> name,
+      Value<double> x,
+      Value<double> y,
+      Value<double> width,
+      Value<double> rotation,
+      Value<String> layer,
+      Value<int> columns,
+      Value<int> rows,
+      Value<String> bits,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$BoardImagesTableReferences
+    extends BaseReferences<_$AppDatabase, $BoardImagesTable, BoardImageRow> {
+  $$BoardImagesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $ProjectsTable _projectIdTable(_$AppDatabase db) =>
+      db.projects.createAlias(
+        $_aliasNameGenerator(db.boardImages.projectId, db.projects.id),
+      );
+
+  $$ProjectsTableProcessedTableManager get projectId {
+    final $_column = $_itemColumn<String>('project_id')!;
+
+    final manager = $$ProjectsTableTableManager(
+      $_db,
+      $_db.projects,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_projectIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$BoardImagesTableFilterComposer
+    extends Composer<_$AppDatabase, $BoardImagesTable> {
+  $$BoardImagesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get x => $composableBuilder(
+    column: $table.x,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get y => $composableBuilder(
+    column: $table.y,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get width => $composableBuilder(
+    column: $table.width,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get rotation => $composableBuilder(
+    column: $table.rotation,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get layer => $composableBuilder(
+    column: $table.layer,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get columns => $composableBuilder(
+    column: $table.columns,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get rows => $composableBuilder(
+    column: $table.rows,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get bits => $composableBuilder(
+    column: $table.bits,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ProjectsTableFilterComposer get projectId {
+    final $$ProjectsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableFilterComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$BoardImagesTableOrderingComposer
+    extends Composer<_$AppDatabase, $BoardImagesTable> {
+  $$BoardImagesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get x => $composableBuilder(
+    column: $table.x,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get y => $composableBuilder(
+    column: $table.y,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get width => $composableBuilder(
+    column: $table.width,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get rotation => $composableBuilder(
+    column: $table.rotation,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get layer => $composableBuilder(
+    column: $table.layer,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get columns => $composableBuilder(
+    column: $table.columns,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get rows => $composableBuilder(
+    column: $table.rows,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get bits => $composableBuilder(
+    column: $table.bits,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ProjectsTableOrderingComposer get projectId {
+    final $$ProjectsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableOrderingComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$BoardImagesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $BoardImagesTable> {
+  $$BoardImagesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<double> get x =>
+      $composableBuilder(column: $table.x, builder: (column) => column);
+
+  GeneratedColumn<double> get y =>
+      $composableBuilder(column: $table.y, builder: (column) => column);
+
+  GeneratedColumn<double> get width =>
+      $composableBuilder(column: $table.width, builder: (column) => column);
+
+  GeneratedColumn<double> get rotation =>
+      $composableBuilder(column: $table.rotation, builder: (column) => column);
+
+  GeneratedColumn<String> get layer =>
+      $composableBuilder(column: $table.layer, builder: (column) => column);
+
+  GeneratedColumn<int> get columns =>
+      $composableBuilder(column: $table.columns, builder: (column) => column);
+
+  GeneratedColumn<int> get rows =>
+      $composableBuilder(column: $table.rows, builder: (column) => column);
+
+  GeneratedColumn<String> get bits =>
+      $composableBuilder(column: $table.bits, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$ProjectsTableAnnotationComposer get projectId {
+    final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$BoardImagesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $BoardImagesTable,
+          BoardImageRow,
+          $$BoardImagesTableFilterComposer,
+          $$BoardImagesTableOrderingComposer,
+          $$BoardImagesTableAnnotationComposer,
+          $$BoardImagesTableCreateCompanionBuilder,
+          $$BoardImagesTableUpdateCompanionBuilder,
+          (BoardImageRow, $$BoardImagesTableReferences),
+          BoardImageRow,
+          PrefetchHooks Function({bool projectId})
+        > {
+  $$BoardImagesTableTableManager(_$AppDatabase db, $BoardImagesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$BoardImagesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$BoardImagesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$BoardImagesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> projectId = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<double> x = const Value.absent(),
+                Value<double> y = const Value.absent(),
+                Value<double> width = const Value.absent(),
+                Value<double> rotation = const Value.absent(),
+                Value<String> layer = const Value.absent(),
+                Value<int> columns = const Value.absent(),
+                Value<int> rows = const Value.absent(),
+                Value<String> bits = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => BoardImagesCompanion(
+                id: id,
+                projectId: projectId,
+                name: name,
+                x: x,
+                y: y,
+                width: width,
+                rotation: rotation,
+                layer: layer,
+                columns: columns,
+                rows: rows,
+                bits: bits,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String projectId,
+                Value<String> name = const Value.absent(),
+                required double x,
+                required double y,
+                required double width,
+                Value<double> rotation = const Value.absent(),
+                required String layer,
+                required int columns,
+                required int rows,
+                required String bits,
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => BoardImagesCompanion.insert(
+                id: id,
+                projectId: projectId,
+                name: name,
+                x: x,
+                y: y,
+                width: width,
+                rotation: rotation,
+                layer: layer,
+                columns: columns,
+                rows: rows,
+                bits: bits,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$BoardImagesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({projectId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (projectId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.projectId,
+                                referencedTable: $$BoardImagesTableReferences
+                                    ._projectIdTable(db),
+                                referencedColumn: $$BoardImagesTableReferences
+                                    ._projectIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$BoardImagesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $BoardImagesTable,
+      BoardImageRow,
+      $$BoardImagesTableFilterComposer,
+      $$BoardImagesTableOrderingComposer,
+      $$BoardImagesTableAnnotationComposer,
+      $$BoardImagesTableCreateCompanionBuilder,
+      $$BoardImagesTableUpdateCompanionBuilder,
+      (BoardImageRow, $$BoardImagesTableReferences),
+      BoardImageRow,
+      PrefetchHooks Function({bool projectId})
+    >;
+typedef $$UserFontsTableCreateCompanionBuilder =
+    UserFontsCompanion Function({
+      required String id,
+      required String family,
+      required String fileName,
+      required Uint8List bytes,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$UserFontsTableUpdateCompanionBuilder =
+    UserFontsCompanion Function({
+      Value<String> id,
+      Value<String> family,
+      Value<String> fileName,
+      Value<Uint8List> bytes,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$UserFontsTableFilterComposer
+    extends Composer<_$AppDatabase, $UserFontsTable> {
+  $$UserFontsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get family => $composableBuilder(
+    column: $table.family,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fileName => $composableBuilder(
+    column: $table.fileName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get bytes => $composableBuilder(
+    column: $table.bytes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$UserFontsTableOrderingComposer
+    extends Composer<_$AppDatabase, $UserFontsTable> {
+  $$UserFontsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get family => $composableBuilder(
+    column: $table.family,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get fileName => $composableBuilder(
+    column: $table.fileName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get bytes => $composableBuilder(
+    column: $table.bytes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$UserFontsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $UserFontsTable> {
+  $$UserFontsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get family =>
+      $composableBuilder(column: $table.family, builder: (column) => column);
+
+  GeneratedColumn<String> get fileName =>
+      $composableBuilder(column: $table.fileName, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get bytes =>
+      $composableBuilder(column: $table.bytes, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$UserFontsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $UserFontsTable,
+          UserFontRow,
+          $$UserFontsTableFilterComposer,
+          $$UserFontsTableOrderingComposer,
+          $$UserFontsTableAnnotationComposer,
+          $$UserFontsTableCreateCompanionBuilder,
+          $$UserFontsTableUpdateCompanionBuilder,
+          (
+            UserFontRow,
+            BaseReferences<_$AppDatabase, $UserFontsTable, UserFontRow>,
+          ),
+          UserFontRow,
+          PrefetchHooks Function()
+        > {
+  $$UserFontsTableTableManager(_$AppDatabase db, $UserFontsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$UserFontsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$UserFontsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$UserFontsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> family = const Value.absent(),
+                Value<String> fileName = const Value.absent(),
+                Value<Uint8List> bytes = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => UserFontsCompanion(
+                id: id,
+                family: family,
+                fileName: fileName,
+                bytes: bytes,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String family,
+                required String fileName,
+                required Uint8List bytes,
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => UserFontsCompanion.insert(
+                id: id,
+                family: family,
+                fileName: fileName,
+                bytes: bytes,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$UserFontsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $UserFontsTable,
+      UserFontRow,
+      $$UserFontsTableFilterComposer,
+      $$UserFontsTableOrderingComposer,
+      $$UserFontsTableAnnotationComposer,
+      $$UserFontsTableCreateCompanionBuilder,
+      $$UserFontsTableUpdateCompanionBuilder,
+      (
+        UserFontRow,
+        BaseReferences<_$AppDatabase, $UserFontsTable, UserFontRow>,
+      ),
+      UserFontRow,
+      PrefetchHooks Function()
+    >;
+typedef $$SilkPicturesTableCreateCompanionBuilder =
+    SilkPicturesCompanion Function({
+      required String id,
+      required String name,
+      required double width,
+      required int columns,
+      required int rows,
+      required String bits,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$SilkPicturesTableUpdateCompanionBuilder =
+    SilkPicturesCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<double> width,
+      Value<int> columns,
+      Value<int> rows,
+      Value<String> bits,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$SilkPicturesTableFilterComposer
+    extends Composer<_$AppDatabase, $SilkPicturesTable> {
+  $$SilkPicturesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get width => $composableBuilder(
+    column: $table.width,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get columns => $composableBuilder(
+    column: $table.columns,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get rows => $composableBuilder(
+    column: $table.rows,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get bits => $composableBuilder(
+    column: $table.bits,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SilkPicturesTableOrderingComposer
+    extends Composer<_$AppDatabase, $SilkPicturesTable> {
+  $$SilkPicturesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get width => $composableBuilder(
+    column: $table.width,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get columns => $composableBuilder(
+    column: $table.columns,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get rows => $composableBuilder(
+    column: $table.rows,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get bits => $composableBuilder(
+    column: $table.bits,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SilkPicturesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SilkPicturesTable> {
+  $$SilkPicturesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<double> get width =>
+      $composableBuilder(column: $table.width, builder: (column) => column);
+
+  GeneratedColumn<int> get columns =>
+      $composableBuilder(column: $table.columns, builder: (column) => column);
+
+  GeneratedColumn<int> get rows =>
+      $composableBuilder(column: $table.rows, builder: (column) => column);
+
+  GeneratedColumn<String> get bits =>
+      $composableBuilder(column: $table.bits, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$SilkPicturesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SilkPicturesTable,
+          SilkPictureRow,
+          $$SilkPicturesTableFilterComposer,
+          $$SilkPicturesTableOrderingComposer,
+          $$SilkPicturesTableAnnotationComposer,
+          $$SilkPicturesTableCreateCompanionBuilder,
+          $$SilkPicturesTableUpdateCompanionBuilder,
+          (
+            SilkPictureRow,
+            BaseReferences<_$AppDatabase, $SilkPicturesTable, SilkPictureRow>,
+          ),
+          SilkPictureRow,
+          PrefetchHooks Function()
+        > {
+  $$SilkPicturesTableTableManager(_$AppDatabase db, $SilkPicturesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SilkPicturesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SilkPicturesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SilkPicturesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<double> width = const Value.absent(),
+                Value<int> columns = const Value.absent(),
+                Value<int> rows = const Value.absent(),
+                Value<String> bits = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SilkPicturesCompanion(
+                id: id,
+                name: name,
+                width: width,
+                columns: columns,
+                rows: rows,
+                bits: bits,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required double width,
+                required int columns,
+                required int rows,
+                required String bits,
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => SilkPicturesCompanion.insert(
+                id: id,
+                name: name,
+                width: width,
+                columns: columns,
+                rows: rows,
+                bits: bits,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SilkPicturesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SilkPicturesTable,
+      SilkPictureRow,
+      $$SilkPicturesTableFilterComposer,
+      $$SilkPicturesTableOrderingComposer,
+      $$SilkPicturesTableAnnotationComposer,
+      $$SilkPicturesTableCreateCompanionBuilder,
+      $$SilkPicturesTableUpdateCompanionBuilder,
+      (
+        SilkPictureRow,
+        BaseReferences<_$AppDatabase, $SilkPicturesTable, SilkPictureRow>,
+      ),
+      SilkPictureRow,
+      PrefetchHooks Function()
     >;
 typedef $$AppSettingsTableCreateCompanionBuilder =
     AppSettingsCompanion Function({
@@ -32635,6 +35208,12 @@ class $AppDatabaseManager {
       $$BoardZonesTableTableManager(_db, _db.boardZones);
   $$BoardTextsTableTableManager get boardTexts =>
       $$BoardTextsTableTableManager(_db, _db.boardTexts);
+  $$BoardImagesTableTableManager get boardImages =>
+      $$BoardImagesTableTableManager(_db, _db.boardImages);
+  $$UserFontsTableTableManager get userFonts =>
+      $$UserFontsTableTableManager(_db, _db.userFonts);
+  $$SilkPicturesTableTableManager get silkPictures =>
+      $$SilkPicturesTableTableManager(_db, _db.silkPictures);
   $$AppSettingsTableTableManager get appSettings =>
       $$AppSettingsTableTableManager(_db, _db.appSettings);
   $$ProjectSnapshotsTableTableManager get projectSnapshots =>

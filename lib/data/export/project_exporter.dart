@@ -179,6 +179,7 @@ class ProjectExporter {
       edges: await boards.getEdges(projectId),
       zones: await boards.getZones(projectId),
       texts: await boards.getTexts(projectId),
+      images: await boards.getImages(projectId),
       netClasses: await boards.getNetClasses(projectId),
       features: await boards.getFeatures(projectId),
       dimensions: await boards.getDimensions(projectId),
