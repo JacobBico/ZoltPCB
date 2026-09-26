@@ -3817,11 +3817,21 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     ];
     // Parts already on the board are laid out already: replicating onto
     // them would pull a finished channel away from its tracks.
-    final footprintOf = {
-      for (final p in placements)
-        if (!p.placed || _selected.footprintIds.contains(p.id))
-          p.partId: p.libId,
-    };
+    // A part never put on the board has no placement yet, only the
+    // footprint the schematic gave it.
+    final placementOf = {for (final p in placements) p.partId: p};
+    final footprintOf = <String, String>{};
+    for (final part in parts) {
+      final placed = placementOf[part.part.id];
+      if (placed == null) {
+        final footprint = part.part.footprint.trim();
+        if (part.part.onBoard && footprint.isNotEmpty) {
+          footprintOf[part.part.id] = footprint;
+        }
+      } else if (!placed.placed || _selected.footprintIds.contains(placed.id)) {
+        footprintOf[part.part.id] = placed.libId;
+      }
+    }
     final channels = findReplicaChannels(
       sourcePartIds: {for (final p in source) p.partId},
       nets: nets,
@@ -3920,8 +3930,16 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     final after = <PlacedFootprintRef>[];
     for (final original in source.placements) {
       final partId = channel.parts[original.partId];
-      final target = placements.where((p) => p.partId == partId).firstOrNull;
-      if (target == null) continue;
+      if (partId == null) continue;
+      // Never on the board: it gets the original's footprint, which is the
+      // one its schematic footprint matched.
+      final target =
+          placements.where((p) => p.partId == partId).firstOrNull ??
+          await repository.assignFootprint(
+            projectId: widget.project.id,
+            partId: partId,
+            libId: original.libId,
+          );
       before.add(target);
       after.add(
         target.copyWith(
