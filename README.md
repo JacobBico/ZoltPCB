@@ -84,8 +84,8 @@ your design against what that fabricator can actually make.
 Zolt will be on Google Play soon. Until then you can build it yourself:
 
 ```bash
-git clone https://github.com/JacobBico/HintPCB.git zolt
-cd zolt
+git clone https://github.com/JacobBico/ZoltPCB.git
+cd ZoltPCB
 flutter pub get
 flutter build apk --release
 ```
