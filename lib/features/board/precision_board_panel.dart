@@ -11,8 +11,6 @@ import '../../app/edit_history.dart';
 import '../../app/providers.dart';
 import '../../core/theme/kicad_palette.dart';
 import '../../core/util/ids.dart';
-import '../../data/repositories/circuit_paster.dart';
-import '../../data/repositories/part_repository.dart' show PartSnapshot;
 import '../../core/widgets/panel.dart';
 import '../../domain/models/models.dart';
 import '../../domain/pcb/pcb.dart';
@@ -1385,13 +1383,6 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           label: 'Move ${_selected.count}',
           onPressed: _selected.isEmpty ? null : () => _carryRegion(),
         ),
-        if (_selected.footprintIds.isNotEmpty)
-          _Chip(
-            key: const ValueKey('copy-parts'),
-            icon: Icons.content_copy_outlined,
-            label: 'Copy',
-            onPressed: () => _copyAsNewParts(scene),
-          ),
         if (_selected.footprintIds.isNotEmpty)
           _Chip(
             key: const ValueKey('replicate'),
@@ -3824,7 +3815,13 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       for (final placement in placements)
         if (_selected.footprintIds.contains(placement.id)) placement,
     ];
-    final footprintOf = {for (final p in placements) p.partId: p.libId};
+    // Parts already on the board are laid out already: replicating onto
+    // them would pull a finished channel away from its tracks.
+    final footprintOf = {
+      for (final p in placements)
+        if (!p.placed || _selected.footprintIds.contains(p.id))
+          p.partId: p.libId,
+    };
     final channels = findReplicaChannels(
       sourcePartIds: {for (final p in source) p.partId},
       nets: nets,
@@ -3875,117 +3872,6 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     );
   }
 
-  /// The swept parts again, as new parts: added to the schematic wired the
-  /// way the originals are among themselves, then laid out on the board
-  /// the same way, tracks and all, riding the crosshair until dropped.
-  ///
-  /// Connections that leave the copied parts come along only when named,
-  /// like GND, so the copy joins the same supply and nothing else.
-  Future<void> _copyAsNewParts(BoardScene scene) async {
-    final projectId = widget.project.id;
-    final partRepository = ref.read(partRepositoryProvider);
-    final netRepository = ref.read(netRepositoryProvider);
-    final boards = ref.read(boardRepositoryProvider);
-    final placements = await boards.getFootprints(projectId);
-    final parts = await partRepository.getPartsWithDetails(projectId);
-    final nets = await netRepository.getNets(projectId);
-    final wires = await netRepository.getWires(projectId);
-    final source = [
-      for (final placement in placements)
-        if (_selected.footprintIds.contains(placement.id)) placement,
-    ];
-    final sourcePartIds = {for (final p in source) p.partId};
-    final sourceParts = [
-      for (final part in parts)
-        if (sourcePartIds.contains(part.part.id)) part,
-    ];
-    final units = [for (final part in sourceParts) ...part.units];
-    final clip = CircuitClip.of(
-      parts: parts,
-      nets: nets,
-      wires: wires,
-      unitIds: {for (final unit in units) unit.id},
-    );
-    if (clip == null || !mounted) return;
-
-    // On the schematic, beside the originals, on the grid.
-    final first = sourceParts.first.units.first;
-    final xs = [for (final unit in units) unit.x];
-    final span = xs.reduce(math.max) - xs.reduce(math.min);
-    const grid = 2.54;
-    final at = Offset(
-      ((first.x + span + 20) / grid).roundToDouble() * grid,
-      (first.y / grid).roundToDouble() * grid,
-    );
-
-    final pasted = await CircuitPaster(
-      partRepository,
-      netRepository,
-    ).paste(projectId, clip, at: at);
-    for (var i = 0; i < pasted.partIds.length && i < sourceParts.length; i++) {
-      final original = source.firstWhere(
-        (p) => p.partId == sourceParts[i].part.id,
-      );
-      await boards.assignFootprint(
-        projectId: projectId,
-        partId: pasted.partIds[i],
-        libId: original.libId,
-      );
-    }
-    final snapshots = <PartSnapshot>[];
-    for (final id in pasted.partIds) {
-      final snapshot = await partRepository.capturePart(id);
-      if (snapshot != null) snapshots.add(snapshot);
-    }
-    if (!mounted) return;
-    _record(
-      'Copy ${clip.summary} on the schematic',
-      undo: () async {
-        for (final wire in pasted.wires) {
-          await netRepository.deleteWire(wire.id);
-        }
-        for (final id in pasted.partIds) {
-          await partRepository.deletePart(id);
-        }
-      },
-      redo: () async {
-        for (final snapshot in snapshots) {
-          await partRepository.restorePart(snapshot);
-        }
-        for (final wire in pasted.wires) {
-          await netRepository.restoreWire(wire);
-        }
-      },
-    );
-
-    // Which new net stands in for each old one, pin by pin.
-    String pinKey(String partId, PartPin pin) =>
-        '$partId|${pin.unit}|${pin.number}';
-    final netOfPin = <String, String>{};
-    for (final net in await netRepository.getNets(projectId)) {
-      for (final endpoint in net.endpoints) {
-        netOfPin[pinKey(endpoint.part.id, endpoint.pin)] = net.id;
-      }
-    }
-    final added = await partRepository.getPartsWithDetails(projectId);
-    final partMap = <String, String>{};
-    final netMap = <String, String>{};
-    for (var i = 0; i < pasted.partIds.length && i < sourceParts.length; i++) {
-      final from = sourceParts[i];
-      final to = added.where((p) => p.part.id == pasted.partIds[i]).first;
-      partMap[from.part.id] = to.part.id;
-      for (final pin in from.pins) {
-        final oldNet = netOfPin[pinKey(from.part.id, pin)];
-        final newNet = netOfPin[pinKey(to.part.id, pin)];
-        if (oldNet != null && newNet != null) netMap[oldNet] = newNet;
-      }
-    }
-
-    _replicaSource = _replicaSourceOf(scene, source);
-    _replicas = [ReplicaChannel(parts: partMap, nets: netMap)];
-    await _placeNextReplica();
-  }
-
   /// Why nothing matched, as specifically as can be said.
   String _whyNoReplica(
     List<PlacedFootprintRef> source,
@@ -3993,23 +3879,29 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     Map<String, String> footprintOf,
   ) {
     final byId = {for (final part in parts) part.part.id: part};
+    String names(Iterable<PartWithDetails> of) =>
+        of.map((t) => t.part.reference).join(', ');
     for (final placement in source) {
       final part = byId[placement.partId];
       if (part == null) continue;
-      final twins = parts.where(
-        (other) =>
-            other.part.id != part.part.id &&
-            other.part.libId == part.part.libId &&
-            !source.any((p) => p.partId == other.part.id),
-      );
+      final twins = parts
+          .where(
+            (other) =>
+                other.part.libId == part.part.libId &&
+                !source.any((p) => p.partId == other.part.id),
+          )
+          .toList();
       if (twins.isEmpty) {
-        return 'No other ${part.part.reference} on the schematic to copy '
-            'this onto';
+        return 'No other part like ${part.part.reference} on the schematic';
       }
-      if (!twins.any((t) => footprintOf[t.part.id] == placement.libId)) {
-        final names = twins.map((t) => t.part.reference).join(', ');
-        return '$names ${twins.length == 1 ? 'has' : 'have'} a different '
-            'footprint from ${part.part.reference}';
+      final free = twins.where((t) => footprintOf.containsKey(t.part.id));
+      if (free.isEmpty) {
+        return '${names(twins)} ${twins.length == 1 ? 'is' : 'are'} '
+            'already on the board';
+      }
+      if (!free.any((t) => footprintOf[t.part.id] == placement.libId)) {
+        return '${names(free)} ${free.length == 1 ? 'has' : 'have'} a '
+            'different footprint from ${part.part.reference}';
       }
     }
     return 'The other copies are wired differently on the schematic';

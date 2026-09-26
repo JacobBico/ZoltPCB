@@ -679,62 +679,6 @@ void main() {
       expect(tracks.single.endX - tracks.single.startX, closeTo(3, 0.01));
     });
 
-    testAppWithStorage('copying makes new parts, wired and laid out', (
-      tester,
-      db,
-      storage,
-    ) async {
-      final footprintStorage = InMemoryLibraryStorageFor();
-      final (project, boards) = await _board(db, footprintStorage);
-      final parts = PartRepository(db);
-      final r1 = (await boards.getFootprints(
-        project.id,
-      )).firstWhere((p) => p.x == 30);
-      final net = await NetRepository(db).netIdForPin(
-        (await parts.getPartsWithDetails(
-          project.id,
-        )).firstWhere((p) => p.part.id == r1.partId).pins.first.id,
-      );
-      await boards.addTrack(
-        projectId: project.id,
-        layer: CopperLayer.front,
-        startX: 31,
-        startY: 35,
-        endX: 44,
-        endY: 35,
-        width: 0.25,
-        netId: net,
-      );
-
-      await pumpApp(
-        tester,
-        Scaffold(body: PrecisionBoardPanel(project: project)),
-        database: db,
-        footprintStorage: footprintStorage,
-      );
-      await tester.tap(find.byIcon(Icons.crop_free).first);
-      await settleApp(tester);
-      await _aimAt(tester, const Offset(27, 32));
-      await tester.tap(find.text('CORNER'));
-      await settleApp(tester);
-      await _aimAt(tester, const Offset(48, 38));
-      await tester.tap(find.text('FINISH'));
-      await settleApp(tester);
-
-      await tester.tap(find.byKey(const ValueKey('copy-parts')));
-      await settleApp(tester);
-      await tester.tap(find.text('DROP'));
-      await settleApp(tester);
-
-      final all = await parts.getPartsWithDetails(project.id);
-      expect(all, hasLength(4));
-      final tracks = await boards.getTracks(project.id);
-      expect(tracks, hasLength(2));
-      expect(tracks.map((t) => t.netId).toSet(), hasLength(2));
-      final placed = await boards.getFootprints(project.id);
-      expect(placed.where((p) => p.placed), hasLength(4));
-    });
-
     testAppWithStorage('a laid-out channel is copied onto its twin', (
       tester,
       db,
