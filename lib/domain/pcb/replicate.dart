@@ -13,7 +13,7 @@ class ReplicaChannel {
   final Map<String, String> parts;
 
   /// Original net id to the copy's net id, for every net the original's
-  /// pins are on.
+  /// pins are on that the copy's matching pin is on too.
   final Map<String, String> nets;
 
   /// Original part ids whose copy is wired the other way round: a two-pin
@@ -25,27 +25,33 @@ class ReplicaChannel {
 /// The other channels of a circuit, found by following the schematic.
 ///
 /// A channel is a set of parts with the same symbols and footprints as
-/// [sourcePartIds], wired to each other the same way: every net that joins
-/// two parts of the original joins the matching parts of the copy. Pins
-/// match by number, except that a part in [twoPin] (a resistor, a
-/// capacitor) may be either way round, since nobody draws every channel
-/// with its resistors facing the same way. Nets that leave the original
-/// map to whatever the copy's pins are on, which is how a copy's tracks end
-/// up on its own signal rather than the original's.
+/// [sourcePartIds], wired the same way: every net of the original maps to
+/// one net of the copy and no two to the same one, and a pin of the copy is
+/// on the net its original's pin maps to. Pins match by number, except that
+/// a part in [twoPin] (a resistor, a capacitor) may be either way round,
+/// since nobody draws every channel with its resistors facing the same way.
+/// A pin left unwired on a copy is fine unless the original's pin joins two
+/// parts of the original: an unused output is still the same circuit.
 ///
-/// [footprintOf] gives each part's footprint; parts without one are not
-/// on the board and never match. Each part belongs to one channel at most,
-/// and channels come in order of their first part's reference.
+/// The search backs up when a choice leads nowhere, so a shared net like
+/// GND, where every channel's capacitor sits, cannot send it down the wrong
+/// channel for good. Parts are tried through the most particular net first.
+///
+/// [footprintOf] gives each part's footprint; parts without one never
+/// match. [symbolOf] gives each part's symbol, needed for parts no net
+/// reaches; parts on a net are known from it anyway. Each part belongs to
+/// one channel at most, and channels come in order of reference.
 List<ReplicaChannel> findReplicaChannels({
   required Set<String> sourcePartIds,
   required List<NetWithEndpoints> nets,
   required Map<String, String> footprintOf,
+  Map<String, String> symbolOf = const {},
   Map<String, (String, String)> twoPin = const {},
 }) {
   if (sourcePartIds.isEmpty) return const [];
 
   final netOf = <String, Map<String, String>>{};
-  final symbolOf = <String, String>{};
+  final symbols = {...symbolOf};
   final referenceOf = <String, String>{};
   final endpointsOf = <String, List<NetEndpoint>>{};
   for (final net in nets) {
@@ -53,19 +59,22 @@ List<ReplicaChannel> findReplicaChannels({
     for (final endpoint in net.endpoints) {
       final part = endpoint.part;
       (netOf[part.id] ??= {})[endpoint.pin.number] = net.id;
-      symbolOf[part.id] = part.libId;
+      symbols[part.id] ??= part.libId;
       referenceOf[part.id] = part.reference;
     }
   }
 
   String? keyOf(String partId) {
     final footprint = footprintOf[partId];
-    final symbol = symbolOf[partId];
+    final symbol = symbols[partId];
     if (footprint == null || symbol == null) return null;
     return '$symbol|$footprint';
   }
 
-  String otherPin(String partId, String number) {
+  if (sourcePartIds.any((id) => keyOf(id) == null)) return const [];
+
+  String pinOn(String partId, String number, bool turn) {
+    if (!turn) return number;
     final pair = twoPin[partId]!;
     return number == pair.$1 ? pair.$2 : pair.$1;
   }
@@ -74,111 +83,162 @@ List<ReplicaChannel> findReplicaChannels({
     (e) => e.part.id != except && sourcePartIds.contains(e.part.id),
   );
 
-  // The part the rest are found from: the one with the most pins wired to
-  // the rest of the original, so the search starts where it is most sure.
-  final source = sourcePartIds.where((id) => keyOf(id) != null).toList()
+  // The order parts are matched in: outwards from the best-connected one,
+  // along nets inside the original, so each is found through one already
+  // matched. Parts nothing joins to the rest come last.
+  int inner(String id) => (netOf[id]?.values ?? const <String>[])
+      .where((net) => internal(net, id))
+      .length;
+  final ranked = sourcePartIds.toList()
     ..sort((a, b) {
-      int inner(String id) => (netOf[id]?.values ?? const <String>[])
-          .where((net) => internal(net, id))
-          .length;
-      return inner(b).compareTo(inner(a));
+      final byLinks = inner(b).compareTo(inner(a));
+      return byLinks != 0
+          ? byLinks
+          : _naturalCompare(referenceOf[a] ?? '', referenceOf[b] ?? '');
     });
-  if (source.length != sourcePartIds.length) return const [];
-  final anchor = source.first;
-
-  final taken = <String>{...sourcePartIds};
-  final candidates =
-      [
-        for (final id in footprintOf.keys)
-          if (!taken.contains(id) && keyOf(id) == keyOf(anchor)) id,
-      ]..sort(
-        (a, b) => _naturalCompare(referenceOf[a] ?? '', referenceOf[b] ?? ''),
-      );
-
-  /// The copy's parts and nets when [anchor] is [start], turned or not,
-  /// or null when the wiring differs.
-  ReplicaChannel? follow(String start, bool turnStart) {
-    final parts = <String, String>{anchor: start};
-    final turned = <String>{if (turnStart) anchor};
-    final netMap = <String, String>{};
-    final queue = [anchor];
-
-    String pinOn(String sourcePart, String number) =>
-        turned.contains(sourcePart) ? otherPin(sourcePart, number) : number;
-
-    while (queue.isNotEmpty) {
-      final from = queue.removeAt(0);
-      final to = parts[from]!;
-      for (final pin in (netOf[from] ?? const <String, String>{}).entries) {
-        final sourceNet = pin.value;
-        final targetNet = netOf[to]?[pinOn(from, pin.key)];
-        if (targetNet == null) {
-          // An unused pin on the copy only matters when it would join two
-          // parts of the original.
-          if (internal(sourceNet, from)) return null;
-          continue;
-        }
-        final mapped = netMap[sourceNet];
-        if (mapped != null && mapped != targetNet) return null;
-        netMap[sourceNet] = targetNet;
-
-        // Every other part of the original on this net needs a partner on
-        // the copy's net.
-        for (final endpoint in endpointsOf[sourceNet]!) {
-          final other = endpoint.part.id;
-          if (other == from || !sourcePartIds.contains(other)) continue;
-          final number = endpoint.pin.number;
-          final known = parts[other];
-          if (known != null) {
-            final wanted = pinOn(other, number);
-            final ok = endpointsOf[targetNet]!.any(
-              (e) => e.part.id == known && e.pin.number == wanted,
-            );
-            if (!ok) return null;
-            continue;
+  final order = <String>[];
+  for (final root in ranked) {
+    if (order.contains(root)) continue;
+    order.add(root);
+    for (var i = order.length - 1; i < order.length; i++) {
+      for (final net in (netOf[order[i]] ?? const <String, String>{}).values) {
+        for (final e in endpointsOf[net]!) {
+          if (sourcePartIds.contains(e.part.id) && !order.contains(e.part.id)) {
+            order.add(e.part.id);
           }
-          String? partner;
-          var turn = false;
-          for (final e in endpointsOf[targetNet]!) {
-            final id = e.part.id;
-            if (taken.contains(id) ||
-                parts.containsValue(id) ||
-                keyOf(id) != keyOf(other)) {
-              continue;
-            }
-            if (e.pin.number == number) {
-              partner = id;
-              break;
-            }
-            if (twoPin.containsKey(other) &&
-                twoPin.containsKey(id) &&
-                e.pin.number == otherPin(other, number)) {
-              partner ??= id;
-              turn = true;
-            }
-          }
-          if (partner == null) return null;
-          parts[other] = partner;
-          if (turn) turned.add(other);
-          queue.add(other);
         }
       }
     }
-    if (parts.length != sourcePartIds.length) return null;
-    return ReplicaChannel(parts: parts, nets: netMap, turned: turned);
   }
 
+  final byKey = <String, List<String>>{};
+  for (final id in footprintOf.keys) {
+    final key = keyOf(id);
+    if (key == null || sourcePartIds.contains(id)) continue;
+    (byKey[key] ??= []).add(id);
+  }
+  for (final list in byKey.values) {
+    list.sort(
+      (a, b) => _naturalCompare(referenceOf[a] ?? '', referenceOf[b] ?? ''),
+    );
+  }
+
+  final taken = <String>{};
   final channels = <ReplicaChannel>[];
-  for (final start in candidates) {
+  final anchor = order.first;
+
+  for (final start in byKey[keyOf(anchor)] ?? const <String>[]) {
     if (taken.contains(start)) continue;
-    final channel =
-        follow(start, false) ??
-        (twoPin.containsKey(anchor) && twoPin.containsKey(start)
-            ? follow(start, true)
-            : null);
-    if (channel == null) continue;
-    taken.addAll(channel.parts.values);
-    channels.add(channel);
+
+    final parts = <String, String>{};
+    final turned = <String>{};
+    final netMap = <String, String>{};
+    final image = <String, String>{};
+    var budget = 20000;
+
+    /// Matches [s] to [t], recording what it implies; returns the nets it
+    /// newly mapped, or null (having recorded nothing) when it clashes.
+    List<String>? assign(String s, String t, bool turn) {
+      final added = <String>[];
+      void undo() {
+        for (final n in added) {
+          image.remove(netMap.remove(n));
+        }
+      }
+
+      for (final pin in (netOf[s] ?? const <String, String>{}).entries) {
+        final n = pin.value;
+        final tn = netOf[t]?[pinOn(s, pin.key, turn)];
+        if (tn == null) {
+          if (internal(n, s)) {
+            undo();
+            return null;
+          }
+          continue;
+        }
+        final mapped = netMap[n];
+        if (mapped != null) {
+          if (mapped != tn) {
+            undo();
+            return null;
+          }
+          continue;
+        }
+        if (image.containsKey(tn)) {
+          undo();
+          return null;
+        }
+        netMap[n] = tn;
+        image[tn] = n;
+        added.add(n);
+      }
+      // And the other way: a pin of the copy on a net the original maps to
+      // must be the pin that is on it in the original.
+      for (final pin in (netOf[t] ?? const <String, String>{}).entries) {
+        final n = image[pin.value];
+        if (n == null) continue;
+        final number = turn ? pinOn(s, pin.key, true) : pin.key;
+        if (netOf[s]?[number] != n) {
+          undo();
+          return null;
+        }
+      }
+      return added;
+    }
+
+    bool search(int index) {
+      if (--budget < 0) return false;
+      if (index == order.length) return true;
+      final s = order[index];
+
+      // Through the matched net with the fewest parts on it, which is the
+      // one that says most about where this part's partner is.
+      Iterable<String> options = byKey[keyOf(s)] ?? const <String>[];
+      if (index == 0) {
+        options = [start];
+      } else {
+        String? narrowest;
+        for (final n in (netOf[s] ?? const <String, String>{}).values) {
+          final tn = netMap[n];
+          if (tn == null) continue;
+          if (narrowest == null ||
+              endpointsOf[tn]!.length < endpointsOf[narrowest]!.length) {
+            narrowest = tn;
+          }
+        }
+        if (narrowest != null) {
+          final on = {for (final e in endpointsOf[narrowest]!) e.part.id};
+          options = options.where(on.contains);
+        }
+      }
+
+      for (final t in options) {
+        if (taken.contains(t) || parts.containsValue(t)) continue;
+        for (final turn in [false, if (twoPin.containsKey(s)) true]) {
+          final added = assign(s, t, turn);
+          if (added == null) continue;
+          parts[s] = t;
+          if (turn) turned.add(s);
+          if (search(index + 1)) return true;
+          parts.remove(s);
+          turned.remove(s);
+          for (final n in added) {
+            image.remove(netMap.remove(n));
+          }
+        }
+      }
+      return false;
+    }
+
+    if (!search(0)) continue;
+    taken.addAll(parts.values);
+    channels.add(
+      ReplicaChannel(
+        parts: Map.of(parts),
+        nets: Map.of(netMap),
+        turned: Set.of(turned),
+      ),
+    );
   }
   return channels;
 }

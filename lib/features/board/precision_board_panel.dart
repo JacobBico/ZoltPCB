@@ -1384,25 +1384,6 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       ];
     }
 
-    // A copy is down and more could follow, one at a time, only if asked.
-    if (_replicaSource != null && _replicas.isNotEmpty) {
-      return [
-        _Chip(
-          key: const ValueKey('replicate-next'),
-          icon: Icons.copy_all_outlined,
-          label: 'Next copy · ${_replicaNames(_replicas.first)}',
-          onPressed: _carryReplica,
-        ),
-        _Chip(
-          key: const ValueKey('replicate-done'),
-          icon: Icons.check,
-          label: 'Done',
-          onPressed: () => setState(_stopCarrying),
-        ),
-        ?_hintText(),
-      ];
-    }
-
     // An area has been swept: what is in it can be moved or deleted as one.
     if (_region != null) {
       return [
@@ -1828,6 +1809,21 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     }
 
     return [
+      // A copy is down and more could follow, one at a time, if asked.
+      if (_replicaSource != null && _replicas.isNotEmpty) ...[
+        _Chip(
+          key: const ValueKey('replicate-next'),
+          icon: Icons.copy_all_outlined,
+          label: 'Next copy · ${_replicaNames(_replicas.first)}',
+          onPressed: _carryReplica,
+        ),
+        _Chip(
+          key: const ValueKey('replicate-done'),
+          icon: Icons.check,
+          label: 'Done',
+          onPressed: () => setState(_stopCarrying),
+        ),
+      ],
       if (_tool == AimTool.route && _routeStyle == RouteStyle.meander)
         _meanderChip(scene)
       else if (_tool == AimTool.route && _routeStyle == RouteStyle.pair)
@@ -3873,6 +3869,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       sourcePartIds: {for (final p in source) p.partId},
       nets: nets,
       footprintOf: footprintOf,
+      symbolOf: symbolOf,
       twoPin: {
         for (final part in parts)
           if (part.pins.length == 2)
@@ -3895,8 +3892,44 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   ]..sort()).join(', ');
 
   /// Puts the next copy on the crosshair. Nothing is written until DROP.
+  ///
+  /// A copy waiting its turn is checked again first: since Replicate was
+  /// tapped, its parts may have been placed by hand or deleted.
   void _carryReplica() {
-    if (_replicas.isEmpty) return;
+    final placements =
+        ref.read(boardFootprintsProvider(widget.project.id)).value ??
+        const <PlacedFootprintRef>[];
+    final parts = ref.read(projectPartsProvider(widget.project.id)).value;
+    final placedIds = {
+      for (final p in placements)
+        if (p.placed) p.partId,
+    };
+    final partIds = parts == null
+        ? null
+        : {for (final part in parts) part.part.id};
+    final stale = [
+      for (final channel in _replicas)
+        if (channel.parts.values.any(
+          (id) =>
+              placedIds.contains(id) ||
+              (partIds != null && !partIds.contains(id)),
+        ))
+          channel,
+    ];
+    if (stale.isNotEmpty) {
+      _replicas = [
+        for (final channel in _replicas)
+          if (!stale.contains(channel)) channel,
+      ];
+      _notify(
+        '${_replicaNames(stale.first)} ${stale.length == 1 ? 'is' : 'are'} '
+        'placed or gone now; skipped',
+      );
+    }
+    if (_replicas.isEmpty) {
+      setState(_stopCarrying);
+      return;
+    }
     setState(() {
       _region = null;
       _regionFrom = null;
@@ -3911,14 +3944,28 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   ///
   /// A part never on the board has no placement yet; it is drawn from one
   /// made up for the purpose, which DROP then makes real.
-  ({List<PlacedFootprintRef> placements, List<Track> tracks, List<Via> vias})
+  ({
+    List<PlacedFootprintRef> placements,
+    List<Track> tracks,
+    List<Via> vias,
+    List<BoardZone> zones,
+  })
   _replicaAt(
     _ReplicaSource source,
     ReplicaChannel channel,
     List<PlacedFootprintRef> placements,
+    List<NetWithEndpoints> nets,
     Offset at,
   ) {
-    final offset = at - source.centre;
+    // Moved in whole steps of the grid, so a copy of parts laid on the
+    // grid is on it too, wherever its middle happens to fall.
+    var offset = at - source.centre;
+    if (_snap && _grid > 0) {
+      offset = Offset(
+        (offset.dx / _grid).roundToDouble() * _grid,
+        (offset.dy / _grid).roundToDouble() * _grid,
+      );
+    }
     final copies = <PlacedFootprintRef>[];
     for (final original in source.placements) {
       final partId = channel.parts[original.partId];
@@ -3931,14 +3978,20 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
             partId: partId,
             libId: original.libId,
           );
+      // Wired the other way round: half a turn about the middle of its
+      // pads puts each pad where the other one was, which is where the
+      // copied tracks end.
+      final turned = channel.turned.contains(original.partId);
+      final pivot = source.padCentres[original.partId];
+      final origin = turned && pivot != null
+          ? pivot * 2 - Offset(original.x, original.y)
+          : Offset(original.x, original.y);
       copies.add(
         existing.copyWith(
           libId: original.libId,
-          x: original.x + offset.dx,
-          y: original.y + offset.dy,
-          // Wired the other way round: half a turn puts its pads back
-          // where the copied tracks end.
-          rotation: channel.turned.contains(original.partId)
+          x: origin.dx + offset.dx,
+          y: origin.dy + offset.dy,
+          rotation: turned
               ? (original.rotation + 180) % 360
               : original.rotation,
           flipped: original.flipped,
@@ -3975,6 +4028,21 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
             clearNet: netFor(v.netId) == null,
           ),
       ],
+      zones: [
+        for (final z in source.zones.where((z) => follows(z.netId)))
+          z.copyWith(
+            id: 'replica-${z.id}',
+            points: [for (final p in z.points) p + offset],
+            netId: netFor(z.netId),
+            clearNet: netFor(z.netId) == null,
+            netName: netFor(z.netId) == null
+                ? null
+                : nets
+                      .where((n) => n.id == netFor(z.netId))
+                      .firstOrNull
+                      ?.displayName,
+          ),
+      ],
     );
   }
 
@@ -3997,7 +4065,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         definitions == null) {
       return committed;
     }
-    final copy = _replicaAt(source, _replicas.first, placements, at);
+    final copy = _replicaAt(source, _replicas.first, placements, nets, at);
     final moved = {for (final p in copy.placements) p.partId: p};
     return BoardScene.build(
       previewOf: committed,
@@ -4018,7 +4086,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       tracks: [...committed.tracks, ...copy.tracks],
       vias: [...committed.vias, ...copy.vias],
       edges: committed.edges,
-      zones: committed.zones,
+      zones: [...committed.zones, ...copy.zones],
     );
   }
 
@@ -4029,7 +4097,10 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     final channel = _replicas.first;
     final repository = ref.read(boardRepositoryProvider);
     final placements = await repository.getFootprints(widget.project.id);
-    final copy = _replicaAt(source, channel, placements, at);
+    final nets = await ref
+        .read(netRepositoryProvider)
+        .getNets(widget.project.id);
+    final copy = _replicaAt(source, channel, placements, nets, at);
 
     // Placements made real, and any footprint changed, for undo.
     final before = <PlacedFootprintRef>[];
@@ -4062,6 +4133,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     }
     final tracks = [for (final t in copy.tracks) t.copyWith(id: newId())];
     final vias = [for (final v in copy.vias) v.copyWith(id: newId())];
+    final zones = [for (final z in copy.zones) z.copyWith(id: newId())];
 
     Future<void> apply() => ref.read(editTransactionProvider)(() async {
       for (final placement in after) {
@@ -4073,6 +4145,9 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         await repository.updatePlacement(placement);
       }
       await repository.restoreCopper(tracks: tracks, vias: vias);
+      for (final zone in zones) {
+        await repository.restoreZone(zone);
+      }
     });
     await apply();
     if (!mounted) return;
@@ -4081,6 +4156,9 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       undo: () => ref.read(editTransactionProvider)(() async {
         await repository.deleteTracks(tracks.map((t) => t.id));
         await repository.deleteVias(vias.map((v) => v.id));
+        for (final zone in zones) {
+          await repository.deleteZone(zone.id);
+        }
         for (final placement in before) {
           await repository.updatePlacement(placement);
         }
@@ -4130,6 +4208,18 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       ),
     );
     return _ReplicaSource(
+      padCentres: {
+        for (final p in source)
+          if (scene.pads.where((pad) => pad.partId == p.partId).toList()
+              case final pads when pads.isNotEmpty)
+            p.partId:
+                pads.map((pad) => pad.position).reduce((a, b) => a + b) /
+                pads.length.toDouble(),
+      },
+      zones: [
+        for (final z in scene.zones)
+          if (_selected.zoneIds.contains(z.id)) z,
+      ],
       placements: source,
       tracks: [
         for (final t in scene.tracks)
@@ -6131,12 +6221,21 @@ class _ReplicaSource {
     required this.placements,
     required this.tracks,
     required this.vias,
+    required this.zones,
+    required this.padCentres,
     required this.centre,
   });
 
   final List<PlacedFootprintRef> placements;
   final List<Track> tracks;
   final List<Via> vias;
+  final List<BoardZone> zones;
+
+  /// The middle of each original part's pads, which a part copied the
+  /// other way round turns about. Not its origin: a through-hole resistor
+  /// has its origin on pad 1, and turning about that would put its pads
+  /// somewhere else entirely.
+  final Map<String, Offset> padCentres;
 
   /// The middle of the original, which rides the crosshair.
   final Offset centre;

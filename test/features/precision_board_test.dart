@@ -745,6 +745,56 @@ void main() {
       expect(copies.every((p) => p.libId == 'Test:TwoPad'), isTrue);
     });
 
+    testAppWithStorage('copies come one at a time, and can stop at one', (
+      tester,
+      db,
+      storage,
+    ) async {
+      final footprintStorage = InMemoryLibraryStorageFor();
+      final (project, boards) = await _board(db, footprintStorage);
+      final parts = PartRepository(db);
+      final twins = <PartWithDetails>[];
+      for (var i = 0; i < 2; i++) {
+        final a = await parts.addPart(project.id, resistorSpec());
+        final b = await parts.addPart(project.id, resistorSpec());
+        await NetRepository(db).connectPins(a.pins.first.id, b.pins.first.id);
+        twins.addAll([a, b]);
+      }
+
+      await pumpApp(
+        tester,
+        Scaffold(body: PrecisionBoardPanel(project: project)),
+        database: db,
+        footprintStorage: footprintStorage,
+      );
+      await tester.tap(find.byIcon(Icons.crop_free).first);
+      await settleApp(tester);
+      await _aimAt(tester, const Offset(27, 32));
+      await tester.tap(find.text('CORNER'));
+      await settleApp(tester);
+      await _aimAt(tester, const Offset(48, 38));
+      await tester.tap(find.text('FINISH'));
+      await settleApp(tester);
+
+      await tester.tap(find.byKey(const ValueKey('replicate')));
+      await settleApp(tester);
+      await tester.tap(find.text('DROP'));
+      await settleApp(tester);
+      expect(find.byKey(const ValueKey('replicate-next')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('replicate-done')));
+      await settleApp(tester);
+      expect(find.byKey(const ValueKey('replicate-next')), findsNothing);
+
+      final placed = {
+        for (final p in await boards.getFootprints(project.id))
+          if (p.placed) p.partId,
+      };
+      expect(placed.contains(twins[0].part.id), isTrue);
+      expect(placed.contains(twins[1].part.id), isTrue);
+      expect(placed.contains(twins[2].part.id), isFalse);
+      expect(placed.contains(twins[3].part.id), isFalse);
+    });
+
     testAppWithStorage('everything inside it can be deleted at once', (
       tester,
       db,

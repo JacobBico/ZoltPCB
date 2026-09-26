@@ -173,11 +173,11 @@ class BoardZone {
     return inside;
   }
 
-  String get label => keepout
-      ? 'Keepout'
-      : (netName.isEmpty ? 'No net' : netName);
+  String get label =>
+      keepout ? 'Keepout' : (netName.isEmpty ? 'No net' : netName);
 
   BoardZone copyWith({
+    String? id,
     BoardLayer? layer,
     List<Offset>? points,
     String? netId,
@@ -197,7 +197,7 @@ class BoardZone {
     bool? noParts,
     bool? locked,
   }) => BoardZone(
-    id: id,
+    id: id ?? this.id,
     projectId: projectId,
     layer: layer ?? this.layer,
     points: points ?? this.points,
