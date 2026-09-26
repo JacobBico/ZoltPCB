@@ -3820,13 +3820,23 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     // A part never put on the board has no placement yet, only the
     // footprint the schematic gave it.
     final placementOf = {for (final p in placements) p.partId: p};
+    // One with no footprint at all takes the original's: same symbol, and
+    // nothing chosen yet to say it should differ.
+    final symbolOf = {for (final part in parts) part.part.id: part.part.libId};
+    final sourceFootprint = {
+      for (final p in source) symbolOf[p.partId]: p.libId,
+    };
     final footprintOf = <String, String>{};
     for (final part in parts) {
       final placed = placementOf[part.part.id];
       if (placed == null) {
         final footprint = part.part.footprint.trim();
-        if (part.part.onBoard && footprint.isNotEmpty) {
+        final fallback = sourceFootprint[part.part.libId];
+        if (!part.part.onBoard) continue;
+        if (footprint.isNotEmpty) {
           footprintOf[part.part.id] = footprint;
+        } else if (fallback != null) {
+          footprintOf[part.part.id] = fallback;
         }
       } else if (!placed.placed || _selected.footprintIds.contains(placed.id)) {
         footprintOf[part.part.id] = placed.libId;
@@ -3843,7 +3853,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       },
     );
     if (channels.isEmpty) {
-      _notify(_whyNoReplica(source, parts, footprintOf));
+      _notify(_whyNoReplica(source, parts, footprintOf, placementOf));
       return;
     }
 
@@ -3887,6 +3897,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     List<PlacedFootprintRef> source,
     List<PartWithDetails> parts,
     Map<String, String> footprintOf,
+    Map<String, PlacedFootprintRef> placementOf,
   ) {
     final byId = {for (final part in parts) part.part.id: part};
     String names(Iterable<PartWithDetails> of) =>
@@ -3906,8 +3917,15 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       }
       final free = twins.where((t) => footprintOf.containsKey(t.part.id));
       if (free.isEmpty) {
+        final placed = twins.where(
+          (t) => placementOf[t.part.id]?.placed ?? false,
+        );
+        if (placed.isNotEmpty) {
+          return '${names(placed)} ${placed.length == 1 ? 'is' : 'are'} '
+              'already on the board';
+        }
         return '${names(twins)} ${twins.length == 1 ? 'is' : 'are'} '
-            'already on the board';
+            'set to leave the board out';
       }
       if (!free.any((t) => footprintOf[t.part.id] == placement.libId)) {
         return '${names(free)} ${free.length == 1 ? 'has' : 'have'} a '

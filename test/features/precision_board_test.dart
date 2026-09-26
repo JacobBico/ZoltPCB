@@ -690,9 +690,10 @@ void main() {
       final r3 = await parts.addPart(project.id, resistorSpec());
       final r4 = await parts.addPart(project.id, resistorSpec());
       await NetRepository(db).connectPins(r3.pins.first.id, r4.pins.first.id);
-      // Never put on the board: only the schematic says which footprint.
+      // Never put on the board, and no footprint chosen on the schematic
+      // either: they take the original's.
       for (final part in [r3, r4]) {
-        await parts.updatePart(part.part.copyWith(footprint: 'Test:TwoPad'));
+        await parts.updatePart(part.part.copyWith(footprint: ''));
       }
       final placed = await boards.getFootprints(project.id);
       final r1 = placed.firstWhere((p) => p.x == 30);
