@@ -49,9 +49,5 @@ flutter:
     # Learn: every folder of notes is listed, since Flutter does not look
     # inside folders on its own. A new topic needs its folder added here.
     - assets/learn/
-    - assets/learn/digital/
-    - assets/learn/decoupling/
-    - assets/learn/routing/
-    - assets/learn/grounding/
-    - assets/learn/high-speed/
+    - assets/learn/capacitors/
     - assets/learn/fabrication/

@@ -55,7 +55,7 @@ void main() {
     test('every category the app ships loads, with its notes', () async {
       TestWidgetsFlutterBinding.ensureInitialized();
       final library = await LearnLibrary.load(rootBundle);
-      expect(library.categories, hasLength(6));
+      expect(library.categories, hasLength(2));
       for (final category in library.categories) {
         expect(category.articles, isNotEmpty, reason: category.id);
         expect(category.short, isNotEmpty);
