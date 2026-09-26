@@ -3811,25 +3811,32 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   /// take the original's positions and its tracks come along on the copy's
   /// own nets, and then it rides the crosshair to wherever it goes.
   Future<void> _replicate(BoardScene scene) async {
-    final placements =
-        ref.read(boardFootprintsProvider(widget.project.id)).value ??
-        const <PlacedFootprintRef>[];
-    final nets = ref.read(projectNetsProvider(widget.project.id)).value;
-    if (nets == null) return;
+    final projectId = widget.project.id;
+    final placements = await ref
+        .read(boardRepositoryProvider)
+        .getFootprints(projectId);
+    final nets = await ref.read(netRepositoryProvider).getNets(projectId);
+    final parts = await ref
+        .read(partRepositoryProvider)
+        .getPartsWithDetails(projectId);
+    if (!mounted) return;
     final source = [
       for (final placement in placements)
         if (_selected.footprintIds.contains(placement.id)) placement,
     ];
+    final footprintOf = {for (final p in placements) p.partId: p.libId};
     final channels = findReplicaChannels(
       sourcePartIds: {for (final p in source) p.partId},
       nets: nets,
-      footprintOf: {for (final p in placements) p.partId: p.libId},
+      footprintOf: footprintOf,
+      twoPin: {
+        for (final part in parts)
+          if (part.pins.length == 2)
+            part.part.id: (part.pins.first.number, part.pins.last.number),
+      },
     );
     if (channels.isEmpty) {
-      _notify(
-        'No other copy of this circuit on the schematic. '
-        'Copy it there first, then replicate',
-      );
+      _notify(_whyNoReplica(source, parts, footprintOf));
       return;
     }
 
@@ -3979,6 +3986,35 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     await _placeNextReplica();
   }
 
+  /// Why nothing matched, as specifically as can be said.
+  String _whyNoReplica(
+    List<PlacedFootprintRef> source,
+    List<PartWithDetails> parts,
+    Map<String, String> footprintOf,
+  ) {
+    final byId = {for (final part in parts) part.part.id: part};
+    for (final placement in source) {
+      final part = byId[placement.partId];
+      if (part == null) continue;
+      final twins = parts.where(
+        (other) =>
+            other.part.id != part.part.id &&
+            other.part.libId == part.part.libId &&
+            !source.any((p) => p.partId == other.part.id),
+      );
+      if (twins.isEmpty) {
+        return 'No other ${part.part.reference} on the schematic to copy '
+            'this onto';
+      }
+      if (!twins.any((t) => footprintOf[t.part.id] == placement.libId)) {
+        final names = twins.map((t) => t.part.reference).join(', ');
+        return '$names ${twins.length == 1 ? 'has' : 'have'} a different '
+            'footprint from ${part.part.reference}';
+      }
+    }
+    return 'The other copies are wired differently on the schematic';
+  }
+
   Future<void> _placeNextReplica() async {
     final source = _replicaSource;
     if (source == null || _replicas.isEmpty) return;
@@ -3999,7 +4035,11 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         target.copyWith(
           x: original.x + offset.dx,
           y: original.y + offset.dy,
-          rotation: original.rotation,
+          // Wired the other way round: half a turn puts its pads back
+          // where the copied tracks end.
+          rotation: channel.turned.contains(original.partId)
+              ? (original.rotation + 180) % 360
+              : original.rotation,
           flipped: original.flipped,
           placed: true,
         ),

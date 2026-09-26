@@ -75,4 +75,35 @@ void main() {
     );
     expect(channels, isEmpty);
   });
+
+  test('a resistor drawn the other way round still matches', () {
+    // R2 meets C2 on its pin 1, where R1 meets C1 on its pin 2.
+    final swapped = [
+      net('in1', [('R1', '1')]),
+      net('a1', [('R1', '2'), ('C1', '1')]),
+      net('in2', [('R2', '2')]),
+      net('a2', [('R2', '1'), ('C2', '1')]),
+      net('gnd', [('C1', '2'), ('C2', '2')]),
+    ];
+    final twoPin = {
+      for (final id in ['R1', 'R2', 'C1', 'C2']) id: ('1', '2'),
+    };
+    expect(
+      findReplicaChannels(
+        sourcePartIds: {'R1', 'C1'},
+        nets: swapped,
+        footprintOf: footprints,
+      ),
+      isEmpty,
+    );
+    final channel = findReplicaChannels(
+      sourcePartIds: {'R1', 'C1'},
+      nets: swapped,
+      footprintOf: footprints,
+      twoPin: twoPin,
+    ).single;
+    expect(channel.parts, {'R1': 'R2', 'C1': 'C2'});
+    expect(channel.nets['in1'], 'in2');
+    expect(channel.turned, {'R1'});
+  });
 }
