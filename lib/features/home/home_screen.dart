@@ -11,12 +11,14 @@ import '../library_editors/footprint_editor_panel.dart';
 import '../library_editors/my_library_panel.dart';
 import '../library_editors/symbol_editor_panel.dart';
 import '../pictures/picture_library.dart';
+import 'home_dashboard.dart';
 import '../pinout/pinout_panel.dart';
 import '../project/backup_actions.dart';
 import '../projects/projects_panel.dart';
 import '../settings/settings_panel.dart';
 
 enum HomeSection {
+  home('Home'),
   projects('Projects'),
   components('Components'),
   pinout('Pinout'),
@@ -43,7 +45,7 @@ final homeSectionProvider = NotifierProvider<HomeSectionNotifier, HomeSection>(
 
 class HomeSectionNotifier extends Notifier<HomeSection> {
   @override
-  HomeSection build() => HomeSection.projects;
+  HomeSection build() => HomeSection.home;
 
   void show(HomeSection section) => state = section;
 }
@@ -95,6 +97,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   setState(() => _railOpen = false);
                 },
                 entries: [
+                  const RailEntry(label: 'Home', icon: Icons.home_outlined),
                   RailEntry(
                     label: 'Projects',
                     icon: Icons.developer_board_outlined,
@@ -144,6 +147,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _action() => switch (_section) {
+    HomeSection.home => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        OutlinedButton.icon(
+          onPressed: () => ProjectsPanel.openKicad(context, ref),
+          icon: const Icon(Icons.file_open_outlined, size: 16),
+          label: const Text('OPEN KICAD'),
+        ),
+        const SizedBox(width: 8),
+        FilledButton.icon(
+          onPressed: () => ProjectsPanel.create(context, ref),
+          icon: const Icon(Icons.add, size: 18),
+          label: const Text('NEW PROJECT'),
+        ),
+      ],
+    ),
     HomeSection.projects => Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -188,6 +207,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   };
 
   Widget _panel() => switch (_section) {
+    HomeSection.home => HomeDashboard(
+      onShowProjects: () => _show(HomeSection.projects),
+    ),
     HomeSection.projects => const ProjectsPanel(),
     HomeSection.components => const ComponentBrowserPanel(),
     HomeSection.pinout => const PinoutPanel(),

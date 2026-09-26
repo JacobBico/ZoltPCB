@@ -1,4 +1,5 @@
 import '../db/database.dart';
+import '../db/watchers.dart';
 
 /// App preferences, as strings under well-known keys.
 class SettingsRepository {
@@ -22,12 +23,25 @@ class SettingsRepository {
   /// tapping its pins and corners.
   static const wireGestureKey = 'schematic.wire_gesture';
 
+  /// The Learn note read last, offered again on the home page.
+  static const lastArticleKey = 'learn.last_article';
+
+  /// Whether Learn has been opened, one of the first-launch steps.
+  static const learnOpenedKey = 'learn.opened';
+
+  /// Whether the first-launch checklist was put away before it was done.
+  static const checklistDismissedKey = 'home.checklist_dismissed';
+
   Future<String?> get(String key) async {
     final row = await (_db.select(
       _db.appSettings,
     )..where((t) => t.key.equals(key))).getSingleOrNull();
     return row?.value;
   }
+
+  /// Every setting, as it changes.
+  Stream<Map<String, String>> watchAll() =>
+      _db.watchAggregate({_db.appSettings}, getAll);
 
   Future<Map<String, String>> getAll() async {
     final rows = await _db.select(_db.appSettings).get();

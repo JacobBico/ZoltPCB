@@ -192,15 +192,35 @@ void main() {
   ) async {
     await pumpApp(tester, const HomeScreen(), database: db, storage: storage);
 
+    // A new install opens on Home, with its getting-started list.
+    expect(find.textContaining('GET STARTED'), findsOneWidget);
+
+    await openRail(tester);
+    // The side menu's entry; the home page has a Projects tile too.
+    await tester.tap(find.text('Projects').last);
+    await tester.pumpAndSettle();
     expect(find.text('No projects yet'), findsOneWidget);
 
     await openRail(tester);
+    // Further down the menu than a landscape phone shows at once.
+    await tester.dragUntilVisible(
+      find.text('Libraries'),
+      find.text('Pinout'),
+      const Offset(0, -80),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Libraries'));
     await tester.pumpAndSettle();
     expect(find.text('No symbol libraries yet'), findsOneWidget);
     expect(find.text('IMPORT LIBRARY'), findsWidgets);
 
     await openRail(tester);
+    await tester.dragUntilVisible(
+      find.text('Components'),
+      find.text('Pinout'),
+      const Offset(0, 80),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Components'));
     await tester.pumpAndSettle();
     expect(find.text('No components to search'), findsOneWidget);

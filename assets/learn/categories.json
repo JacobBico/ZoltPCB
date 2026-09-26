@@ -1,0 +1,44 @@
+[
+  {
+    "id": "digital",
+    "title": "Digital components",
+    "blurb": "Logic, microcontrollers, and what their datasheets leave out",
+    "icon": "chip",
+    "short": "Digital"
+  },
+  {
+    "id": "decoupling",
+    "title": "Decoupling",
+    "blurb": "Which capacitors, how many, and how close to the pin",
+    "icon": "capacitor",
+    "short": "Decoupling"
+  },
+  {
+    "id": "routing",
+    "title": "Low-noise routing",
+    "blurb": "Keeping quiet signals away from the loud ones",
+    "icon": "wave",
+    "short": "Routing"
+  },
+  {
+    "id": "grounding",
+    "title": "Grounding and return paths",
+    "blurb": "Where the current comes back, and why it matters",
+    "icon": "ground",
+    "short": "Grounding"
+  },
+  {
+    "id": "high-speed",
+    "title": "High speed and impedance",
+    "blurb": "Pairs, stackups, and length matching",
+    "icon": "speed",
+    "short": "High speed"
+  },
+  {
+    "id": "fabrication",
+    "title": "Getting boards made",
+    "blurb": "Rules, panels, and what the fab will check",
+    "icon": "factory",
+    "short": "Fabrication"
+  }
+]

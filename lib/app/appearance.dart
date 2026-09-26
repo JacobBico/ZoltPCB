@@ -128,6 +128,12 @@ final settingsRepositoryProvider = Provider<SettingsRepository>(
   (ref) => SettingsRepository(ref.watch(databaseProvider)),
 );
 
+/// The app's settings, as they change.
+final appSettingsProvider = StreamProvider<Map<String, String>>(
+  (ref) => ref.watch(settingsRepositoryProvider).watchAll(),
+);
+
+
 /// Which board editor the PCB section uses.
 ///
 /// [precision] is the one this section is built around: the crosshair

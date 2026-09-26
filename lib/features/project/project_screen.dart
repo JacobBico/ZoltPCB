@@ -63,6 +63,17 @@ class ProjectScreen extends ConsumerStatefulWidget {
         ProjectScreen(projectId: projectId, initialSection: initialSection),
   );
 
+  /// The project setting that says which section it was left in.
+  static const lastSectionKey = 'home.last_section';
+
+  /// The section a project was last left in, from its [settings]; the
+  /// schematic for one never opened.
+  static ProjectSection lastSectionIn(Map<String, String> settings) =>
+      ProjectSection.values
+          .where((s) => s.name == settings[lastSectionKey])
+          .firstOrNull ??
+      ProjectSection.schematic;
+
   @override
   ConsumerState<ProjectScreen> createState() => _ProjectScreenState();
 }
@@ -74,8 +85,24 @@ class _ProjectScreenState extends ConsumerState<ProjectScreen> {
   /// soon as a section is chosen, so the section fills the screen.
   bool _railOpen = false;
 
+  /// The section last written down as where this project was left, so the
+  /// home page can open it there again.
+  ProjectSection? _remembered;
+
+  void _remember() {
+    if (_section == _remembered) return;
+    _remembered = _section;
+    final section = _section;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(projectSettingsRepositoryProvider).setAll(widget.projectId, {
+        ProjectScreen.lastSectionKey: section.name,
+      });
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    _remember();
     final project = ref.watch(projectProvider(widget.projectId));
     final loaded = project.value;
     final parts = ref.watch(projectPartsProvider(widget.projectId)).value;

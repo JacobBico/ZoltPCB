@@ -12,11 +12,17 @@ import 'package:zolt/features/home/home_screen.dart';
 import 'package:zolt/features/projects/projects_panel.dart';
 
 import '../helpers/fixtures.dart';
+import '../helpers/home.dart';
 import '../helpers/pump_app.dart';
 
 void main() {
   testApp('shows an empty state before any project exists', (tester, db) async {
-    await pumpApp(tester, const HomeScreen(), database: db);
+    await pumpApp(
+      tester,
+      const HomeScreen(),
+      database: db,
+      overrides: [startOnProjects],
+    );
 
     expect(find.text('No projects yet'), findsOneWidget);
     expect(find.text('NEW PROJECT'), findsNWidgets(2));
@@ -31,6 +37,7 @@ void main() {
       tester,
       const HomeScreen(),
       database: db,
+      overrides: [startOnProjects],
       padding: const EdgeInsets.fromLTRB(48, 32, 24, 16),
     );
 
@@ -71,7 +78,12 @@ void main() {
     await nets.connectPins(r1.pins.first.id, r2.pins.first.id);
     await projects.create(name: 'Bench PSU');
 
-    await pumpApp(tester, const HomeScreen(), database: db);
+    await pumpApp(
+      tester,
+      const HomeScreen(),
+      database: db,
+      overrides: [startOnProjects],
+    );
 
     expect(find.text('Preamp'), findsOneWidget);
     expect(find.text('MM'), findsOneWidget);
@@ -91,7 +103,12 @@ void main() {
 
   testApp('the new project dialog rejects a blank name', (tester, db) async {
     final projects = ProjectRepository(db);
-    await pumpApp(tester, const HomeScreen(), database: db);
+    await pumpApp(
+      tester,
+      const HomeScreen(),
+      database: db,
+      overrides: [startOnProjects],
+    );
 
     await tester.tap(find.text('NEW PROJECT').first);
     await tester.pumpAndSettle();
@@ -109,7 +126,12 @@ void main() {
     db,
   ) async {
     final projects = ProjectRepository(db);
-    await pumpApp(tester, const HomeScreen(), database: db);
+    await pumpApp(
+      tester,
+      const HomeScreen(),
+      database: db,
+      overrides: [startOnProjects],
+    );
 
     await tester.tap(find.text('NEW PROJECT').first);
     await tester.pumpAndSettle();
@@ -135,7 +157,12 @@ void main() {
   testApp('deleting a project asks first, then removes it', (tester, db) async {
     final projects = ProjectRepository(db);
     await projects.create(name: 'Scratch');
-    await pumpApp(tester, const HomeScreen(), database: db);
+    await pumpApp(
+      tester,
+      const HomeScreen(),
+      database: db,
+      overrides: [startOnProjects],
+    );
 
     await tester.tap(find.byIcon(Icons.more_vert));
     await tester.pumpAndSettle();
