@@ -11,6 +11,8 @@ import '../../app/edit_history.dart';
 import '../../app/providers.dart';
 import '../../core/theme/kicad_palette.dart';
 import '../../core/util/ids.dart';
+import '../../data/repositories/circuit_paster.dart';
+import '../../data/repositories/part_repository.dart' show PartSnapshot;
 import '../../core/widgets/panel.dart';
 import '../../domain/models/models.dart';
 import '../../domain/pcb/pcb.dart';
@@ -1383,6 +1385,13 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           label: 'Move ${_selected.count}',
           onPressed: _selected.isEmpty ? null : () => _carryRegion(),
         ),
+        if (_selected.footprintIds.isNotEmpty)
+          _Chip(
+            key: const ValueKey('copy-parts'),
+            icon: Icons.content_copy_outlined,
+            label: 'Copy',
+            onPressed: () => _copyAsNewParts(scene),
+          ),
         if (_selected.footprintIds.isNotEmpty)
           _Chip(
             key: const ValueKey('replicate'),
@@ -3824,7 +3833,17 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       return;
     }
 
-    // Offset to the side of the original, clear of it, until placed.
+    _replicaSource = _replicaSourceOf(scene, source);
+    _replicas = [...channels];
+    await _placeNextReplica();
+  }
+
+  /// What is in the swept area, to be copied, and where a copy first
+  /// appears: beside the original, clear of it, until placed.
+  _ReplicaSource _replicaSourceOf(
+    BoardScene scene,
+    List<PlacedFootprintRef> source,
+  ) {
     final points = [
       for (final p in source) Offset(p.x, p.y),
       for (final t in scene.tracks)
@@ -3835,7 +3854,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     ];
     final left = points.map((p) => p.dx).reduce(math.min);
     final right = points.map((p) => p.dx).reduce(math.max);
-    _replicaSource = _ReplicaSource(
+    return _ReplicaSource(
       placements: source,
       tracks: [
         for (final t in scene.tracks)
@@ -3847,7 +3866,116 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       ],
       offset: Offset(right - left + 5, 0),
     );
-    _replicas = [...channels];
+  }
+
+  /// The swept parts again, as new parts: added to the schematic wired the
+  /// way the originals are among themselves, then laid out on the board
+  /// the same way, tracks and all, riding the crosshair until dropped.
+  ///
+  /// Connections that leave the copied parts come along only when named,
+  /// like GND, so the copy joins the same supply and nothing else.
+  Future<void> _copyAsNewParts(BoardScene scene) async {
+    final projectId = widget.project.id;
+    final partRepository = ref.read(partRepositoryProvider);
+    final netRepository = ref.read(netRepositoryProvider);
+    final boards = ref.read(boardRepositoryProvider);
+    final placements = await boards.getFootprints(projectId);
+    final parts = await partRepository.getPartsWithDetails(projectId);
+    final nets = await netRepository.getNets(projectId);
+    final wires = await netRepository.getWires(projectId);
+    final source = [
+      for (final placement in placements)
+        if (_selected.footprintIds.contains(placement.id)) placement,
+    ];
+    final sourcePartIds = {for (final p in source) p.partId};
+    final sourceParts = [
+      for (final part in parts)
+        if (sourcePartIds.contains(part.part.id)) part,
+    ];
+    final units = [for (final part in sourceParts) ...part.units];
+    final clip = CircuitClip.of(
+      parts: parts,
+      nets: nets,
+      wires: wires,
+      unitIds: {for (final unit in units) unit.id},
+    );
+    if (clip == null || !mounted) return;
+
+    // On the schematic, beside the originals, on the grid.
+    final first = sourceParts.first.units.first;
+    final xs = [for (final unit in units) unit.x];
+    final span = xs.reduce(math.max) - xs.reduce(math.min);
+    const grid = 2.54;
+    final at = Offset(
+      ((first.x + span + 20) / grid).roundToDouble() * grid,
+      (first.y / grid).roundToDouble() * grid,
+    );
+
+    final pasted = await CircuitPaster(
+      partRepository,
+      netRepository,
+    ).paste(projectId, clip, at: at);
+    for (var i = 0; i < pasted.partIds.length && i < sourceParts.length; i++) {
+      final original = source.firstWhere(
+        (p) => p.partId == sourceParts[i].part.id,
+      );
+      await boards.assignFootprint(
+        projectId: projectId,
+        partId: pasted.partIds[i],
+        libId: original.libId,
+      );
+    }
+    final snapshots = <PartSnapshot>[];
+    for (final id in pasted.partIds) {
+      final snapshot = await partRepository.capturePart(id);
+      if (snapshot != null) snapshots.add(snapshot);
+    }
+    if (!mounted) return;
+    _record(
+      'Copy ${clip.summary} on the schematic',
+      undo: () async {
+        for (final wire in pasted.wires) {
+          await netRepository.deleteWire(wire.id);
+        }
+        for (final id in pasted.partIds) {
+          await partRepository.deletePart(id);
+        }
+      },
+      redo: () async {
+        for (final snapshot in snapshots) {
+          await partRepository.restorePart(snapshot);
+        }
+        for (final wire in pasted.wires) {
+          await netRepository.restoreWire(wire);
+        }
+      },
+    );
+
+    // Which new net stands in for each old one, pin by pin.
+    String pinKey(String partId, PartPin pin) =>
+        '$partId|${pin.unit}|${pin.number}';
+    final netOfPin = <String, String>{};
+    for (final net in await netRepository.getNets(projectId)) {
+      for (final endpoint in net.endpoints) {
+        netOfPin[pinKey(endpoint.part.id, endpoint.pin)] = net.id;
+      }
+    }
+    final added = await partRepository.getPartsWithDetails(projectId);
+    final partMap = <String, String>{};
+    final netMap = <String, String>{};
+    for (var i = 0; i < pasted.partIds.length && i < sourceParts.length; i++) {
+      final from = sourceParts[i];
+      final to = added.where((p) => p.part.id == pasted.partIds[i]).first;
+      partMap[from.part.id] = to.part.id;
+      for (final pin in from.pins) {
+        final oldNet = netOfPin[pinKey(from.part.id, pin)];
+        final newNet = netOfPin[pinKey(to.part.id, pin)];
+        if (oldNet != null && newNet != null) netMap[oldNet] = newNet;
+      }
+    }
+
+    _replicaSource = _replicaSourceOf(scene, source);
+    _replicas = [ReplicaChannel(parts: partMap, nets: netMap)];
     await _placeNextReplica();
   }
 
@@ -3857,9 +3985,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     final channel = _replicas.first;
     _replicas = _replicas.sublist(1);
     final repository = ref.read(boardRepositoryProvider);
-    final placements =
-        ref.read(boardFootprintsProvider(widget.project.id)).value ??
-        const <PlacedFootprintRef>[];
+    final placements = await repository.getFootprints(widget.project.id);
     final offset = source.offset;
 
     final before = <PlacedFootprintRef>[];
@@ -3880,8 +4006,12 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       );
     }
     String? netFor(String? netId) => netId == null ? null : channel.nets[netId];
+    // Copper on a net the copy has no counterpart of stays behind: it
+    // would only be a short to somewhere else.
+    bool follows(String? netId) =>
+        netId == null || channel.nets.containsKey(netId);
     final tracks = [
-      for (final t in source.tracks)
+      for (final t in source.tracks.where((t) => follows(t.netId)))
         t
             .copyWith(
               id: newId(),
@@ -3893,7 +4023,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
             .withNet(netFor(t.netId)),
     ];
     final vias = [
-      for (final v in source.vias)
+      for (final v in source.vias.where((v) => follows(v.netId)))
         v.copyWith(
           id: newId(),
           x: v.x + offset.dx,
@@ -3923,11 +4053,14 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       redo: apply,
     );
 
-    final parts = ref.read(projectPartsProvider(widget.project.id)).value;
+    final parts = await ref
+        .read(partRepositoryProvider)
+        .getPartsWithDetails(widget.project.id);
+    if (!mounted) return;
     final names = [
       for (final placement in after)
         parts
-                ?.where((p) => p.part.id == placement.partId)
+                .where((p) => p.part.id == placement.partId)
                 .firstOrNull
                 ?.part
                 .reference ??
