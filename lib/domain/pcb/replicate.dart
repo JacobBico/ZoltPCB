@@ -94,10 +94,18 @@ List<ReplicaChannel> findReplicaChannels({
       for (final pin in (netOf[from] ?? const <String, String>{}).entries) {
         final sourceNet = pin.value;
         final targetNet = netOf[to]?[pin.key];
+        final internal = endpointsOf[sourceNet]!.any(
+          (e) => e.part.id != from && sourcePartIds.contains(e.part.id),
+        );
         if (targetNet == null) {
-          // The original is wired here and the copy is not.
-          failed = true;
-          break;
+          // The copy leaves this pin unwired. That only matters when the
+          // pin joins two parts of the original: an unused output on one
+          // channel is still the same circuit.
+          if (internal) {
+            failed = true;
+            break;
+          }
+          continue;
         }
         final mapped = netMap[sourceNet];
         if (mapped != null && mapped != targetNet) {

@@ -1410,6 +1410,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           label: 'Clear',
           onPressed: () => setState(_clearSelection),
         ),
+        ?_hintText(),
       ];
     }
 
@@ -1844,16 +1845,19 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
             ? null
             : () => _deleteUnderCrosshair(scene),
       ),
-      if (_hint != null)
-        Padding(
+      ?_hintText(),
+    ];
+  }
+
+  Widget? _hintText() => _hint == null
+      ? null
+      : Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8),
           child: Text(
             _hint!,
             style: TextStyle(color: KicadPalette.highlight, fontSize: 12),
           ),
-        ),
-    ];
-  }
+        );
 
   /// The chips the strip shows, in order.
   ///
