@@ -10,6 +10,7 @@ import '../../app/cross_probe.dart';
 import '../../app/edit_history.dart';
 import '../../app/providers.dart';
 import '../../core/theme/kicad_palette.dart';
+import '../../core/util/ids.dart';
 import '../../core/widgets/panel.dart';
 import '../../domain/models/models.dart';
 import '../../domain/pcb/pcb.dart';
@@ -288,6 +289,11 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   Offset? _regionFrom;
   Rect? _region;
   _Selection _selected = const _Selection.empty();
+
+  /// Copies of a laid-out circuit still to be put down, each placed with
+  /// the crosshair in turn, and the original they are copied from.
+  List<ReplicaChannel> _replicas = const [];
+  _ReplicaSource? _replicaSource;
 
   /// Where the carried thing was picked up, so everything moves by the
   /// same delta rather than jumping its anchor to the crosshair.
@@ -1377,6 +1383,13 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           label: 'Move ${_selected.count}',
           onPressed: _selected.isEmpty ? null : () => _carryRegion(),
         ),
+        if (_selected.footprintIds.isNotEmpty)
+          _Chip(
+            key: const ValueKey('replicate'),
+            icon: Icons.copy_all_outlined,
+            label: 'Replicate',
+            onPressed: () => _replicate(scene),
+          ),
         if (_selected.trackIds.isNotEmpty || _selected.viaIds.isNotEmpty)
           _Chip(
             key: const ValueKey('selection-net'),
@@ -3052,6 +3065,15 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       return;
     }
 
+    if (_carryingSelection && _replicas.isNotEmpty) {
+      await _dropMoved(scene, delta);
+      if (mounted) await _placeNextReplica();
+      return;
+    }
+    await _dropMoved(scene, delta);
+  }
+
+  Future<void> _dropMoved(BoardScene scene, Offset delta) async {
     final edgeId = _carryingEdgeId;
     final outline = _carryingOutline;
     final moving = _selected;
@@ -3656,6 +3678,8 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   }
 
   void _stopCarrying() {
+    _replicas = const [];
+    _replicaSource = null;
     _carryAnchor = null;
     _carryingEdgeId = null;
     _slidingTrackId = null;
@@ -3765,6 +3789,164 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       _regionFrom = null;
     });
     _notify('Pan to move ${_selected.count} things, then DROP');
+  }
+
+  /// The same layout for every other channel of the circuit.
+  ///
+  /// The channels are found on the schematic: parts with the same symbols
+  /// and footprints, wired to each other the same way. Each copy's parts
+  /// take the original's positions and its tracks come along on the copy's
+  /// own nets, and then it rides the crosshair to wherever it goes.
+  Future<void> _replicate(BoardScene scene) async {
+    final placements =
+        ref.read(boardFootprintsProvider(widget.project.id)).value ??
+        const <PlacedFootprintRef>[];
+    final nets = ref.read(projectNetsProvider(widget.project.id)).value;
+    if (nets == null) return;
+    final source = [
+      for (final placement in placements)
+        if (_selected.footprintIds.contains(placement.id)) placement,
+    ];
+    final channels = findReplicaChannels(
+      sourcePartIds: {for (final p in source) p.partId},
+      nets: nets,
+      footprintOf: {for (final p in placements) p.partId: p.libId},
+    );
+    if (channels.isEmpty) {
+      _notify(
+        'No other copy of this circuit on the schematic. '
+        'Copy it there first, then replicate',
+      );
+      return;
+    }
+
+    // Offset to the side of the original, clear of it, until placed.
+    final points = [
+      for (final p in source) Offset(p.x, p.y),
+      for (final t in scene.tracks)
+        if (_selected.trackIds.contains(t.id)) ...[
+          Offset(t.startX, t.startY),
+          Offset(t.endX, t.endY),
+        ],
+    ];
+    final left = points.map((p) => p.dx).reduce(math.min);
+    final right = points.map((p) => p.dx).reduce(math.max);
+    _replicaSource = _ReplicaSource(
+      placements: source,
+      tracks: [
+        for (final t in scene.tracks)
+          if (_selected.trackIds.contains(t.id)) t,
+      ],
+      vias: [
+        for (final v in scene.vias)
+          if (_selected.viaIds.contains(v.id)) v,
+      ],
+      offset: Offset(right - left + 5, 0),
+    );
+    _replicas = [...channels];
+    await _placeNextReplica();
+  }
+
+  Future<void> _placeNextReplica() async {
+    final source = _replicaSource;
+    if (source == null || _replicas.isEmpty) return;
+    final channel = _replicas.first;
+    _replicas = _replicas.sublist(1);
+    final repository = ref.read(boardRepositoryProvider);
+    final placements =
+        ref.read(boardFootprintsProvider(widget.project.id)).value ??
+        const <PlacedFootprintRef>[];
+    final offset = source.offset;
+
+    final before = <PlacedFootprintRef>[];
+    final after = <PlacedFootprintRef>[];
+    for (final original in source.placements) {
+      final partId = channel.parts[original.partId];
+      final target = placements.where((p) => p.partId == partId).firstOrNull;
+      if (target == null) continue;
+      before.add(target);
+      after.add(
+        target.copyWith(
+          x: original.x + offset.dx,
+          y: original.y + offset.dy,
+          rotation: original.rotation,
+          flipped: original.flipped,
+          placed: true,
+        ),
+      );
+    }
+    String? netFor(String? netId) => netId == null ? null : channel.nets[netId];
+    final tracks = [
+      for (final t in source.tracks)
+        t
+            .copyWith(
+              id: newId(),
+              startX: t.startX + offset.dx,
+              startY: t.startY + offset.dy,
+              endX: t.endX + offset.dx,
+              endY: t.endY + offset.dy,
+            )
+            .withNet(netFor(t.netId)),
+    ];
+    final vias = [
+      for (final v in source.vias)
+        v.copyWith(
+          id: newId(),
+          x: v.x + offset.dx,
+          y: v.y + offset.dy,
+          netId: netFor(v.netId),
+          clearNet: netFor(v.netId) == null,
+        ),
+    ];
+
+    Future<void> apply() => ref.read(editTransactionProvider)(() async {
+      for (final placement in after) {
+        await repository.updatePlacement(placement);
+      }
+      await repository.restoreCopper(tracks: tracks, vias: vias);
+    });
+    await apply();
+    if (!mounted) return;
+    _record(
+      'Replicate',
+      undo: () => ref.read(editTransactionProvider)(() async {
+        await repository.deleteTracks(tracks.map((t) => t.id));
+        await repository.deleteVias(vias.map((v) => v.id));
+        for (final placement in before) {
+          await repository.updatePlacement(placement);
+        }
+      }),
+      redo: apply,
+    );
+
+    final parts = ref.read(projectPartsProvider(widget.project.id)).value;
+    final names = [
+      for (final placement in after)
+        parts
+                ?.where((p) => p.part.id == placement.partId)
+                .firstOrNull
+                ?.part
+                .reference ??
+            '',
+    ]..sort();
+    setState(() {
+      _region = null;
+      _regionFrom = null;
+      _selected = _Selection(
+        footprintIds: {for (final p in after) p.id},
+        trackIds: {for (final t in tracks) t.id},
+        viaIds: {for (final v in vias) v.id},
+        edgeIds: const {},
+        zoneIds: const {},
+      );
+      _carryAnchor = _lastSnap;
+    });
+    unawaited(HapticFeedback.mediumImpact());
+    final left = _replicas.length;
+    _notify(
+      'Pan to place ${names.join(', ')}, then DROP'
+      '${left > 0 ? ' ($left more after)' : ''}',
+    );
   }
 
   /// Everything in the swept area, gone in one step.
@@ -5704,4 +5886,21 @@ class _RegionPainter extends CustomPainter {
   @override
   bool shouldRepaint(_RegionPainter old) =>
       old.from != from || old.to != to || old.settled != settled;
+}
+
+/// The laid-out original a replicate copies from.
+class _ReplicaSource {
+  const _ReplicaSource({
+    required this.placements,
+    required this.tracks,
+    required this.vias,
+    required this.offset,
+  });
+
+  final List<PlacedFootprintRef> placements;
+  final List<Track> tracks;
+  final List<Via> vias;
+
+  /// Where each copy first appears, relative to the original.
+  final Offset offset;
 }

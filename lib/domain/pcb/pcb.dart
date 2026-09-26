@@ -9,6 +9,7 @@ export 'board_image.dart';
 export 'board_text.dart';
 export 'board_zone.dart';
 export 'panel.dart';
+export 'replicate.dart';
 export 'pour_copper.dart';
 export 'pour_fill.dart';
 export 'drc.dart';

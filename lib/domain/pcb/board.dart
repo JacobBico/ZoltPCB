@@ -441,6 +441,7 @@ class Track {
   /// be a little wider, or a corner nudged a tenth of a millimetre, is the
   /// difference between laying out a board and accepting one.
   Track copyWith({
+    String? id,
     CopperLayer? layer,
     double? startX,
     double? startY,
@@ -451,7 +452,7 @@ class Track {
     bool clearNet = false,
     bool? locked,
   }) => Track(
-    id: id,
+    id: id ?? this.id,
     projectId: projectId,
     layer: layer ?? this.layer,
     startX: startX ?? this.startX,
@@ -578,6 +579,7 @@ class Via {
   }
 
   Via copyWith({
+    String? id,
     double? x,
     double? y,
     double? diameter,
@@ -589,7 +591,7 @@ class Via {
     CopperLayer? toLayer,
     bool? locked,
   }) => Via(
-    id: id,
+    id: id ?? this.id,
     projectId: projectId,
     x: x ?? this.x,
     y: y ?? this.y,

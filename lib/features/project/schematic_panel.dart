@@ -222,6 +222,14 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   bool get _tapWiring =>
       ref.read(appearanceProvider).wireGesture == WireGesture.tap;
 
+  /// Placing parts rather than wiring them: the parts panel is open. Pins
+  /// then never start a wire, and a tap on empty sheet puts down another
+  /// of the part picked last.
+  bool get _placing => ref.read(componentPickerOpenProvider);
+
+  /// The part a tap on empty sheet puts down while placing.
+  SymbolIndexEntry? _stamp;
+
   /// How close a tap has to land, in millimetres of sheet, to count as
   /// hitting a pin. Scaled by zoom so the target stays roughly a finger
   /// wide on screen whatever the magnification.
@@ -370,6 +378,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     _sheetViews(scene, nets);
 
     final pickerOpen = ref.watch(componentPickerOpenProvider);
+    if (!pickerOpen) _stamp = null;
 
     // The empty state sits inside the Row rather than short-circuiting it,
     // so the component picker can still open on a blank sheet — which is
@@ -552,6 +561,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
           at: _spotInView(symbol),
         );
     if (!mounted) return;
+    if (_placing && _stamp?.libId != entry.libId) {
+      _stamp = entry;
+      _notify('Tap the sheet to place another ${entry.name}');
+    }
     setState(() => _selectedUnitId = added.units.first.id);
     await _recordAddition(added.part.id, 'Add ${added.part.reference}');
   }
@@ -2284,11 +2297,24 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       });
       return;
     }
-    final result = scene.resolveTap(
-      sheet,
-      toleranceMm: _hitToleranceMm(viewport),
-      ambiguityMarginMm: _ambiguityMarginPx / viewport.pixelsPerMm,
-    );
+    // Placing: another of the part picked last, wherever the sheet is
+    // empty. Pins are not for wiring in this mode.
+    final stamp = _stamp;
+    if (_placing &&
+        stamp != null &&
+        scene.unitAt(sheet) == null &&
+        scene.wireRunNear(sheet, _wireToleranceMm(viewport)) == null &&
+        _labelAt(scene, sheet) == null) {
+      await _addFromLibrary(stamp);
+      return;
+    }
+    final result = _placing
+        ? const PinTapMissed()
+        : scene.resolveTap(
+            sheet,
+            toleranceMm: _hitToleranceMm(viewport),
+            ambiguityMarginMm: _ambiguityMarginPx / viewport.pixelsPerMm,
+          );
 
     if (result is PinTapMissed) {
       // A label is the smallest thing on the sheet and sits on top of it;
@@ -2728,7 +2754,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       // drawn — drags a wire out of it. Tighter than a tap's target, so a
       // part can still be picked up by its body right next to its pins.
       // Not with a group selected: a touch on it moves the group.
-      if (!_tapWiring && !_boxSelecting && _selectedUnitIds.isEmpty) {
+      if (!_tapWiring &&
+          !_placing &&
+          !_boxSelecting &&
+          _selectedUnitIds.isEmpty) {
         final grab = math.max(0.6, 14 / viewport.pixelsPerMm);
         final pendingId = ref.read(pendingPinProvider);
         final end = _wireEnd(scene);

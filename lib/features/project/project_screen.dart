@@ -314,17 +314,30 @@ class _ProjectScreenState extends ConsumerState<ProjectScreen> {
     // pushing a full-screen browser, so the schematic stays in view.
     // Styled quietly to match the rest of the chrome: a filled accent
     // button was the loudest thing on screen, competing with the drawing.
-    ProjectSection.schematic => OutlinedButton.icon(
-      onPressed: () => ref.read(componentPickerOpenProvider.notifier).toggle(),
-      icon: const Icon(Icons.add, size: 15),
-      label: const Text('ADD'),
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, 34),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        foregroundColor: KicadPalette.textSecondary,
-        side: BorderSide(color: KicadPalette.border),
+    // Placing parts, or wiring them: one switch, the parts panel open for
+    // placing. See [SchematicPanel] for what each does to a touch.
+    ProjectSection.schematic => SegmentedButton<bool>(
+      key: const ValueKey('schematic-mode'),
+      showSelectedIcon: false,
+      style: SegmentedButton.styleFrom(
+        visualDensity: VisualDensity.compact,
         textStyle: const TextStyle(fontSize: 12, letterSpacing: 0.4),
       ),
+      segments: const [
+        ButtonSegment(
+          value: true,
+          icon: Icon(Icons.add_box_outlined, size: 16),
+          label: Text('PLACE'),
+        ),
+        ButtonSegment(
+          value: false,
+          icon: Icon(Icons.timeline, size: 16),
+          label: Text('WIRE'),
+        ),
+      ],
+      selected: {ref.watch(componentPickerOpenProvider)},
+      onSelectionChanged: (value) =>
+          ref.read(componentPickerOpenProvider.notifier).set(value.first),
     ),
     // The board has no add button: everything on it comes from the
     // schematic, and its own verbs live on the canvas action bar.
