@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 250" width="480" height="250">
+  <rect x="0" y="0" width="480" height="250" rx="12" fill="#161a24"/>
+  <!-- leads -->
+  <line x1="58" y1="148" x2="150" y2="148" stroke="#c9ced8" stroke-width="4"/>
+  <line x1="258" y1="136" x2="422" y2="136" stroke="#c9ced8" stroke-width="4"/>
+  <circle cx="54" cy="148" r="6" fill="#c9ced8"/>
+  <circle cx="426" cy="136" r="6" fill="#c9ced8"/>
+  <!-- left plate -->
+  <polygon points="150,80 164,80 204,55 190,55" fill="#f2b366"/>
+  <polygon points="164,80 204,55 204,190 164,215" fill="#a8641f"/>
+  <rect x="150" y="80" width="14" height="135" fill="#d88a36"/>
+  <!-- dielectric -->
+  <polygon points="164,92 230,92 262,72 196,72" fill="#8fb8ff" fill-opacity="0.55"/>
+  <polygon points="230,92 262,72 262,183 230,203" fill="#4f79c4" fill-opacity="0.55"/>
+  <rect x="164" y="92" width="66" height="111" fill="#6f98e6" fill-opacity="0.45"/>
+  <!-- charges -->
+  <text x="176" y="128" font-family="sans-serif" font-size="18" font-weight="bold" fill="#ffd9a8" text-anchor="middle">+</text>
+  <text x="176" y="158" font-family="sans-serif" font-size="18" font-weight="bold" fill="#ffd9a8" text-anchor="middle">+</text>
+  <text x="176" y="188" font-family="sans-serif" font-size="18" font-weight="bold" fill="#ffd9a8" text-anchor="middle">+</text>
+  <text x="219" y="127" font-family="sans-serif" font-size="20" font-weight="bold" fill="#dbe7ff" text-anchor="middle">−</text>
+  <text x="219" y="157" font-family="sans-serif" font-size="20" font-weight="bold" fill="#dbe7ff" text-anchor="middle">−</text>
+  <text x="219" y="187" font-family="sans-serif" font-size="20" font-weight="bold" fill="#dbe7ff" text-anchor="middle">−</text>
+  <!-- right plate -->
+  <polygon points="230,80 244,80 284,55 270,55" fill="#f2b366"/>
+  <polygon points="244,80 284,55 284,190 244,215" fill="#a8641f"/>
+  <rect x="230" y="80" width="14" height="135" fill="#d88a36"/>
+  <!-- labels -->
+  <line x1="157" y1="76" x2="120" y2="42" stroke="#9aa3b5" stroke-width="1.2"/>
+  <text x="118" y="36" font-family="sans-serif" font-size="14" fill="#e6e8ee" text-anchor="middle">Metal plate</text>
+  <line x1="215" y1="70" x2="215" y2="42" stroke="#9aa3b5" stroke-width="1.2"/>
+  <text x="215" y="36" font-family="sans-serif" font-size="14" fill="#e6e8ee" text-anchor="middle">Dielectric</text>
+  <line x1="277" y1="54" x2="320" y2="42" stroke="#9aa3b5" stroke-width="1.2"/>
+  <text x="340" y="36" font-family="sans-serif" font-size="14" fill="#e6e8ee" text-anchor="middle">Metal plate</text>
+  <text x="240" y="238" font-family="sans-serif" font-size="12" fill="#9aa3b5" text-anchor="middle">Charge gathers on the plates; the dielectric keeps them apart</text>
+</svg>

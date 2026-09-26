@@ -299,6 +299,10 @@ class _LearnCategoryScreenState extends ConsumerState<LearnCategoryScreen> {
                         : MarkdownView(
                             '# ${open.title}\n\n${open.text}',
                             key: ValueKey(open.path),
+                            assetDir: open.path.substring(
+                              0,
+                              open.path.lastIndexOf('/'),
+                            ),
                             padding: const EdgeInsets.fromLTRB(22, 14, 22, 24),
                           ),
                   ),

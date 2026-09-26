@@ -50,4 +50,5 @@ flutter:
     # inside folders on its own. A new topic needs its folder added here.
     - assets/learn/
     - assets/learn/capacitors/
+    - assets/learn/capacitors/images/
     - assets/learn/fabrication/

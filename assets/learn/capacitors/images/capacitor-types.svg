@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 262" width="600" height="262">
+  <rect x="0" y="0" width="600" height="262" rx="12" fill="#161a24"/>
+  <g transform="translate(0,-26)">
+  <!-- ceramic MLCC -->
+  <polygon points="44,130 150,130 176,112 70,112" fill="#e2c79a"/>
+  <polygon points="44,130 70,112 70,148 44,166" fill="#dfe3e8"/>
+  <polygon points="150,130 176,112 176,148 150,166" fill="#9aa1ab"/>
+  <rect x="44" y="130" width="106" height="36" fill="#c9a877"/>
+  <rect x="44" y="130" width="22" height="36" fill="#cfd4da"/>
+  <rect x="128" y="130" width="22" height="36" fill="#cfd4da"/>
+  <polygon points="44,130 66,130 92,112 70,112" fill="#eef1f4"/>
+  <polygon points="128,130 150,130 176,112 154,112" fill="#eef1f4"/>
+  <!-- aluminium electrolytic -->
+  <line x1="286" y1="176" x2="286" y2="202" stroke="#c9ced8" stroke-width="3"/>
+  <line x1="314" y1="176" x2="314" y2="196" stroke="#c9ced8" stroke-width="3"/>
+  <rect x="262" y="60" width="76" height="116" fill="#2f5fa8"/>
+  <rect x="262" y="60" width="18" height="116" fill="#1f447d"/>
+  <rect x="318" y="60" width="20" height="116" fill="#b8c7de"/>
+  <text x="328" y="100" font-family="sans-serif" font-size="16" font-weight="bold" fill="#2f5fa8" text-anchor="middle">−</text>
+  <text x="328" y="130" font-family="sans-serif" font-size="16" font-weight="bold" fill="#2f5fa8" text-anchor="middle">−</text>
+  <text x="328" y="160" font-family="sans-serif" font-size="16" font-weight="bold" fill="#2f5fa8" text-anchor="middle">−</text>
+  <ellipse cx="300" cy="176" rx="38" ry="9" fill="#24497f"/>
+  <rect x="262" y="166" width="76" height="10" fill="#2a5596"/>
+  <ellipse cx="300" cy="60" rx="38" ry="10" fill="#cfd4da"/>
+  <line x1="286" y1="56" x2="314" y2="64" stroke="#8b929c" stroke-width="2"/>
+  <line x1="314" y1="56" x2="286" y2="64" stroke="#8b929c" stroke-width="2"/>
+  <!-- tantalum -->
+  <polygon points="436,120 546,120 566,104 456,104" fill="#f3c24a"/>
+  <polygon points="546,120 566,104 566,150 546,166" fill="#b8861c"/>
+  <rect x="436" y="120" width="110" height="46" fill="#e0a526"/>
+  <rect x="436" y="120" width="26" height="46" fill="#8a5a12"/>
+  <polygon points="436,120 462,120 482,104 456,104" fill="#a86e18"/>
+  <rect x="428" y="152" width="18" height="16" fill="#cfd4da"/>
+  <rect x="536" y="152" width="18" height="16" fill="#cfd4da"/>
+  <text x="449" y="149" font-family="sans-serif" font-size="16" font-weight="bold" fill="#ffe7a6" text-anchor="middle">+</text>
+
+  </g>
+  <text x="110" y="206" font-family="sans-serif" font-size="15" font-weight="bold" fill="#e6e8ee" text-anchor="middle">Ceramic (MLCC)</text>
+  <text x="110" y="226" font-family="sans-serif" font-size="12" fill="#9aa3b5" text-anchor="middle">Tiny and cheap</text>
+  <text x="110" y="243" font-family="sans-serif" font-size="12" fill="#9aa3b5" text-anchor="middle">Non-polarized</text>
+  <text x="300" y="206" font-family="sans-serif" font-size="15" font-weight="bold" fill="#e6e8ee" text-anchor="middle">Electrolytic</text>
+  <text x="300" y="226" font-family="sans-serif" font-size="12" fill="#9aa3b5" text-anchor="middle">Large values</text>
+  <text x="300" y="243" font-family="sans-serif" font-size="12" fill="#9aa3b5" text-anchor="middle">Stripe marks the − lead</text>
+  <text x="496" y="206" font-family="sans-serif" font-size="15" font-weight="bold" fill="#e6e8ee" text-anchor="middle">Tantalum</text>
+  <text x="496" y="226" font-family="sans-serif" font-size="12" fill="#9aa3b5" text-anchor="middle">Small and stable</text>
+  <text x="496" y="243" font-family="sans-serif" font-size="12" fill="#9aa3b5" text-anchor="middle">Band marks the + end</text>
+</svg>

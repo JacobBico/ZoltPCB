@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zolt/data/repositories/project_repository.dart';
 import 'package:zolt/data/repositories/symbol_library_repository.dart';
@@ -60,6 +61,45 @@ void main() {
         expect(category.articles, isNotEmpty, reason: category.id);
         expect(category.short, isNotEmpty);
       }
+    });
+
+    test('every picture a note shows is there, and draws', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      final library = await LearnLibrary.load(rootBundle);
+      var pictures = 0;
+      for (final category in library.categories) {
+        for (final note in category.articles) {
+          final dir = note.path.substring(0, note.path.lastIndexOf('/'));
+          for (final match in RegExp(
+            r'^!\[.*\]\((.+)\)$',
+            multiLine: true,
+          ).allMatches(note.text)) {
+            final svg = await rootBundle.loadString('$dir/${match[1]}');
+            final info = await vg.loadPicture(SvgStringLoader(svg), null);
+            expect(info.size.isEmpty, isFalse, reason: match[1]);
+            info.picture.dispose();
+            pictures++;
+          }
+        }
+      }
+      expect(pictures, greaterThanOrEqualTo(5));
+    });
+
+    testWidgets('a picture line shows the picture and its caption', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: MarkdownView(
+              '![Two plates](images/capacitor-structure.svg)',
+              assetDir: 'assets/learn/capacitors',
+            ),
+          ),
+        ),
+      );
+      expect(find.byType(SvgPicture), findsOneWidget);
+      expect(find.text('Two plates'), findsOneWidget);
     });
 
     testWidgets('Markdown draws its headings, lists and tips', (tester) async {

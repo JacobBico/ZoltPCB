@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 222" width="480" height="222">
+  <rect x="0" y="0" width="480" height="222" rx="12" fill="#161a24"/>
+  <!-- non-polarized -->
+  <line x1="40" y1="95" x2="110" y2="95" stroke="#e6e8ee" stroke-width="3"/>
+  <line x1="110" y1="60" x2="110" y2="130" stroke="#e6e8ee" stroke-width="5"/>
+  <line x1="130" y1="60" x2="130" y2="130" stroke="#e6e8ee" stroke-width="5"/>
+  <line x1="130" y1="95" x2="200" y2="95" stroke="#e6e8ee" stroke-width="3"/>
+  <text x="120" y="168" font-family="sans-serif" font-size="15" font-weight="bold" fill="#e6e8ee" text-anchor="middle">Non-polarized</text>
+  <text x="120" y="188" font-family="sans-serif" font-size="12" fill="#9aa3b5" text-anchor="middle">Either way round</text>
+  <text x="120" y="205" font-family="sans-serif" font-size="12" fill="#9aa3b5" text-anchor="middle">Ceramic, film</text>
+  <!-- divider -->
+  <line x1="240" y1="30" x2="240" y2="180" stroke="#2c3345" stroke-width="1.5"/>
+  <!-- polarized -->
+  <line x1="280" y1="95" x2="350" y2="95" stroke="#e6e8ee" stroke-width="3"/>
+  <line x1="350" y1="60" x2="350" y2="130" stroke="#e6e8ee" stroke-width="5"/>
+  <path d="M 380 60 Q 364 95 380 130" fill="none" stroke="#e6e8ee" stroke-width="5"/>
+  <line x1="370" y1="95" x2="440" y2="95" stroke="#e6e8ee" stroke-width="3"/>
+  <text x="334" y="66" font-family="sans-serif" font-size="20" font-weight="bold" fill="#f2b366" text-anchor="middle">+</text>
+  <text x="360" y="168" font-family="sans-serif" font-size="15" font-weight="bold" fill="#e6e8ee" text-anchor="middle">Polarized</text>
+  <text x="360" y="188" font-family="sans-serif" font-size="12" fill="#9aa3b5" text-anchor="middle">+ goes to the higher voltage</text>
+  <text x="360" y="205" font-family="sans-serif" font-size="12" fill="#9aa3b5" text-anchor="middle">Electrolytic, tantalum</text>
+</svg>

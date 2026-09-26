@@ -1,22 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../core/theme/kicad_palette.dart';
 
 /// Markdown, drawn in the app's own style.
 ///
 /// The small part of Markdown notes are written in: headings, paragraphs,
-/// bullet and numbered lists, quotes (drawn as a tip), fenced code, and
-/// **bold**, *italic* and `code` within a line. Anything else shows as the
+/// bullet and numbered lists, quotes (drawn as a tip), fenced code,
+/// pictures on a line of their own (`![caption](images/plates.svg)`, found
+/// beside the note in [assetDir]), and **bold**, *italic* and `code` within
+/// a line. Anything else shows as the
 /// text it is, which is never wrong, only plain.
 class MarkdownView extends StatelessWidget {
-  const MarkdownView(this.markdown, {super.key, this.padding});
+  const MarkdownView(this.markdown, {super.key, this.padding, this.assetDir});
 
   final String markdown;
   final EdgeInsetsGeometry? padding;
 
+  /// The asset folder a picture's path starts from: the note's own. Null
+  /// shows a picture as its caption alone.
+  final String? assetDir;
+
   @override
   Widget build(BuildContext context) {
-    final blocks = _blocks(markdown);
+    final blocks = _blocks(markdown, assetDir);
     return ListView.separated(
       padding: padding ?? const EdgeInsets.all(16),
       itemCount: blocks.length,
@@ -25,7 +32,7 @@ class MarkdownView extends StatelessWidget {
     );
   }
 
-  static List<_Block> _blocks(String markdown) {
+  static List<_Block> _blocks(String markdown, String? assetDir) {
     final lines = markdown.replaceAll('\r', '').split('\n');
     final blocks = <_Block>[];
     var paragraph = <String>[];
@@ -50,6 +57,17 @@ class MarkdownView extends StatelessWidget {
           code.add(lines[i]);
         }
         blocks.add(_Code(code.join('\n')));
+        continue;
+      }
+      final picture = RegExp(r'^!\[(.*)\]\((.+)\)$').firstMatch(trimmed);
+      if (picture != null) {
+        flush();
+        blocks.add(
+          _Picture(
+            caption: picture[1]!,
+            asset: assetDir == null ? null : '$assetDir/${picture[2]!}',
+          ),
+        );
         continue;
       }
       final heading = RegExp(r'^(#{1,3})\s+(.*)$').firstMatch(trimmed);
@@ -268,6 +286,55 @@ class _Code extends _Block {
       ),
     ),
   );
+}
+
+class _Picture extends _Block {
+  const _Picture({required this.caption, required this.asset});
+
+  final String caption;
+  final String? asset;
+
+  @override
+  Widget build(BuildContext context) {
+    final asset = this.asset;
+    return Column(
+      children: [
+        if (asset != null)
+          // A width of its own, measured: the picture's height follows from
+          // it, and an unbounded one would make that endless too.
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth.clamp(0.0, 560.0);
+              return ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: asset.endsWith('.svg')
+                    ? SvgPicture.asset(
+                        asset,
+                        width: width,
+                        semanticsLabel: caption,
+                        placeholderBuilder: (_) =>
+                            SizedBox(width: width, height: width * 0.5),
+                      )
+                    : Image.asset(asset, width: width),
+              );
+            },
+          ),
+        if (caption.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              caption,
+              textAlign: TextAlign.center,
+              style: body(context).copyWith(
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+                color: KicadPalette.textSecondary,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class _Rule extends _Block {
