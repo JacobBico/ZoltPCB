@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="docs/images/zolt-banner.svg" alt="Zolt — Design fab-ready circuit boards, right from your pocket." width="100%">
+  <img src="docs/images/zolt-banner.svg" alt="Zolt: design fab-ready circuit boards, right from your pocket." width="100%">
 </p>
 
 <p align="center">
-  Schematic capture and PCB layout for Android — from the first resistor to
-  fab-ready Gerbers, without a desk.
+  Schematic capture and PCB layout for Android, from the first resistor to
+  Gerbers you can send off to be made.
 </p>
 
 <p align="center">
@@ -16,67 +16,69 @@
 
 ---
 
-Zolt is a complete electronics design tool that fits in your pocket. Draw the
-schematic, lay out the board, check it against your fabricator's rules, and
-send the files off to be made — all from a phone.
+Zolt lets you design a circuit board on your phone. You draw the schematic,
+lay out the board, check it against your fab's rules and export the files to
+get it made. No laptop needed.
 
-It isn't a viewer or a toy. Zolt speaks **KiCad** natively: open your desktop
-projects on the train, keep working on them, and hand them back to KiCad
-when you're at a desk. Or skip the desktop entirely and export Gerbers
-straight to JLCPCB, PCBWay or any other board house.
+It works with KiCad files, so you can start something on the desktop, carry
+on with it on your phone, and open it back up in KiCad later. Or skip the
+desktop completely and send the Gerbers straight to JLCPCB, PCBWay or
+whoever you use.
 
-Everything runs on the device. No account, no cloud, no subscription — your
-designs never leave your phone unless you send them somewhere.
+Everything stays on your phone. There's no account, no cloud and no
+subscription, and your designs only go somewhere if you send them.
 
 ## Why Zolt
 
-**Built for fingers, not ported to them.** Every tool was designed for a
-touchscreen from the start. The board editor aims with a crosshair that stays
-still while the board moves beneath it, so every point lands exactly where
-you meant it — never hidden under your fingertip.
+**It's made for touch.** Doing precise work with a fingertip on a small
+screen is usually miserable, so the board editor works the other way round:
+the crosshair stays put in the middle of the screen and you move the board
+under it. You can always see exactly where a point is going to land.
 
-**Real KiCad, both ways.** Zolt reads and writes KiCad's own schematic, board
-and project files, hierarchical sheets included. Its exports are tested
-against the real `kicad-cli`, so what you draw on the phone is what KiCad
-opens on the desktop.
+**It speaks KiCad.** Zolt reads and writes KiCad's own schematic, board and
+project files, sub-sheets and all. The exports are tested against the real
+`kicad-cli`, so what you draw here is what KiCad opens.
 
-**All the libraries you already know.** Download KiCad's official symbol and
-footprint libraries from inside the app — over 20,000 parts — or import your
-own.
+**The libraries are the ones you know.** You can download KiCad's official
+symbol and footprint libraries from inside the app (over 20,000 parts) or
+import your own.
 
-**Straight to the fab.** Gerbers, drill files, a bill of materials and a
-pick-and-place file, zipped and ready to upload. Board-house presets check
-your design against what that fabricator can actually make.
+**The output is ready to order.** Gerbers, drill files, a BOM and a
+pick-and-place file, zipped up and ready to upload. There are presets for
+real board houses that check your design against what they can actually make.
 
 ## What it can do
 
 ### Schematic
-- A fast parts palette with the common parts one tap away, plus search across
-  every library you have installed
-- Drag wires out of pins, or tap them out corner by corner — your choice
+- A parts panel with the common parts one tap away, plus search across every
+  library you've installed
+- Drag wires out of pins, or tap them out corner by corner if you prefer
 - Net labels, power and ground symbols, no-connect flags and label ranges
-  such as `D[0..7]`
-- Multi-unit parts, hierarchical sheets, notes and boxes
-- An electrical rule check with severities you set per project
-- Undo and redo for every edit
+  like `D[0..7]`
+- Multi-unit parts, sub-sheets, notes and boxes
+- An electrical rule check you can tune per project
+- Undo and redo for everything
 
 ### Board
 - 2, 4, 6 or 8 copper layers, with an editable stackup
-- Draw your own board outline: rectangles, circles, triangles, arcs and lines
+- Draw your own board outline with rectangles, circles, triangles, arcs and
+  lines, with snapping to corners and centres
 - Walk-around routing, buses, differential pairs and curved tracks
 - Copper pours with thermal reliefs, keepout areas and teardrops
 - Through, blind and buried vias
-- Impedance-controlled net classes, net lengths and length-tuning meanders
+- Net classes with impedance targets, net lengths and meanders for length
+  matching
+- Silkscreen text in a choice of fonts, and pictures or logos on the
+  silkscreen
 - A design rule check, plus manufacturability checks for real board houses
-- Cross-probing: see the schematic and the board side by side
+- The schematic and the board side by side, so you can see what's what
 
 ### Manufacturing
-- Gerbers, Excellon drill files (with properly routed slots), a BOM CSV and a
-  pick-and-place file
-- Panelisation with mouse bites or V-scoring, rails, fiducials and tooling
-  holes
-- A preview of the board as it will be made, and a Gerber viewer to check
-  the output
+- Gerbers, Excellon drill files (slots come out as proper slots), a BOM with
+  component IDs for assembly, and a pick-and-place file
+- Panels with mouse bites or V-scoring, rails, fiducials and tooling holes
+- A preview of what the finished board will look like, and a Gerber viewer to
+  check the output
 - A schematic PDF, and project backups you can move between phones
 
 ## Getting Zolt
@@ -91,26 +93,28 @@ flutter build apk --release
 ```
 
 Then install `build/app/outputs/flutter-apk/app-release.apk` on an Android
-phone. Zolt is designed for landscape use.
+phone. Zolt is meant to be used in landscape.
 
-On first launch, open the component panel and choose **Download from KiCad**
-to fetch the parts libraries.
+The first time you open it, the home page has a short Get started list. The
+first step downloads KiCad's parts libraries, which you'll want before
+anything else.
 
-## Status
+## Where it's at
 
-Zolt is young and moving quickly. Its exports are checked against real KiCad
-and accepted by board houses, but please check your design — and the exported Gerbers, in your fabricator's viewer — before
-you order. If something looks wrong, [open an issue](../../issues).
+Zolt is still young and changing quickly. The exports are checked against
+real KiCad and board houses accept them, but check your design, and look at
+the Gerbers in your fab's viewer, before you order anything. If something
+looks off, please [open an issue](../../issues).
 
-Not there yet: a 3D view, and an autorouter. For those, open your project in
-desktop KiCad.
+There's no 3D view or autorouter yet. For those, open your project in desktop
+KiCad.
 
 ## Contributing
 
-Bug reports, ideas and pull requests are all welcome. Please read
-[CONTRIBUTING.md](CONTRIBUTING.md) first; it's short. For how the app is put
-together — the architecture, the design decisions and how to run the tests —
-see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Bug reports, ideas and pull requests are all welcome. Have a quick read of
+[CONTRIBUTING.md](CONTRIBUTING.md) first. If you want to know how the app is
+put together, including the design decisions and how to run the tests,
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) covers it.
 
 ## License
 
@@ -119,8 +123,8 @@ terms of the GNU General Public License as published by the Free Software
 Foundation, either version 3 of the License, or (at your option) any later
 version. See [LICENSE](LICENSE).
 
-In short: you may use, study, change and share Zolt, including commercially,
-but anything you distribute that is built from it must be released under the
+In short: you can use, study, change and share Zolt, including commercially,
+but anything you distribute that's built from it has to be released under the
 same license, with its full source code.
 
 It is distributed in the hope that it will be useful, but WITHOUT ANY
@@ -131,12 +135,12 @@ Copyright © 2026 JacobBico.
 
 ## Trademarks
 
-"Zolt" and the Zolt logo are trademarks of JacobBico and are not covered by
-the license above. You are welcome to fork the code, but a fork that is
-distributed — on an app store or anywhere else — must use a different name
-and logo, so that nobody mistakes it for the original. Saying that your
-project is "based on Zolt" is fine.
+"Zolt" and the Zolt logo are trademarks of JacobBico and aren't covered by
+the license above. You're welcome to fork the code, but if you publish a fork,
+on an app store or anywhere else, please give it a different name and logo so
+nobody mistakes it for the original. Saying your project is "based on Zolt"
+is fine.
 
-KiCad's libraries are © the KiCad Library Team and licensed under CC-BY-SA 4.0
+KiCad's libraries are © the KiCad Library Team and licensed under CC-BY-SA 4.0,
 with an exception that leaves the designs you make with them entirely yours.
-Zolt downloads them on request; it does not ship them.
+Zolt downloads them when you ask; it doesn't ship them.
