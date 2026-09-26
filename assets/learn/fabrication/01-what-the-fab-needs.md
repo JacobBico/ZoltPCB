@@ -14,6 +14,8 @@ A **Gerber** file is a picture of one layer of the board. A normal two-layer boa
 
 A four-layer board adds two inner copper layers, and so on.
 
+![A two-layer board pulled apart into its layers](images/board-layers.svg)
+
 ## Drill files
 
 Holes are not in the Gerbers. They go in separate **Excellon** drill files: the position and size of every hole, with plated holes (vias and through-hole pads) kept apart from unplated ones (mounting holes).

@@ -11,6 +11,8 @@ Every fab has limits: how thin a track it can etch, how small a hole it can dril
 - **Copper to edge**: how far copper has to stay from the board outline, so cutting the board does not expose or tear it.
 - **Silkscreen**: the thinnest line and smallest text that still print legibly.
 
+![What each rule measures](images/design-rules.svg)
+
 ## Typical numbers
 
 For a cheap standard two-layer board, the limits are usually around:

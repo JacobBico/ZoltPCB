@@ -82,7 +82,7 @@ void main() {
           }
         }
       }
-      expect(pictures, greaterThanOrEqualTo(5));
+      expect(pictures, greaterThanOrEqualTo(9));
     });
 
     testWidgets('a picture line shows the picture and its caption', (
