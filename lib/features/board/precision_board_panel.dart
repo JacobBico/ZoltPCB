@@ -295,6 +295,12 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   List<ReplicaChannel> _replicas = const [];
   _ReplicaSource? _replicaSource;
 
+  /// The next copy is riding the crosshair, drawn but not yet written.
+  bool _replicaRiding = false;
+
+  /// References by part id, for saying which copy is which.
+  Map<String, String> _references = const {};
+
   /// Where the carried thing was picked up, so everything moves by the
   /// same delta rather than jumping its anchor to the crosshair.
   Offset? _carryAnchor;
@@ -694,6 +700,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
   /// The board with whatever is being carried following the crosshair.
   BoardScene _withCarried(BoardScene committed, Offset at) {
+    if (_replicaRiding) return _withReplica(committed, at);
     final delta = _carryAnchor == null ? Offset.zero : at - _carryAnchor!;
 
     if (_carryingTextId != null ||
@@ -1334,7 +1341,8 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       _carryingImageId != null ||
       _carryingOutlineHandle != null ||
       _carryingOutline ||
-      _carryingSelection;
+      _carryingSelection ||
+      _replicaRiding;
 
   /// The buttons that matter right now, and no others.
   List<Widget> _contextButtons(BoardScene scene, List<PartWithDetails> parts) {
@@ -1365,13 +1373,33 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         _carryingImageId != null ||
         _carryingOutlineHandle != null ||
         _carryingOutline ||
-        _carryingSelection) {
+        _carryingSelection ||
+        _replicaRiding) {
       return [
         _Chip(
           icon: Icons.close,
           label: 'Cancel',
           onPressed: () => setState(_stopCarrying),
         ),
+      ];
+    }
+
+    // A copy is down and more could follow, one at a time, only if asked.
+    if (_replicaSource != null && _replicas.isNotEmpty) {
+      return [
+        _Chip(
+          key: const ValueKey('replicate-next'),
+          icon: Icons.copy_all_outlined,
+          label: 'Next copy · ${_replicaNames(_replicas.first)}',
+          onPressed: _carryReplica,
+        ),
+        _Chip(
+          key: const ValueKey('replicate-done'),
+          icon: Icons.check,
+          label: 'Done',
+          onPressed: () => setState(_stopCarrying),
+        ),
+        ?_hintText(),
       ];
     }
 
@@ -3045,6 +3073,10 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
   /// Puts down whatever was picked up, wherever it was picked up from.
   Future<void> _drop(BoardScene scene, Offset at) async {
+    if (_replicaRiding) {
+      await _dropReplica(at);
+      return;
+    }
     final anchor = _carryAnchor;
     if (_carryingTextId != null ||
         _carryingLabelId != null ||
@@ -3069,11 +3101,6 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       return;
     }
 
-    if (_carryingSelection && _replicas.isNotEmpty) {
-      await _dropMoved(scene, delta);
-      if (mounted) await _placeNextReplica();
-      return;
-    }
     await _dropMoved(scene, delta);
   }
 
@@ -3684,6 +3711,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   void _stopCarrying() {
     _replicas = const [];
     _replicaSource = null;
+    _replicaRiding = false;
     _carryAnchor = null;
     _carryingEdgeId = null;
     _slidingTrackId = null;
@@ -3858,7 +3886,223 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
     _replicaSource = _replicaSourceOf(scene, source);
     _replicas = [...channels];
-    await _placeNextReplica();
+    _references = {for (final part in parts) part.part.id: part.part.reference};
+    _carryReplica();
+  }
+
+  String _replicaNames(ReplicaChannel channel) => ([
+    for (final id in channel.parts.values) _references[id] ?? '',
+  ]..sort()).join(', ');
+
+  /// Puts the next copy on the crosshair. Nothing is written until DROP.
+  void _carryReplica() {
+    if (_replicas.isEmpty) return;
+    setState(() {
+      _region = null;
+      _regionFrom = null;
+      _selected = const _Selection.empty();
+      _replicaRiding = true;
+    });
+    unawaited(HapticFeedback.selectionClick());
+    _notify('Pan to place ${_replicaNames(_replicas.first)}, then DROP');
+  }
+
+  /// The copy's parts, tracks and vias, with the original's middle at [at].
+  ///
+  /// A part never on the board has no placement yet; it is drawn from one
+  /// made up for the purpose, which DROP then makes real.
+  ({List<PlacedFootprintRef> placements, List<Track> tracks, List<Via> vias})
+  _replicaAt(
+    _ReplicaSource source,
+    ReplicaChannel channel,
+    List<PlacedFootprintRef> placements,
+    Offset at,
+  ) {
+    final offset = at - source.centre;
+    final copies = <PlacedFootprintRef>[];
+    for (final original in source.placements) {
+      final partId = channel.parts[original.partId];
+      if (partId == null) continue;
+      final existing =
+          placements.where((p) => p.partId == partId).firstOrNull ??
+          PlacedFootprintRef(
+            id: 'replica-$partId',
+            projectId: widget.project.id,
+            partId: partId,
+            libId: original.libId,
+          );
+      copies.add(
+        existing.copyWith(
+          libId: original.libId,
+          x: original.x + offset.dx,
+          y: original.y + offset.dy,
+          // Wired the other way round: half a turn puts its pads back
+          // where the copied tracks end.
+          rotation: channel.turned.contains(original.partId)
+              ? (original.rotation + 180) % 360
+              : original.rotation,
+          flipped: original.flipped,
+          placed: true,
+        ),
+      );
+    }
+    String? netFor(String? netId) => netId == null ? null : channel.nets[netId];
+    // Copper on a net the copy has no counterpart of stays behind: it
+    // would only be a short to somewhere else.
+    bool follows(String? netId) =>
+        netId == null || channel.nets.containsKey(netId);
+    return (
+      placements: copies,
+      tracks: [
+        for (final t in source.tracks.where((t) => follows(t.netId)))
+          t
+              .copyWith(
+                id: 'replica-${t.id}',
+                startX: t.startX + offset.dx,
+                startY: t.startY + offset.dy,
+                endX: t.endX + offset.dx,
+                endY: t.endY + offset.dy,
+              )
+              .withNet(netFor(t.netId)),
+      ],
+      vias: [
+        for (final v in source.vias.where((v) => follows(v.netId)))
+          v.copyWith(
+            id: 'replica-${v.id}',
+            x: v.x + offset.dx,
+            y: v.y + offset.dy,
+            netId: netFor(v.netId),
+            clearNet: netFor(v.netId) == null,
+          ),
+      ],
+    );
+  }
+
+  /// The board with the riding copy drawn at [at].
+  BoardScene _withReplica(BoardScene committed, Offset at) {
+    final source = _replicaSource;
+    final parts = ref.watch(projectPartsProvider(widget.project.id)).value;
+    final nets = ref.watch(projectNetsProvider(widget.project.id)).value;
+    final placements = ref
+        .watch(boardFootprintsProvider(widget.project.id))
+        .value;
+    final definitions = ref
+        .watch(projectFootprintsProvider(widget.project.id))
+        .value;
+    if (source == null ||
+        _replicas.isEmpty ||
+        parts == null ||
+        nets == null ||
+        placements == null ||
+        definitions == null) {
+      return committed;
+    }
+    final copy = _replicaAt(source, _replicas.first, placements, at);
+    final moved = {for (final p in copy.placements) p.partId: p};
+    return BoardScene.build(
+      previewOf: committed,
+      texts: committed.texts,
+      images: committed.images,
+      netClasses: committed.netClasses,
+      features: committed.features,
+      dimensions: committed.dimensions,
+      board: committed.board,
+      parts: parts,
+      nets: nets,
+      placements: [
+        for (final placement in placements)
+          if (!moved.containsKey(placement.partId)) placement,
+        ...copy.placements,
+      ],
+      definitions: definitions,
+      tracks: [...committed.tracks, ...copy.tracks],
+      vias: [...committed.vias, ...copy.vias],
+      edges: committed.edges,
+      zones: committed.zones,
+    );
+  }
+
+  /// Writes the riding copy where it is, as one step to undo.
+  Future<void> _dropReplica(Offset at) async {
+    final source = _replicaSource;
+    if (source == null || _replicas.isEmpty) return;
+    final channel = _replicas.first;
+    final repository = ref.read(boardRepositoryProvider);
+    final placements = await repository.getFootprints(widget.project.id);
+    final copy = _replicaAt(source, channel, placements, at);
+
+    // Placements made real, and any footprint changed, for undo.
+    final before = <PlacedFootprintRef>[];
+    final after = <PlacedFootprintRef>[];
+    final swappedFrom = <String, String>{};
+    for (final planned in copy.placements) {
+      final existing = placements
+          .where((p) => p.partId == planned.partId)
+          .firstOrNull;
+      if (existing != null && existing.libId != planned.libId) {
+        swappedFrom[planned.partId] = existing.libId;
+      }
+      final target = existing?.libId == planned.libId
+          ? existing!
+          : await repository.assignFootprint(
+              projectId: widget.project.id,
+              partId: planned.partId,
+              libId: planned.libId,
+            );
+      before.add(target);
+      after.add(
+        target.copyWith(
+          x: planned.x,
+          y: planned.y,
+          rotation: planned.rotation,
+          flipped: planned.flipped,
+          placed: true,
+        ),
+      );
+    }
+    final tracks = [for (final t in copy.tracks) t.copyWith(id: newId())];
+    final vias = [for (final v in copy.vias) v.copyWith(id: newId())];
+
+    Future<void> apply() => ref.read(editTransactionProvider)(() async {
+      for (final placement in after) {
+        await repository.assignFootprint(
+          projectId: widget.project.id,
+          partId: placement.partId,
+          libId: placement.libId,
+        );
+        await repository.updatePlacement(placement);
+      }
+      await repository.restoreCopper(tracks: tracks, vias: vias);
+    });
+    await apply();
+    if (!mounted) return;
+    _record(
+      'Replicate ${_replicaNames(channel)}',
+      undo: () => ref.read(editTransactionProvider)(() async {
+        await repository.deleteTracks(tracks.map((t) => t.id));
+        await repository.deleteVias(vias.map((v) => v.id));
+        for (final placement in before) {
+          await repository.updatePlacement(placement);
+        }
+        for (final entry in swappedFrom.entries) {
+          await repository.assignFootprint(
+            projectId: widget.project.id,
+            partId: entry.key,
+            libId: entry.value,
+          );
+        }
+      }),
+      redo: apply,
+    );
+    unawaited(HapticFeedback.mediumImpact());
+    setState(() {
+      _replicaRiding = false;
+      _replicas = _replicas.sublist(1);
+      if (_replicas.isEmpty) _replicaSource = null;
+    });
+    if (_replicas.isNotEmpty) {
+      _notify('${_replicas.length} more could be replicated');
+    }
   }
 
   /// What is in the swept area, to be copied, and where a copy first
@@ -3875,8 +4119,16 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
           Offset(t.endX, t.endY),
         ],
     ];
-    final left = points.map((p) => p.dx).reduce(math.min);
-    final right = points.map((p) => p.dx).reduce(math.max);
+    final bounds = Rect.fromPoints(
+      Offset(
+        points.map((p) => p.dx).reduce(math.min),
+        points.map((p) => p.dy).reduce(math.min),
+      ),
+      Offset(
+        points.map((p) => p.dx).reduce(math.max),
+        points.map((p) => p.dy).reduce(math.max),
+      ),
+    );
     return _ReplicaSource(
       placements: source,
       tracks: [
@@ -3887,7 +4139,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
         for (final v in scene.vias)
           if (_selected.viaIds.contains(v.id)) v,
       ],
-      offset: Offset(right - left + 5, 0),
+      centre: bounds.center,
     );
   }
 
@@ -3932,145 +4184,6 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
       }
     }
     return 'The other copies are wired differently on the schematic';
-  }
-
-  Future<void> _placeNextReplica() async {
-    final source = _replicaSource;
-    if (source == null || _replicas.isEmpty) return;
-    final channel = _replicas.first;
-    _replicas = _replicas.sublist(1);
-    final repository = ref.read(boardRepositoryProvider);
-    final placements = await repository.getFootprints(widget.project.id);
-    final offset = source.offset;
-
-    final before = <PlacedFootprintRef>[];
-    final after = <PlacedFootprintRef>[];
-    // Parts that had a different footprint, put back by undo.
-    final swappedFrom = <String, String>{};
-    for (final original in source.placements) {
-      final partId = channel.parts[original.partId];
-      if (partId == null) continue;
-      // Never on the board: it gets the original's footprint, which is the
-      // one its schematic footprint matched.
-      final existing = placements.where((p) => p.partId == partId).firstOrNull;
-      final target = existing?.libId == original.libId
-          ? existing!
-          : await repository.assignFootprint(
-              projectId: widget.project.id,
-              partId: partId,
-              libId: original.libId,
-            );
-      if (existing != null && existing.libId != original.libId) {
-        swappedFrom[partId] = existing.libId;
-      }
-      before.add(target);
-      after.add(
-        target.copyWith(
-          x: original.x + offset.dx,
-          y: original.y + offset.dy,
-          // Wired the other way round: half a turn puts its pads back
-          // where the copied tracks end.
-          rotation: channel.turned.contains(original.partId)
-              ? (original.rotation + 180) % 360
-              : original.rotation,
-          flipped: original.flipped,
-          placed: true,
-        ),
-      );
-    }
-    String? netFor(String? netId) => netId == null ? null : channel.nets[netId];
-    // Copper on a net the copy has no counterpart of stays behind: it
-    // would only be a short to somewhere else.
-    bool follows(String? netId) =>
-        netId == null || channel.nets.containsKey(netId);
-    final tracks = [
-      for (final t in source.tracks.where((t) => follows(t.netId)))
-        t
-            .copyWith(
-              id: newId(),
-              startX: t.startX + offset.dx,
-              startY: t.startY + offset.dy,
-              endX: t.endX + offset.dx,
-              endY: t.endY + offset.dy,
-            )
-            .withNet(netFor(t.netId)),
-    ];
-    final vias = [
-      for (final v in source.vias.where((v) => follows(v.netId)))
-        v.copyWith(
-          id: newId(),
-          x: v.x + offset.dx,
-          y: v.y + offset.dy,
-          netId: netFor(v.netId),
-          clearNet: netFor(v.netId) == null,
-        ),
-    ];
-
-    Future<void> apply() => ref.read(editTransactionProvider)(() async {
-      for (final partId in swappedFrom.keys) {
-        await repository.assignFootprint(
-          projectId: widget.project.id,
-          partId: partId,
-          libId: after.firstWhere((p) => p.partId == partId).libId,
-        );
-      }
-      for (final placement in after) {
-        await repository.updatePlacement(placement);
-      }
-      await repository.restoreCopper(tracks: tracks, vias: vias);
-    });
-    await apply();
-    if (!mounted) return;
-    _record(
-      'Replicate',
-      undo: () => ref.read(editTransactionProvider)(() async {
-        await repository.deleteTracks(tracks.map((t) => t.id));
-        await repository.deleteVias(vias.map((v) => v.id));
-        for (final placement in before) {
-          await repository.updatePlacement(placement);
-        }
-        for (final entry in swappedFrom.entries) {
-          await repository.assignFootprint(
-            projectId: widget.project.id,
-            partId: entry.key,
-            libId: entry.value,
-          );
-        }
-      }),
-      redo: apply,
-    );
-
-    final parts = await ref
-        .read(partRepositoryProvider)
-        .getPartsWithDetails(widget.project.id);
-    if (!mounted) return;
-    final names = [
-      for (final placement in after)
-        parts
-                .where((p) => p.part.id == placement.partId)
-                .firstOrNull
-                ?.part
-                .reference ??
-            '',
-    ]..sort();
-    setState(() {
-      _region = null;
-      _regionFrom = null;
-      _selected = _Selection(
-        footprintIds: {for (final p in after) p.id},
-        trackIds: {for (final t in tracks) t.id},
-        viaIds: {for (final v in vias) v.id},
-        edgeIds: const {},
-        zoneIds: const {},
-      );
-      _carryAnchor = _lastSnap;
-    });
-    unawaited(HapticFeedback.mediumImpact());
-    final left = _replicas.length;
-    _notify(
-      'Pan to place ${names.join(', ')}, then DROP'
-      '${left > 0 ? ' ($left more after)' : ''}',
-    );
   }
 
   /// Everything in the swept area, gone in one step.
@@ -6018,13 +6131,13 @@ class _ReplicaSource {
     required this.placements,
     required this.tracks,
     required this.vias,
-    required this.offset,
+    required this.centre,
   });
 
   final List<PlacedFootprintRef> placements;
   final List<Track> tracks;
   final List<Via> vias;
 
-  /// Where each copy first appears, relative to the original.
-  final Offset offset;
+  /// The middle of the original, which rides the crosshair.
+  final Offset centre;
 }

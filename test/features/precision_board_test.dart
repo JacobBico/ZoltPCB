@@ -730,6 +730,8 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('replicate')));
       await settleApp(tester);
       expect(find.text('DROP'), findsOneWidget);
+      // Only drawn while it rides the crosshair; nothing written yet.
+      expect(await boards.getTracks(project.id), hasLength(1));
       await tester.tap(find.text('DROP'));
       await settleApp(tester);
 
