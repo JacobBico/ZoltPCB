@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:math' as math;
 import 'dart:ui';
 
@@ -6,6 +7,7 @@ import '../../domain/geometry/placement.dart';
 import '../../domain/models/models.dart';
 import '../../domain/pcb/pcb.dart';
 import '../../domain/symbols/symbols.dart';
+import '../../fab/silk_fonts.dart';
 import '../../kicad/schematic_writer.dart';
 import '../../kicad/board_writer.dart';
 import '../../kicad/board_project_writer.dart';
@@ -957,6 +959,49 @@ class KicadProjectImporter {
             node.child('effects')?.child('font')?.child('size')?.number(1) ??
             1.0,
         back: layer == 'B.SilkS',
+        font: _fontNamed(
+          node.child('effects')?.child('font')?.child('face')?.atom(1),
+        ),
+      );
+    }
+
+    // --- silkscreen pictures: filled shapes, a group of them at a time
+    final groupOf = <String, String>{};
+    for (final group in root.children('group')) {
+      final name = group.atom(1) ?? '';
+      for (final member in group.child('members')?.items.skip(1) ?? const []) {
+        if (member is SAtom) groupOf[member.value] = name;
+      }
+    }
+    final pictures = <(String, String), List<List<Offset>>>{};
+    for (final node in root.children('gr_poly')) {
+      final layer = node.childAtom('layer');
+      if (layer != 'F.SilkS' && layer != 'B.SilkS') continue;
+      final fill = node.childAtom('fill');
+      if (fill != 'yes' && fill != 'solid') continue;
+      final points = [
+        for (final xy in node.child('pts')?.children('xy') ?? const <SList>[])
+          _xy(xy),
+      ];
+      if (points.length < 3) continue;
+      final group = groupOf[node.childAtom('uuid') ?? ''] ?? '';
+      (pictures[(layer!, group)] ??= []).add(points);
+    }
+    for (final MapEntry(key: (layer, group), value: shapes)
+        in pictures.entries) {
+      final picture = _rasterise(shapes, back: layer == 'B.SilkS');
+      if (picture == null) continue;
+      await boards.addImage(
+        projectId: project.id,
+        name: group.startsWith(BoardWriter.pictureGroupPrefix)
+            ? group.substring(BoardWriter.pictureGroupPrefix.length)
+            : (group.isEmpty ? 'Imported artwork' : group),
+        position: picture.$1,
+        width: picture.$2,
+        columns: picture.$3,
+        rows: picture.$4,
+        bits: picture.$5,
+        back: layer == 'B.SilkS',
       );
     }
 
@@ -1427,4 +1472,63 @@ class _SheetLinks {
     final parts = key.split(marker);
     return (parts.length > 1 ? parts[1] : '', parts.length > 2 ? parts[2] : '');
   }
+}
+
+/// The id of the silkscreen font whose family is [face], or the stroke font.
+String _fontNamed(String? face) {
+  if (face == null || face.isEmpty) return '';
+  final wanted = face.toLowerCase();
+  for (final info in SilkFonts.available) {
+    if (SilkFonts.byId(info.id)?.family.toLowerCase() == wanted) return info.id;
+  }
+  return '';
+}
+
+/// Filled shapes turned back into a picture: its centre, printed width,
+/// pixels across and down, and ink. Null when there is nothing to draw.
+///
+/// Read at a twentieth of a millimetre, or coarser if the picture is large,
+/// and un-mirrored for the underside, where a picture is stored as it reads
+/// from the front.
+(Offset, double, int, int, Uint8List)? _rasterise(
+  List<List<Offset>> shapes, {
+  required bool back,
+}) {
+  var bounds = Rect.fromPoints(shapes.first.first, shapes.first.first);
+  for (final shape in shapes) {
+    for (final p in shape) {
+      bounds = bounds.expandToInclude(Rect.fromPoints(p, p));
+    }
+  }
+  if (bounds.width <= 0 || bounds.height <= 0) return null;
+  final pixel = math.max(0.05, math.max(bounds.width, bounds.height) / 600);
+  final columns = math.max(1, (bounds.width / pixel).round());
+  final rows = math.max(1, (bounds.height / pixel).round());
+  final ink = List<bool>.filled(columns * rows, false);
+  for (var y = 0; y < rows; y++) {
+    final sy = bounds.top + (y + 0.5) * bounds.height / rows;
+    for (final shape in shapes) {
+      final crossings = <double>[];
+      for (var i = 0, j = shape.length - 1; i < shape.length; j = i++) {
+        final a = shape[i];
+        final b = shape[j];
+        if ((a.dy > sy) == (b.dy > sy)) continue;
+        crossings.add((b.dx - a.dx) * (sy - a.dy) / (b.dy - a.dy) + a.dx);
+      }
+      crossings.sort();
+      for (var k = 0; k + 1 < crossings.length; k += 2) {
+        final from = ((crossings[k] - bounds.left) / bounds.width * columns)
+            .round()
+            .clamp(0, columns);
+        final to = ((crossings[k + 1] - bounds.left) / bounds.width * columns)
+            .round()
+            .clamp(0, columns);
+        for (var x = from; x < to; x++) {
+          ink[y * columns + (back ? columns - 1 - x : x)] = true;
+        }
+      }
+    }
+  }
+  if (!ink.contains(true)) return null;
+  return (bounds.center, bounds.width, columns, rows, BoardImage.pack(ink));
 }

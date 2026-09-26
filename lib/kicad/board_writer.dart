@@ -597,7 +597,17 @@ class BoardWriter {
   /// KiCad has no printed-bitmap object, so this is the form that reaches
   /// its Gerbers unchanged.
   List<SList> _images(BoardDocument document) => [
-    for (final image in document.scene.images)
+    for (final image in document.scene.images) ...[
+      // Grouped and named, so opening the board again makes a picture of
+      // them rather than a pile of shapes.
+      S.list('group', [
+        S.text('$pictureGroupPrefix${image.name}'),
+        SList([SAtom('uuid'), S.text(derivedId('image:${image.id}'))]),
+        S.list('members', [
+          for (var i = 0; i < image.inkPolygons.length; i++)
+            S.text(derivedId('image:${image.id}:$i')),
+        ]),
+      ]),
       for (var i = 0; i < image.inkPolygons.length; i++)
         S.list('gr_poly', [
           S.list('pts', [
@@ -611,7 +621,11 @@ class BoardWriter {
           SList([SAtom('layer'), S.text(image.layer.token)]),
           SList([SAtom('uuid'), S.text(derivedId('image:${image.id}:$i'))]),
         ]),
+    ],
   ];
+
+  /// What a picture's group is called in the file, before its name.
+  static const pictureGroupPrefix = 'Zolt picture: ';
 
   SList _withValue(SList property, String value) => SList([
     property.items.first,

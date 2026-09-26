@@ -466,8 +466,15 @@ class SchematicWriter {
           : net.endpoints;
 
       for (final endpoint in endpoints) {
-        final at = connectivity.pinPositions[endpoint.pin.id];
+        var at = connectivity.pinPositions[endpoint.pin.id];
         if (at == null) continue;
+        // A wired net's one label goes where it was put on the phone: onto
+        // the net's wire at the point nearest it, since a KiCad label joins
+        // only what its anchor touches.
+        final placed = net.net.labelAt;
+        if (drawn && placed != null) {
+          at = connectivity.nearestOnNet(net.id, placed) ?? at;
+        }
         labels.add(
           SList([
             SAtom('label'),
@@ -713,6 +720,34 @@ class _Connectivity {
 
   final Map<String, Offset> pinPositions;
   final List<RoutedWire> wires;
+
+  /// The point on [netId]'s wires closest to [to], or null with none.
+  Offset? nearestOnNet(String netId, Offset to) {
+    Offset? best;
+    var bestDistance = double.infinity;
+    for (final wire in wires) {
+      if (wire.netId != netId) continue;
+      for (var i = 0; i + 1 < wire.points.length; i++) {
+        final a = wire.points[i];
+        final b = wire.points[i + 1];
+        final d = b - a;
+        final length = d.distanceSquared;
+        final t = length == 0
+            ? 0.0
+            : (((to - a).dx * d.dx + (to - a).dy * d.dy) / length).clamp(
+                0.0,
+                1.0,
+              );
+        final point = a + d * t;
+        final distance = (point - to).distance;
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = point;
+        }
+      }
+    }
+    return best;
+  }
 
   /// One endpoint from each separately wired piece of [net].
   List<NetEndpoint> onePerPiece(NetWithEndpoints net) {

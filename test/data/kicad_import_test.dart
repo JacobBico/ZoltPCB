@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:zolt/fab/silk_fonts.dart';
 import 'package:zolt/data/db/database.dart';
 import 'package:zolt/data/import/kicad_project_importer.dart';
 import 'package:zolt/data/libraries/library_file_storage.dart';
@@ -320,6 +321,10 @@ void main() {
       netId: vmid.net.id,
     );
 
+    SilkFonts.register(
+      'fira-sans',
+      File('assets/fonts/FiraSans-Bold.ttf').readAsBytesSync(),
+    );
     final placements = await source.boards.getFootprints(project.id);
     final scene = BoardScene.build(
       board: await source.boards.ensureBoard(project.id),
@@ -330,6 +335,33 @@ void main() {
         'Test:TwoPad': (await source.footprints.loadFootprint('Test:TwoPad'))!,
       },
       tracks: await source.boards.getTracks(project.id),
+      // Silkscreen in a font, and a picture on the back.
+      texts: const [
+        BoardText(
+          id: 't',
+          projectId: 'p',
+          content: 'Zolt',
+          position: Offset(38, 42),
+          size: 1.5,
+          font: 'fira-sans',
+        ),
+      ],
+      images: [
+        BoardImage(
+          id: 'i',
+          projectId: 'p',
+          name: 'Arrow',
+          position: const Offset(38, 30),
+          width: 4,
+          back: true,
+          columns: 4,
+          rows: 2,
+          bits: BoardImage.pack([
+            true, true, false, false, //
+            true, true, true, true,
+          ]),
+        ),
+      ],
     );
     final boardText = const BoardWriter().write(
       BoardDocument(
@@ -380,6 +412,18 @@ void main() {
       result.project.id,
     )).firstWhere((n) => n.net.id == track.netId);
     expect(named.net.name, 'VMID');
+
+    // The font text keeps its font, and the picture comes back a picture,
+    // on the back, reading the same way round.
+    final text = (await target.boards.getTexts(result.project.id)).single;
+    expect(text.font, 'fira-sans');
+    final picture = (await target.boards.getImages(result.project.id)).single;
+    expect(picture.name, 'Arrow');
+    expect(picture.back, isTrue);
+    expect(picture.width, closeTo(4, 0.01));
+    // Left half of the top row inked, right half not.
+    expect(picture.ink(0, 0), isTrue);
+    expect(picture.ink(picture.columns - 1, 0), isFalse);
 
     // A damaged project file costs its rules, with a warning, not the
     // whole import.
