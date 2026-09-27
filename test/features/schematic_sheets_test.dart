@@ -72,7 +72,7 @@ void main() {
       // On the top sheet: R1, the box, and VMID going into it.
       var painter = _painter(tester);
       expect(painter.scene.units.map((u) => u.part.reference), ['R1']);
-      expect(painter.sheetBoxes.single.pins, ['VMID']);
+      expect(painter.sheetBoxes.single.pins.map((p) => p.name), ['VMID']);
       expect(painter.offSheetLabels.single.name, 'VMID');
       expect(painter.offSheetLabels.single.hierarchical, isFalse);
       expect(find.byKey(const ValueKey('sheet-path')), findsOneWidget);

@@ -451,6 +451,9 @@ class ProjectExporter {
     }
 
     final file = File('${outputDirectory.path}/$fileName');
+    // A sheet brought in from a folder of its own (`sch/power.kicad_sch`)
+    // goes back into that folder, beside the top sheet as KiCad expects.
+    await file.parent.create(recursive: true);
     await file.writeAsString(contents, flush: true);
 
     return ExportedFile(

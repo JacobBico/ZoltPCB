@@ -81,6 +81,7 @@ class SheetRepository {
             height: Value(sheet.box.height),
             sortOrder: Value(sheet.sortOrder),
             createdAt: DateTime.now(),
+            pins: Value(SheetPin.encode(sheet.pins)),
           ),
           mode: InsertMode.insertOrReplace,
         );
@@ -246,6 +247,7 @@ class SheetRepository {
     fileName: row.fileName,
     box: Rect.fromLTWH(row.x, row.y, row.width, row.height),
     sortOrder: row.sortOrder,
+    pins: SheetPin.decode(row.pins),
   );
 
   static PartUnit _toUnit(PartUnitRow row) => PartUnit(

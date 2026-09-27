@@ -40,21 +40,23 @@ class Placement {
 
   /// Maps a point in symbol space to sheet space.
   Offset apply(double sx, double sy) {
-    // Mirroring happens in symbol space, before rotation, which is the
-    // order KiCad applies them in.
-    var px = mirrorY ? -sx : sx;
-    var py = mirrorX ? -sy : sy;
-
     // Flip to Y-down, then rotate. Rotating after the flip means a positive
     // angle still reads as counter-clockwise on screen.
-    final fx = px;
-    final fy = -py;
+    final fx = sx;
+    final fy = -sy;
 
     final radians = rotation * math.pi / 180;
     final cos = math.cos(radians);
     final sin = math.sin(radians);
-    final rx = fx * cos + fy * sin;
-    final ry = -fx * sin + fy * cos;
+    var rx = fx * cos + fy * sin;
+    var ry = -fx * sin + fy * cos;
+
+    // Then mirror, across the sheet's axes: KiCad turns a symbol first and
+    // mirrors it after. The other way round gives the same answer unless
+    // it is turned a quarter, when a two-pin part's pins trade places —
+    // an LED the wrong way round against the drawing it came from.
+    if (mirrorX) ry = -ry;
+    if (mirrorY) rx = -rx;
 
     return Offset(x + rx, y + ry);
   }
@@ -64,11 +66,12 @@ class Placement {
   /// The direction a pin stub points, in sheet space, as an angle in degrees
   /// measured clockwise from the positive X axis (screen convention).
   double pinAngle(double symbolAngle) {
-    var angle = symbolAngle;
-    if (mirrorY) angle = 180 - angle;
+    // Y-down flips the sense of rotation, then the placement rotation adds,
+    // and the mirroring comes last, as it does for points.
+    var angle = -symbolAngle - rotation;
     if (mirrorX) angle = -angle;
-    // Y-down flips the sense of rotation, then the placement rotation adds.
-    return _normalizeDegrees(-angle - rotation);
+    if (mirrorY) angle = 180 - angle;
+    return _normalizeDegrees(angle);
   }
 
   static double _normalizeDegrees(double degrees) {

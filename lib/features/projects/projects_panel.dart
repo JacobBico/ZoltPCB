@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +6,7 @@ import '../../app/providers.dart';
 import '../../core/theme/kicad_palette.dart';
 import '../../core/util/formatting.dart';
 import '../../core/widgets/panel.dart';
+import '../../data/import/kicad_picked_files.dart';
 import '../../data/import/kicad_project_importer.dart';
 import '../../domain/models/models.dart';
 import '../project/backup_actions.dart';
@@ -44,66 +43,104 @@ class ProjectsPanel extends ConsumerWidget {
     );
   }
 
-  /// Opens a project made in desktop KiCad: its schematic, and its board
-  /// and project file when they are picked with it.
+  /// Opens a project made in desktop KiCad: its schematics, board and
+  /// project file, picked together or as a `.zip` of the project folder.
   static Future<void> openKicad(BuildContext context, WidgetRef ref) async {
     void report(String message) => ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(SnackBar(content: Text(message)));
 
-    final List<PlatformFile> picked;
-    try {
-      picked = await FilePicker.pickFiles(
-        dialogTitle:
-            'Pick the .kicad_sch files, with the .kicad_pcb and .kicad_pro',
-        // No MIME type exists for KiCad files, so filtering by extension
-        // would hide them on most phones.
-        type: FileType.any,
-        // pickFiles takes several files (file_picker 12); the board and
-        // project file are picked alongside the schematic.
+    final picked = KicadPickedFiles();
+    Future<bool> pick(String title) async {
+      final List<PlatformFile> files;
+      try {
+        files = await FilePicker.pickFiles(
+          dialogTitle: title,
+          // No MIME type exists for KiCad files, so filtering by extension
+          // would hide them on most phones.
+          type: FileType.any,
+        );
+      } catch (error) {
+        if (context.mounted) report('Could not open the picker: $error');
+        return false;
+      }
+      for (final file in files) {
+        picked.add(file.name, await file.readAsBytes());
+      }
+      return files.isNotEmpty;
+    }
+
+    if (!await pick(
+      'Pick the .kicad_sch files with the .kicad_pcb and .kicad_pro, '
+      'or a .zip of the project folder',
+    )) {
+      return;
+    }
+    if (!context.mounted) return;
+    if (picked.schematics.isEmpty) {
+      report('Pick the .kicad_sch files, or a .zip of the project folder');
+      return;
+    }
+
+    // Each sub-sheet is a file of its own. One not picked would come in
+    // empty, and its footprints would drop off the board, so say which.
+    while (picked.missingSheets.isNotEmpty) {
+      final missing = picked.missingSheets;
+      final again = await showDialog<bool>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+          title: Text(
+            missing.length == 1
+                ? 'A sheet was not picked'
+                : '${missing.length} sheets were not picked',
+          ),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Text(
+                '${missing.map((m) => '• $m').join('\n')}\n\n'
+                'Without them, their parts are left out, and their '
+                'footprints with them. A .zip of the project folder brings '
+                'everything at once.',
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialog).pop(false),
+              child: const Text('OPEN WITHOUT THEM'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialog).pop(true),
+              child: const Text('PICK THEM'),
+            ),
+          ],
+        ),
       );
-    } catch (error) {
-      if (context.mounted) report('Could not open the picker: $error');
-      return;
+      if (!context.mounted || again == null) return;
+      if (!again) break;
+      await pick('Pick ${missing.join(', ')}');
+      if (!context.mounted) return;
     }
-    if (picked.isEmpty || !context.mounted) return;
 
-    PlatformFile? withExtension(String extension) => picked
-        .where((f) => f.name.toLowerCase().endsWith(extension))
-        .firstOrNull;
-    Future<String?> read(PlatformFile? file) async => file == null
-        ? null
-        : utf8.decode(await file.readAsBytes(), allowMalformed: true);
-
-    // Every schematic picked: the top one and its sub-sheets.
-    final schematics = <String, String>{
-      for (final file in picked)
-        if (file.name.toLowerCase().endsWith('.kicad_sch'))
-          file.name: (await read(file))!,
-    };
-    if (schematics.isEmpty) {
-      report('Pick the .kicad_sch — the board and project files come with it');
-      return;
-    }
-    final topName = _topSheet(
-      schematics,
-      project: withExtension('.kicad_pro')?.name,
+    final projectFile = picked.withExtension('.kicad_pro');
+    final schematics = picked.schematics;
+    final topName = _topSheet(schematics, project: projectFile?.key);
+    final baseName = topName.replaceFirst(
+      RegExp(r'\.kicad_sch$', caseSensitive: false),
+      '',
     );
-    final schematic = picked.firstWhere((f) => f.name == topName);
 
-    report('Opening ${schematic.name}…');
+    report('Opening $topName…');
     final KicadImportResult result;
     try {
       result = await ref
           .read(kicadImporterProvider)
           .import(
-            name: schematic.name.replaceFirst(
-              RegExp(r'\.kicad_sch$', caseSensitive: false),
-              '',
-            ),
+            name: baseName,
             schematic: schematics[topName]!,
-            board: await read(withExtension('.kicad_pcb')),
-            projectFile: await read(withExtension('.kicad_pro')),
+            board: picked.withExtension('.kicad_pcb', project: baseName)?.value,
+            projectFile: projectFile?.value,
             sheetFiles: {
               for (final entry in schematics.entries)
                 if (entry.key != topName) entry.key: entry.value,

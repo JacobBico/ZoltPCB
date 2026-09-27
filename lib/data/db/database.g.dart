@@ -17966,6 +17966,16 @@ class $SchematicSheetsTable extends SchematicSheets
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _pinsMeta = const VerificationMeta('pins');
+  @override
+  late final GeneratedColumn<String> pins = GeneratedColumn<String>(
+    'pins',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -17979,6 +17989,7 @@ class $SchematicSheetsTable extends SchematicSheets
     height,
     sortOrder,
     createdAt,
+    pins,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -18059,6 +18070,12 @@ class $SchematicSheetsTable extends SchematicSheets
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('pins')) {
+      context.handle(
+        _pinsMeta,
+        pins.isAcceptableOrUnknown(data['pins']!, _pinsMeta),
+      );
+    }
     return context;
   }
 
@@ -18112,6 +18129,10 @@ class $SchematicSheetsTable extends SchematicSheets
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      pins: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pins'],
+      )!,
     );
   }
 
@@ -18140,6 +18161,10 @@ class SchematicSheetRow extends DataClass
   final double height;
   final int sortOrder;
   final DateTime createdAt;
+
+  /// The box's own pins, as JSON (see `SheetPin`); empty for a sheet whose
+  /// pins all follow from the nets crossing it.
+  final String pins;
   const SchematicSheetRow({
     required this.id,
     required this.projectId,
@@ -18152,6 +18177,7 @@ class SchematicSheetRow extends DataClass
     required this.height,
     required this.sortOrder,
     required this.createdAt,
+    required this.pins,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -18169,6 +18195,7 @@ class SchematicSheetRow extends DataClass
     map['height'] = Variable<double>(height);
     map['sort_order'] = Variable<int>(sortOrder);
     map['created_at'] = Variable<DateTime>(createdAt);
+    map['pins'] = Variable<String>(pins);
     return map;
   }
 
@@ -18187,6 +18214,7 @@ class SchematicSheetRow extends DataClass
       height: Value(height),
       sortOrder: Value(sortOrder),
       createdAt: Value(createdAt),
+      pins: Value(pins),
     );
   }
 
@@ -18207,6 +18235,7 @@ class SchematicSheetRow extends DataClass
       height: serializer.fromJson<double>(json['height']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      pins: serializer.fromJson<String>(json['pins']),
     );
   }
   @override
@@ -18224,6 +18253,7 @@ class SchematicSheetRow extends DataClass
       'height': serializer.toJson<double>(height),
       'sortOrder': serializer.toJson<int>(sortOrder),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'pins': serializer.toJson<String>(pins),
     };
   }
 
@@ -18239,6 +18269,7 @@ class SchematicSheetRow extends DataClass
     double? height,
     int? sortOrder,
     DateTime? createdAt,
+    String? pins,
   }) => SchematicSheetRow(
     id: id ?? this.id,
     projectId: projectId ?? this.projectId,
@@ -18251,6 +18282,7 @@ class SchematicSheetRow extends DataClass
     height: height ?? this.height,
     sortOrder: sortOrder ?? this.sortOrder,
     createdAt: createdAt ?? this.createdAt,
+    pins: pins ?? this.pins,
   );
   SchematicSheetRow copyWithCompanion(SchematicSheetsCompanion data) {
     return SchematicSheetRow(
@@ -18265,6 +18297,7 @@ class SchematicSheetRow extends DataClass
       height: data.height.present ? data.height.value : this.height,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      pins: data.pins.present ? data.pins.value : this.pins,
     );
   }
 
@@ -18281,7 +18314,8 @@ class SchematicSheetRow extends DataClass
           ..write('width: $width, ')
           ..write('height: $height, ')
           ..write('sortOrder: $sortOrder, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('pins: $pins')
           ..write(')'))
         .toString();
   }
@@ -18299,6 +18333,7 @@ class SchematicSheetRow extends DataClass
     height,
     sortOrder,
     createdAt,
+    pins,
   );
   @override
   bool operator ==(Object other) =>
@@ -18314,7 +18349,8 @@ class SchematicSheetRow extends DataClass
           other.width == this.width &&
           other.height == this.height &&
           other.sortOrder == this.sortOrder &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.pins == this.pins);
 }
 
 class SchematicSheetsCompanion extends UpdateCompanion<SchematicSheetRow> {
@@ -18329,6 +18365,7 @@ class SchematicSheetsCompanion extends UpdateCompanion<SchematicSheetRow> {
   final Value<double> height;
   final Value<int> sortOrder;
   final Value<DateTime> createdAt;
+  final Value<String> pins;
   final Value<int> rowid;
   const SchematicSheetsCompanion({
     this.id = const Value.absent(),
@@ -18342,6 +18379,7 @@ class SchematicSheetsCompanion extends UpdateCompanion<SchematicSheetRow> {
     this.height = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.pins = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SchematicSheetsCompanion.insert({
@@ -18356,6 +18394,7 @@ class SchematicSheetsCompanion extends UpdateCompanion<SchematicSheetRow> {
     this.height = const Value.absent(),
     this.sortOrder = const Value.absent(),
     required DateTime createdAt,
+    this.pins = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        projectId = Value(projectId),
@@ -18374,6 +18413,7 @@ class SchematicSheetsCompanion extends UpdateCompanion<SchematicSheetRow> {
     Expression<double>? height,
     Expression<int>? sortOrder,
     Expression<DateTime>? createdAt,
+    Expression<String>? pins,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -18388,6 +18428,7 @@ class SchematicSheetsCompanion extends UpdateCompanion<SchematicSheetRow> {
       if (height != null) 'height': height,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (createdAt != null) 'created_at': createdAt,
+      if (pins != null) 'pins': pins,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -18404,6 +18445,7 @@ class SchematicSheetsCompanion extends UpdateCompanion<SchematicSheetRow> {
     Value<double>? height,
     Value<int>? sortOrder,
     Value<DateTime>? createdAt,
+    Value<String>? pins,
     Value<int>? rowid,
   }) {
     return SchematicSheetsCompanion(
@@ -18418,6 +18460,7 @@ class SchematicSheetsCompanion extends UpdateCompanion<SchematicSheetRow> {
       height: height ?? this.height,
       sortOrder: sortOrder ?? this.sortOrder,
       createdAt: createdAt ?? this.createdAt,
+      pins: pins ?? this.pins,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -18458,6 +18501,9 @@ class SchematicSheetsCompanion extends UpdateCompanion<SchematicSheetRow> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (pins.present) {
+      map['pins'] = Variable<String>(pins.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -18478,6 +18524,7 @@ class SchematicSheetsCompanion extends UpdateCompanion<SchematicSheetRow> {
           ..write('height: $height, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
+          ..write('pins: $pins, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -34732,6 +34779,7 @@ typedef $$SchematicSheetsTableCreateCompanionBuilder =
       Value<double> height,
       Value<int> sortOrder,
       required DateTime createdAt,
+      Value<String> pins,
       Value<int> rowid,
     });
 typedef $$SchematicSheetsTableUpdateCompanionBuilder =
@@ -34747,6 +34795,7 @@ typedef $$SchematicSheetsTableUpdateCompanionBuilder =
       Value<double> height,
       Value<int> sortOrder,
       Value<DateTime> createdAt,
+      Value<String> pins,
       Value<int> rowid,
     });
 
@@ -34842,6 +34891,11 @@ class $$SchematicSheetsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get pins => $composableBuilder(
+    column: $table.pins,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$ProjectsTableFilterComposer get projectId {
     final $$ProjectsTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -34925,6 +34979,11 @@ class $$SchematicSheetsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get pins => $composableBuilder(
+    column: $table.pins,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$ProjectsTableOrderingComposer get projectId {
     final $$ProjectsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -34987,6 +35046,9 @@ class $$SchematicSheetsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<String> get pins =>
+      $composableBuilder(column: $table.pins, builder: (column) => column);
 
   $$ProjectsTableAnnotationComposer get projectId {
     final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
@@ -35053,6 +35115,7 @@ class $$SchematicSheetsTableTableManager
                 Value<double> height = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<String> pins = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SchematicSheetsCompanion(
                 id: id,
@@ -35066,6 +35129,7 @@ class $$SchematicSheetsTableTableManager
                 height: height,
                 sortOrder: sortOrder,
                 createdAt: createdAt,
+                pins: pins,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -35081,6 +35145,7 @@ class $$SchematicSheetsTableTableManager
                 Value<double> height = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 required DateTime createdAt,
+                Value<String> pins = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SchematicSheetsCompanion.insert(
                 id: id,
@@ -35094,6 +35159,7 @@ class $$SchematicSheetsTableTableManager
                 height: height,
                 sortOrder: sortOrder,
                 createdAt: createdAt,
+                pins: pins,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

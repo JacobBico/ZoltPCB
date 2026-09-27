@@ -8,6 +8,7 @@ import 'schematic_painter_support.dart';
 import 'schematic_scene.dart';
 import '../domain/geometry/drawn_wire_geometry.dart';
 import '../domain/models/schematic_note.dart';
+import '../domain/models/schematic_sheet.dart';
 import '../domain/models/sheet_views.dart';
 import 'schematic_viewport.dart';
 import 'symbol_renderer.dart';
@@ -201,22 +202,56 @@ class SchematicPainter extends CustomPainter {
         size * 0.85,
       );
       file.paint(canvas, rect.bottomLeft + const Offset(0, 2));
-      for (var i = 0; i < view.pins.length; i++) {
-        final at = viewport.toScreen(view.pinAt(i));
-        final s = math.max(3.0, viewport.lengthToScreen(0.8));
-        canvas.drawPath(
-          Path()
-            ..moveTo(at.dx, at.dy - s)
-            ..lineTo(at.dx + s * 1.4, at.dy)
-            ..lineTo(at.dx, at.dy + s)
-            ..close(),
-          Paint()..color = KicadPalette.globalLabel,
-        );
-        if (size < 7) continue;
-        final text = _label(view.pins[i], KicadPalette.globalLabel, size);
-        text.paint(canvas, at + Offset(s * 1.8, -text.height / 2));
+      for (final pin in view.pins) {
+        _paintSheetPin(canvas, pin, size);
       }
     }
+  }
+
+  /// A pin on a sheet's box, drawn the way KiCad draws one: its shape just
+  /// inside the edge (an arrow in for an input, out for an output, a
+  /// diamond for either way, a square for passive), and its name beyond.
+  void _paintSheetPin(Canvas canvas, SheetBoxPin pin, double size) {
+    final at = viewport.toScreen(pin.at);
+    final s = math.max(3.0, viewport.lengthToScreen(0.64));
+    // Into the box from its edge, and along the edge.
+    final (inward, along) = switch (pin.side) {
+      SheetSide.left => (const Offset(1, 0), const Offset(0, 1)),
+      SheetSide.right => (const Offset(-1, 0), const Offset(0, 1)),
+      SheetSide.top => (const Offset(0, 1), const Offset(1, 0)),
+      SheetSide.bottom => (const Offset(0, -1), const Offset(1, 0)),
+    };
+    Offset p(double inwards, double across) =>
+        at + inward * (inwards * s) + along * (across * s);
+    final points = switch (pin.shape) {
+      'input' => [p(0, -1), p(1, -1), p(2, 0), p(1, 1), p(0, 1)],
+      'output' => [p(0, 0), p(1, -1), p(2, -1), p(2, 1), p(1, 1)],
+      'passive' => [p(0, -1), p(2, -1), p(2, 1), p(0, 1)],
+      _ => [p(0, 0), p(1, -1), p(2, 0), p(1, 1)],
+    };
+    final path = Path()..addPolygon(points, true);
+    final colour = pin.net == null
+        ? KicadPalette.globalLabel.withValues(alpha: 0.55)
+        : KicadPalette.globalLabel;
+    canvas
+      ..drawPath(path, Paint()..color = colour.withValues(alpha: 0.18))
+      ..drawPath(
+        path,
+        Paint()
+          ..color = colour
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2,
+      );
+    if (size < 7) return;
+    final text = _label(pin.name, colour, size);
+    final gap = s * 2.6;
+    final origin = switch (pin.side) {
+      SheetSide.left => at + Offset(gap, -text.height / 2),
+      SheetSide.right => at + Offset(-gap - text.width, -text.height / 2),
+      SheetSide.top => at + Offset(-text.width / 2, gap),
+      SheetSide.bottom => at + Offset(-text.width / 2, -gap - text.height),
+    };
+    text.paint(canvas, origin);
   }
 
   /// Names at pins whose nets carry on elsewhere: a flag shape for a
@@ -407,7 +442,7 @@ class SchematicPainter extends CustomPainter {
       anchors: [
         for (final pin in scene.pins) pin.sheetPosition,
         for (final view in sheetBoxes)
-          for (var i = 0; i < view.pins.length; i++) view.pinAt(i),
+          for (final pin in view.pins) pin.at,
       ],
     );
     if (ends.isEmpty) return;

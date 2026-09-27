@@ -105,7 +105,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => 25;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -335,6 +335,11 @@ class AppDatabase extends _$AppDatabase {
       // v24: the picture library.
       if (from < 24) {
         await m.createTable(silkPictures);
+      }
+      // v25: a sheet box's own pins, from KiCad. A table made from v18 on
+      // already has the column; only one made before this needs it added.
+      if (from >= 18 && from < 25) {
+        await m.addColumn(schematicSheets, schematicSheets.pins);
       }
     },
     beforeOpen: (details) async {

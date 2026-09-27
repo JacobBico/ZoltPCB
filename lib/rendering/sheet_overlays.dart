@@ -15,28 +15,34 @@ import 'schematic_scene.dart';
 }) {
   final boxes = [
     for (final child in links.tree.childrenOf(sheetId))
-      SheetBoxView(
-        sheet: moving != null && movedTo != null && child.id == moving.id
+      SheetBoxView.of(
+        moving != null && movedTo != null && child.id == moving.id
             ? child.copyWith(box: movedTo & child.box.size)
             : child,
-        pins: [for (final net in links.crossing(child.id)) net.displayName],
+        crossing: links.crossing(child.id),
+        nets: links.nets,
       ),
   ];
   final inside = sheetId == null ? null : links.tree.subtree(sheetId);
+  final here = sheetId == null
+      ? null
+      : links.tree.sheets.where((s) => s.id == sheetId).firstOrNull;
   final pinAt = {for (final pin in scene.pins) pin.id: pin.sheetPosition};
   final labels = [
     for (final net in links.leaving(sheetId))
       if (net.endpoints.map((e) => pinAt[e.pin.id]).nonNulls.firstOrNull
           case final at?)
-        OffSheetLabel(
-          at: at,
-          name: net.displayName,
-          // Leaving this sheet for its parent: KiCad's hierarchical label.
-          // Only going down into a box on it: a plain one.
-          hierarchical:
-              inside != null &&
-              links.sheetsOf(net).any((s) => !inside.contains(s)),
-        ),
+        if (inside != null &&
+                links.sheetsOf(net).any((s) => !inside.contains(s))
+            case final up)
+          OffSheetLabel(
+            at: at,
+            // Leaving this sheet for its parent: KiCad's hierarchical label,
+            // named as the pin on this sheet's box is. Only going down into
+            // a box on it: a plain one.
+            name: up ? SheetBoxView.upwardName(here, net) : net.displayName,
+            hierarchical: up,
+          ),
   ];
   return (boxes, labels);
 }

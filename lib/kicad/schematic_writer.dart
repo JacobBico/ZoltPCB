@@ -156,17 +156,31 @@ class SchematicWriter {
           S.of('at', [box.box.left, box.box.bottom + 0.5842, 0]),
           SymbolWriter.effects(justify: 'left top'),
         ]),
-        for (var i = 0; i < box.pins.length; i++)
+        for (final pin in box.pins)
           SList([
             SAtom('pin'),
-            S.text(box.pins[i]),
-            SAtom('bidirectional'),
-            S.of('at', [box.pinAt(i).dx, box.pinAt(i).dy, 180]),
+            S.text(pin.name),
+            SAtom(pin.shape),
+            S.of('at', [
+              pin.at.dx,
+              pin.at.dy,
+              switch (pin.side) {
+                SheetSide.left => 180,
+                SheetSide.right => 0,
+                SheetSide.top => 90,
+                SheetSide.bottom => 270,
+              },
+            ]),
             SList([
               SAtom('uuid'),
-              S.text(derivedId('sheetpin:${box.sheet.id}:${box.pins[i]}')),
+              S.text(derivedId('sheetpin:${box.sheet.id}:${pin.name}')),
             ]),
-            SymbolWriter.effects(justify: 'left'),
+            SymbolWriter.effects(
+              justify: switch (pin.side) {
+                SheetSide.left || SheetSide.bottom => 'left',
+                SheetSide.right || SheetSide.top => 'right',
+              },
+            ),
           ]),
         S.list('instances', [
           SList([
@@ -189,16 +203,15 @@ class SchematicWriter {
   List<SList> _sheetLinks(SchematicDocument document, _SheetFile file) {
     final out = <SList>[];
     for (final box in file.boxes) {
-      for (var i = 0; i < box.pins.length; i++) {
-        final name = box.pins[i];
-        final net = file.netNamed[name];
+      for (final pin in box.pins) {
+        final net = pin.net;
         if (net == null) continue;
         out.add(
           _label(
             file.leavesUpwards(net) ? 'hierarchical_label' : 'label',
-            name,
-            box.pinAt(i),
-            derivedId('sheetlink:${box.sheet.id}:$name'),
+            file.nameOf(net),
+            pin.at,
+            derivedId('sheetlink:${box.sheet.id}:${pin.name}'),
           ),
         );
       }
@@ -413,26 +426,26 @@ class SchematicWriter {
       // says the same thing twice, and a label on a power net is not
       // something a schematic is ever drawn with.
       if (net.endpoints.any((e) => e.part.reference.startsWith('#PWR'))) {
-        // On a sheet with no symbol of its own for it, a global label
-        // stands in: KiCad joins it to the supply's symbols everywhere.
-        if (file != null &&
-            !net.endpoints.any(
-              (e) =>
-                  e.part.reference.startsWith('#PWR') &&
-                  connectivity.pinPositions.containsKey(e.pin.id),
-            )) {
-          for (final endpoint in connectivity.onePerPiece(net)) {
-            final at = connectivity.pinPositions[endpoint.pin.id];
-            if (at == null) continue;
-            labels.add(
-              _label(
-                'global_label',
-                _powerName(net),
-                at,
-                derivedId('power:${endpoint.node.id}'),
-              ),
-            );
+        // A piece of it drawn here with no symbol of its own — on a sheet
+        // with none, or apart from the symbol on this one — gets a global
+        // label instead, which KiCad joins to the supply's symbols.
+        for (final piece in connectivity.pieces(net)) {
+          final here = [
+            for (final e in piece)
+              if (connectivity.pinPositions.containsKey(e.pin.id)) e,
+          ];
+          if (here.isEmpty ||
+              here.any((e) => e.part.reference.startsWith('#PWR'))) {
+            continue;
           }
+          labels.add(
+            _label(
+              'global_label',
+              _powerName(net),
+              connectivity.pinPositions[here.first.pin.id]!,
+              derivedId('power:${here.first.node.id}'),
+            ),
+          );
         }
         continue;
       }
@@ -443,13 +456,12 @@ class SchematicWriter {
       // sheet — is what joins it across.
       if (file != null && file.leaves(net)) {
         final kind = file.leavesUpwards(net) ? 'hierarchical_label' : 'label';
-        final pieces = drawn
-            ? connectivity.onePerPiece(net).take(1)
-            : connectivity.onePerPiece(net);
-        for (final endpoint in pieces) {
+        // A label on each separate piece: wires join the rest of a piece,
+        // and only the name joins the pieces.
+        for (final endpoint in connectivity.onePerPiece(net)) {
           final at = connectivity.pinPositions[endpoint.pin.id];
           if (at == null) continue;
-          labels.add(_label(kind, name, at, endpoint.node.id));
+          labels.add(_label(kind, file.nameOf(net), at, endpoint.node.id));
         }
         continue;
       }
@@ -459,8 +471,19 @@ class SchematicWriter {
       // drawing under text saying nothing the wires do not already say. A
       // named net in separate pieces — a bus label on two chips — gets one
       // label per piece, which is what joins them.
-      final endpoints = drawn
-          ? (net.net.isNamed ? net.endpoints.take(1) : const <NetEndpoint>[])
+      //
+      // Drawn wires join a piece, not the net: a design brought from KiCad
+      // is often drawn in pieces joined by name alone, and one label would
+      // leave the others off it.
+      final pieces = drawn
+          ? connectivity.onePerPiece(net)
+          : const <NetEndpoint>[];
+      final Iterable<NetEndpoint> endpoints = drawn
+          ? (pieces.length > 1
+                ? pieces
+                : net.net.isNamed
+                ? net.endpoints.take(1)
+                : const <NetEndpoint>[])
           : net.net.isNamed
           ? connectivity.onePerPiece(net)
           : net.endpoints;
@@ -472,7 +495,7 @@ class SchematicWriter {
         // the net's wire at the point nearest it, since a KiCad label joins
         // only what its anchor touches.
         final placed = net.net.labelAt;
-        if (drawn && placed != null) {
+        if (drawn && pieces.length <= 1 && placed != null) {
           at = connectivity.nearestOnNet(net.id, placed) ?? at;
         }
         labels.add(
@@ -750,7 +773,8 @@ class _Connectivity {
   }
 
   /// One endpoint from each separately wired piece of [net].
-  List<NetEndpoint> onePerPiece(NetWithEndpoints net) {
+  /// The separate pieces of [net]: pins the wires join, together.
+  List<List<NetEndpoint>> pieces(NetWithEndpoints net) {
     final parent = <String, String>{};
     String find(String a) {
       var root = parent.putIfAbsent(a, () => a);
@@ -794,12 +818,18 @@ class _Connectivity {
         }
       }
     }
-    final seen = <String>{};
-    return [
-      for (final e in net.endpoints)
-        if (seen.add(find(e.pin.id))) e,
-    ];
+    final pieces = <String, List<NetEndpoint>>{};
+    for (final e in net.endpoints) {
+      (pieces[find(e.pin.id)] ??= []).add(e);
+    }
+    return [for (final piece in pieces.values) piece];
   }
+
+  /// One pin from each separate piece of [net]: the pins wires join are a
+  /// piece, and pieces are joined only by name.
+  List<NetEndpoint> onePerPiece(NetWithEndpoints net) => [
+    for (final piece in pieces(net)) piece.first,
+  ];
 
   /// Nets whose every pin is reachable through the wires that survived, and
   /// which therefore need no labels to hold themselves together.
@@ -958,31 +988,30 @@ class _Hierarchy {
 class _SheetFile {
   _SheetFile(this.hierarchy, this.sheetId)
     : inside = hierarchy.tree.subtree(sheetId),
+      sheet = hierarchy.tree.sheets.where((s) => s.id == sheetId).firstOrNull,
       boxes = [
         for (final child in hierarchy.tree.childrenOf(sheetId))
-          SheetBoxView(
-            sheet: child,
-            pins: [
-              for (final net in hierarchy.links.crossing(child.id))
-                net.displayName,
-            ],
+          SheetBoxView.of(
+            child,
+            crossing: hierarchy.links.crossing(child.id),
+            nets: hierarchy.links.nets,
           ),
-      ],
-      netNamed = {
-        for (final net in hierarchy.links.leaving(sheetId))
-          net.displayName: net,
-        for (final child in hierarchy.tree.childrenOf(sheetId))
-          for (final net in hierarchy.links.crossing(child.id))
-            net.displayName: net,
-      };
+      ];
 
   final _Hierarchy hierarchy;
   final String? sheetId;
   final Set<String?> inside;
   final List<SheetBoxView> boxes;
 
-  /// Every net this sheet names, by its name.
-  final Map<String, NetWithEndpoints> netNamed;
+  /// This sheet, or null for the top one.
+  final SchematicSheet? sheet;
+
+  /// What [net] is called on this sheet. One that leaves for the sheet
+  /// above takes the name of the pin carrying it on this sheet's box, and
+  /// every label for it here says the same, or KiCad would see two nets.
+  String nameOf(NetWithEndpoints net) => leavesUpwards(net)
+      ? SheetBoxView.upwardName(sheet, net)
+      : net.displayName;
 
   /// The top sheet keeps the project's uuid; each other file its own.
   String get fileUuid =>

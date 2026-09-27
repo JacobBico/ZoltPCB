@@ -39,6 +39,9 @@ class SheetConnections {
   final Map<String, String?> _sheetOfPin;
   final List<NetWithEndpoints> _nets;
 
+  /// Every net of the project.
+  List<NetWithEndpoints> get nets => _nets;
+
   /// A supply is joined by its symbol on every sheet, as in KiCad: it
   /// never needs a sheet pin.
   static bool isPower(NetWithEndpoints net) =>

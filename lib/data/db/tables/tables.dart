@@ -944,6 +944,10 @@ class SchematicSheets extends Table {
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime()();
 
+  /// The box's own pins, as JSON (see `SheetPin`); empty for a sheet whose
+  /// pins all follow from the nets crossing it.
+  TextColumn get pins => text().withDefault(const Constant(''))();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }

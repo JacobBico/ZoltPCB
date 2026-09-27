@@ -148,6 +148,7 @@ class KicadProjectImporter {
       warnings: warnings,
     );
     await _nameLinkedNets(project, links);
+    await _givePinsTheirNets(project, links);
     final netCount = (await nets.getNets(project.id)).length;
 
     var footprintCount = 0;
@@ -220,24 +221,38 @@ class KicadProjectImporter {
           parentId: sheetId,
           at: Offset(at?.number(1) ?? 0, at?.number(2) ?? 0),
         );
-        await repository.update(
-          added.copyWith(
-            fileName: fileName.isEmpty ? added.fileName : fileName,
-            box: Rect.fromLTWH(
-              at?.number(1) ?? 0,
-              at?.number(2) ?? 0,
-              size?.number(1) ?? 30.48,
-              size?.number(2) ?? 20.32,
-            ),
-          ),
+        final box = Rect.fromLTWH(
+          at?.number(1) ?? 0,
+          at?.number(2) ?? 0,
+          size?.number(1) ?? 30.48,
+          size?.number(2) ?? 20.32,
         );
+        // The box keeps its pins where they were drawn, whether or not the
+        // sheet's own file comes in: they are what the wires here end on.
+        final boxPins = [
+          for (final pin in node.children('pin'))
+            if (pin.atom(1) case final pinName?)
+              SheetPin.onEdge(
+                name: _unescape(pinName),
+                box: box,
+                point: _at(pin),
+                shape: pin.atom(2) ?? 'bidirectional',
+              ),
+        ];
+        final placed = added.copyWith(
+          fileName: fileName.isEmpty ? added.fileName : fileName,
+          box: box,
+          pins: boxPins,
+        );
+        await repository.update(placed);
+        links.boxes[added.id] = placed;
         links.pathOf[added.id] = '$pathName$name/';
         // Each pin of the box is joined, by a name only the import uses,
         // to the hierarchical label of the same name inside the sheet.
         for (final pin in node.children('pin')) {
           final pinName = pin.atom(1);
           if (pinName == null) continue;
-          pinPoints.add((links.key(added.id, pinName), _at(pin)));
+          pinPoints.add((links.key(added.id, _unescape(pinName)), _at(pin)));
         }
         children.add((
           added.id,
@@ -258,7 +273,9 @@ class KicadProjectImporter {
     );
 
     for (final (childId, _, fileName, childPath) in children) {
-      final text = files[fileName];
+      // A sheet in a folder of its own (`sch/power.kicad_sch`) is picked as
+      // plain `power.kicad_sch`.
+      final text = files[fileName] ?? files[fileName.split('/').last];
       if (text == null) {
         warnings.add(
           '$fileName was not picked, so the sheet ${links.pathOf[childId]} '
@@ -311,6 +328,7 @@ class KicadProjectImporter {
       if (name == null) continue;
       var wanted = name;
       if (name.startsWith(_SheetLinks.marker)) {
+        links.netOf[name] = net.net.id;
         final (sheetId, pin) = links.parse(name);
         wanted = links.preferred[name] ?? '${links.pathOf[sheetId] ?? '/'}$pin';
       }
@@ -319,6 +337,36 @@ class KicadProjectImporter {
       } else if (wanted != name) {
         await nets.renameNet(net.net.id, wanted);
       }
+    }
+  }
+
+  /// Each box's pins, told which net they carry: the one their joining
+  /// name ended up on, however it was renamed after.
+  Future<void> _givePinsTheirNets(Project project, _SheetLinks links) async {
+    final repository = sheets;
+    if (repository == null) return;
+    final byName = {
+      for (final net in await nets.getNets(project.id))
+        ?net.net.name: net.net.id,
+    };
+    for (final sheet in links.boxes.values) {
+      if (sheet.pins.isEmpty) continue;
+      String? netOf(SheetPin pin) {
+        final key = links.resolve(links.key(sheet.id, pin.name));
+        // Named by its joining name until renamed, or by a label on it
+        // that it was given instead.
+        return links.netOf[key] ??
+            switch (links.preferred[key]) {
+              final name? => byName[name],
+              null => null,
+            };
+      }
+
+      await repository.update(
+        sheet.copyWith(
+          pins: [for (final pin in sheet.pins) pin.withNet(netOf(pin))],
+        ),
+      );
     }
   }
 
@@ -546,23 +594,49 @@ class KicadProjectImporter {
     final labels = <(String, Offset)>[
       for (final kind in const ['label', 'global_label', 'hierarchical_label'])
         for (final label in root.children(kind))
-          if (label.atom(1) != null) (nameOf(kind, label.atom(1)!), _at(label)),
+          if (label.atom(1) != null)
+            (nameOf(kind, _unescape(label.atom(1)!)), _at(label)),
       for (final (key, at) in extraLabels) (links?.resolve(key) ?? key, at),
     ];
-    // An older symbol's hidden power pins join the net of their name, on
-    // every sheet, as if each carried a global label: a hidden VCC pin is
-    // on VCC. KiCad still reads them that way, so the import does too.
+    // The name as written on this sheet, for each label: on one sheet, a
+    // local label, a global one, a hierarchical one and a power symbol
+    // saying the same thing are one net, as KiCad has it, though the
+    // project knows a local one by the sheet's path (`/Battery/BAT-`).
+    final written = <String?>[
+      for (final kind in const ['label', 'global_label', 'hierarchical_label'])
+        for (final label in root.children(kind))
+          if (label.atom(1) != null) _unescape(label.atom(1)!),
+      for (final _ in extraLabels) null,
+    ];
+    // A power symbol's pin joins the net named by its value, on every
+    // sheet, like a global label: KiCad's rule since version 7, and the only
+    // one a KiCad 8 or 9 symbol follows, its pin having no name at all.
+    // GND's symbol with its value set to BAT- is on BAT-, not ground.
+    //
+    // An older symbol's hidden power pins join the net of their own name
+    // the same way: a hidden VCC pin is on VCC. KiCad still reads them so.
     for (final part in all) {
+      final value = _unescape(part.part.value.trim());
+      final powerSymbol =
+          part.part.reference.startsWith('#PWR') && value.isNotEmpty;
       for (final unit in part.units) {
         if (!unit.placed || unit.sheetId != sheetId) continue;
         final placement = Placement.ofUnit(unit);
         for (final pin in part.pins) {
           if (pin.unit != unit.unitNumber && pin.unit != 0) continue;
-          if (!pin.hidden || pin.electricalType != PinElectricalType.powerIn) {
+          final String name;
+          if (powerSymbol) {
+            name = value;
+          } else if (pin.hidden &&
+              pin.electricalType == PinElectricalType.powerIn &&
+              pin.name.isNotEmpty &&
+              pin.name != '~') {
+            name = pin.name;
+          } else {
             continue;
           }
-          if (pin.name.isEmpty || pin.name == '~') continue;
-          labels.add((pin.name, placement.apply(pin.x, pin.y)));
+          labels.add((name, placement.apply(pin.x, pin.y)));
+          written.add(name);
         }
       }
     }
@@ -641,7 +715,9 @@ class KicadProjectImporter {
       for (var m = l + 1; m < labels.length; m++) {
         // The same name, or the same spot: a sheet's pin and the label
         // written at it are one connection.
-        if (labels[m].$1 == text || _same(labels[m].$2, at)) {
+        if (labels[m].$1 == text ||
+            _same(labels[m].$2, at) ||
+            (written[l] != null && written[l] == written[m])) {
           union(labelBase + l, labelBase + m);
         }
       }
@@ -655,6 +731,27 @@ class KicadProjectImporter {
     }
     for (var l = 0; l < labels.length; l++) {
       (namesOf[find(labelBase + l)] ??= []).add(labels[l].$1);
+    }
+
+    // A wire on this sheet between the pins of two sheet boxes, with no
+    // part of its own on it, still joins them: their joining names become
+    // one, though no net here holds them.
+    if (links != null) {
+      for (final entry in namesOf.entries) {
+        if (pinsOf.containsKey(entry.key)) continue;
+        final joins = {
+          for (final n in entry.value)
+            if (n.startsWith(_SheetLinks.marker)) links.resolve(n),
+        }.toList();
+        if (joins.isEmpty) continue;
+        for (final other in joins.skip(1)) {
+          if (other != joins.first) links.alias[other] = joins.first;
+        }
+        final plain = entry.value
+            .where((n) => !n.startsWith(_SheetLinks.marker))
+            .firstOrNull;
+        if (plain != null) links.preferred[joins.first] ??= plain;
+      }
     }
 
     for (final entry in pinsOf.entries) {
@@ -1361,6 +1458,30 @@ class KicadProjectImporter {
 
   static Offset _at(SList node) => _xy(node.child('at'));
 
+  /// A name as KiCad means it: characters it cannot keep as they are in a
+  /// name are written as `{slash}`, `{colon}` and so on, and a label saying
+  /// `VPP{slash}MCLR` is the same net as one saying `VPP/MCLR`.
+  static String _unescape(String text) {
+    if (!text.contains('{')) return text;
+    const escapes = {
+      '{slash}': '/',
+      '{backslash}': r'\',
+      '{colon}': ':',
+      '{lt}': '<',
+      '{gt}': '>',
+      '{dblquote}': '"',
+      '{quote}': "'",
+      '{tab}': '\t',
+      '{return}': '\n',
+      '{brace}': '{',
+    };
+    var out = text;
+    for (final e in escapes.entries) {
+      out = out.replaceAll(e.key, e.value);
+    }
+    return out;
+  }
+
   static bool _same(Offset a, Offset b) => (a - b).distance < _near;
 
   static bool _onSegment(Offset p, Offset a, Offset b) {
@@ -1454,6 +1575,12 @@ class _SheetLinks {
 
   /// Sheet files already brought in, to notice one used twice.
   final used = <String>{};
+
+  /// Every sheet brought in, as its box was placed.
+  final boxes = <String, SchematicSheet>{};
+
+  /// The net each joining name ended up on, before it was renamed.
+  final netOf = <String, String>{};
 
   String key(String sheetId, String pin) => '$marker$sheetId$marker$pin';
 
