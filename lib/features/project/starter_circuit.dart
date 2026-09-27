@@ -55,6 +55,16 @@ const _resistors = ['Device:R', 'Device:R_Small'];
 const _crystals = ['Device:Crystal', 'Device:Crystal_Small'];
 const _buttons = ['Switch:SW_Push', 'Switch:SW_Push_Small'];
 
+/// Footprints for the generic parts, whose KiCad symbols name none: without
+/// them the starter would reach the board as nine parts to choose a
+/// footprint for, one at a time. Sizes a hand can still solder; a symbol
+/// that names its own footprint keeps it.
+const _smallCapFootprint = 'Capacitor_SMD:C_0603_1608Metric';
+const _bulkCapFootprint = 'Capacitor_SMD:C_0805_2012Metric';
+const _resistorFootprint = 'Resistor_SMD:R_0603_1608Metric';
+const _crystalFootprint = 'Crystal:Crystal_SMD_HC49-SD';
+const _buttonFootprint = 'Button_Switch_SMD:SW_SPST_TL3342';
+
 /// Places [mcuSymbol] at [at] with what it needs to run.
 ///
 /// Ground pins all go on one net, and rail pins on another, rather than a
@@ -106,11 +116,15 @@ Future<StarterResult> buildStarterCircuit({
     SymbolDefinition symbol,
     String value,
     Offset position, {
+    required String footprint,
     int rotation = 0,
   }) async {
     final part = await parts.addPart(
       projectId,
-      symbol.toNewPartSpec(value: value),
+      symbol.toNewPartSpec(
+        value: value,
+        footprint: symbol.footprint.trim().isEmpty ? footprint : null,
+      ),
     );
     await parts.updateUnitPlacement(
       part.units.first.copyWith(
@@ -203,16 +217,27 @@ Future<StarterResult> buildStarterCircuit({
       for (final (number, value) in decoupled) {
         final pin = mcuPin(number);
         if (pin == null) continue;
-        final cap = await place(capacitor, value, Offset(x, row));
+        final cap = await place(
+          capacitor,
+          value,
+          Offset(x, row),
+          footprint: _smallCapFootprint,
+        );
         final (top, bottom) = ends(cap);
         await join(top, pin);
         await toGround(cap, bottom);
-        x += 7.62;
+        // Room for "C1 100nF" beside each one before the next.
+        x += _labelledPitch;
       }
       // One bulk capacitor on the rail, the way every reference design has.
       final rail = railAnchor;
       if (rail != null) {
-        final cap = await place(capacitor, '10uF', Offset(x, row));
+        final cap = await place(
+          capacitor,
+          '10uF',
+          Offset(x, row),
+          footprint: _bulkCapFootprint,
+        );
         final (top, bottom) = ends(cap);
         await nets.connectPins(rail, top.id);
         await toGround(cap, bottom);
@@ -231,21 +256,31 @@ Future<StarterResult> buildStarterCircuit({
       final outAt = _pinGeometry(mcu, oscOut);
       // On whichever side of the chip the oscillator pins come out of.
       final leftSide = inAt.exit.dx + outAt.exit.dx <= 0;
+      // Clear of the chip's own name and value, which sit beside its body.
       final x = leftSide
-          ? math.min(inAt.position.dx, outAt.position.dx) - 17.78
-          : math.max(inAt.position.dx, outAt.position.dx) + 17.78;
+          ? math.min(inAt.position.dx, outAt.position.dx) - 27.94
+          : math.max(inAt.position.dx, outAt.position.dx) + 27.94;
       final y = (inAt.position.dy + outAt.position.dy) / 2;
 
-      final part = await place(crystal, options.crystalValue, Offset(x, y));
+      final part = await place(
+        crystal,
+        options.crystalValue,
+        Offset(x, y),
+        footprint: _crystalFootprint,
+      );
       final (left, right) = ends(part, horizontal: true);
       await join(left, oscIn);
       await join(right, oscOut);
       for (final end in [left, right]) {
         final position = _pinGeometry(part, end).position;
+        // Each out past its own end of the crystal, so their labels have
+        // room between them.
+        final outward = end == left ? -5.08 : 5.08;
         final cap = await place(
           capacitor,
           '20pF',
-          Offset(position.dx, y + 10.16),
+          Offset(position.dx + outward, y + 10.16),
+          footprint: _smallCapFootprint,
         );
         final (top, bottom) = ends(cap);
         await join(top, end);
@@ -268,41 +303,71 @@ Future<StarterResult> buildStarterCircuit({
     var x = bounds.left;
 
     if (options.reset && resetPin != null) {
-      final push = await place(button!, 'RESET', Offset(x, row));
+      final push = await place(
+        button!,
+        'RESET',
+        Offset(x, row),
+        footprint: _buttonFootprint,
+      );
       final (left, right) = ends(push, horizontal: true);
       await join(left, resetPin);
       await toGround(push, right);
 
-      final pullUp = await place(resistor!, '10k', Offset(x + 12.7, row));
+      final pullUp = await place(
+        resistor!,
+        '10k',
+        Offset(x + _labelledPitch, row),
+        footprint: _resistorFootprint,
+      );
       final (top, bottom) = ends(pullUp);
       await join(bottom, resetPin);
       await toRail(pullUp, top);
 
       if (capacitor != null) {
-        final cap = await place(capacitor, '100nF', Offset(x + 20.32, row));
+        final cap = await place(
+          capacitor,
+          '100nF',
+          Offset(x + 2 * _labelledPitch, row),
+          footprint: _smallCapFootprint,
+        );
         final (capTop, capBottom) = ends(cap);
         await join(capTop, resetPin);
         await toGround(cap, capBottom);
       }
-      x += 30.48;
+      x += 3 * _labelledPitch;
     }
 
     if (options.boot && bootPin != null) {
-      final push = await place(button!, 'BOOT', Offset(x, row));
+      final push = await place(
+        button!,
+        'BOOT',
+        Offset(x, row),
+        footprint: _buttonFootprint,
+      );
       final (left, right) = ends(push, horizontal: true);
       await join(left, bootPin);
 
       if (essentials.bootPolarity == BootPolarity.activeHigh) {
         // Pressed pulls it up; the rest of the time it is held down.
         await toRail(push, right);
-        final pullDown = await place(resistor!, '10k', Offset(x + 12.7, row));
+        final pullDown = await place(
+          resistor!,
+          '10k',
+          Offset(x + _labelledPitch, row),
+          footprint: _resistorFootprint,
+        );
         final (top, bottom) = ends(pullDown);
         await join(top, bootPin);
         await toGround(pullDown, bottom);
       } else {
         await toGround(push, right);
         if (essentials.bootNeedsPullUp) {
-          final pullUp = await place(resistor!, '10k', Offset(x + 12.7, row));
+          final pullUp = await place(
+            resistor!,
+            '10k',
+            Offset(x + _labelledPitch, row),
+            footprint: _resistorFootprint,
+          );
           final (top, bottom) = ends(pullUp);
           await join(bottom, bootPin);
           await toRail(pullUp, top);
@@ -319,6 +384,10 @@ Future<StarterResult> buildStarterCircuit({
 }
 
 double _onGrid(double value) => (value / 1.27).round() * 1.27;
+
+/// Between two-pin parts in a row: the part, and its name and value
+/// beside it, with a gap before the next.
+const _labelledPitch = 12.7;
 
 /// Where [pin] is on the sheet and which way a wire leaves it.
 ({Offset position, Offset exit}) _pinGeometry(

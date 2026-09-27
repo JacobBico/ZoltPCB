@@ -441,10 +441,81 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
   SchematicViewport? _gestureStartViewport;
   Offset _gestureStartFocal = Offset.zero;
 
+  /// A zoom from the keyboard, still easing in.
+  Timer? _zoomTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_onKey);
+  }
+
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
     _hintTimer?.cancel();
+    _zoomTimer?.cancel();
     super.dispose();
+  }
+
+  /// With a keyboard, `+` and `-` zoom about the crosshair: the one thing a
+  /// pinch does that a Bluetooth keyboard or a Chromebook has no finger for.
+  /// Nothing on screen changes for it, so the editor stays as it is.
+  bool _onKey(KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
+    if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) {
+      return false;
+    }
+    // Not while a text field has the keys.
+    final focused = FocusManager.instance.primaryFocus?.context;
+    if (focused?.findAncestorStateOfType<EditableTextState>() != null) {
+      return false;
+    }
+    final key = event.logicalKey;
+    final double factor;
+    if (key == LogicalKeyboardKey.equal ||
+        key == LogicalKeyboardKey.add ||
+        key == LogicalKeyboardKey.numpadAdd) {
+      factor = 1.5;
+    } else if (key == LogicalKeyboardKey.minus ||
+        key == LogicalKeyboardKey.numpadSubtract) {
+      factor = 1 / 1.5;
+    } else {
+      return false;
+    }
+    _zoomBy(factor);
+    return true;
+  }
+
+  /// Zooms by [factor] about the crosshair, eased over a moment rather than
+  /// jumping, so what was under the sight stays under it throughout.
+  void _zoomBy(double factor) {
+    if (_viewport == null || _canvasSize.isEmpty) return;
+    _zoomTimer?.cancel();
+    const steps = 12;
+    var done = 0;
+    var applied = 1.0;
+    _zoomTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
+      final viewport = _viewport;
+      if (!mounted || viewport == null) {
+        timer.cancel();
+        return;
+      }
+      done++;
+      final t = done / steps;
+      final eased = 1 - math.pow(1 - t, 3).toDouble();
+      final target = math.pow(factor, eased).toDouble();
+      final step = target / applied;
+      applied = target;
+      final centre = Offset(_canvasSize.width / 2, _canvasSize.height / 2);
+      final next = viewport.zoomedAbout(centre, step);
+      if (next.pixelsPerMm < 0.5 || next.pixelsPerMm > 200) {
+        timer.cancel();
+        return;
+      }
+      setState(() => _viewport = next);
+      if (done >= steps) timer.cancel();
+    });
   }
 
   @override

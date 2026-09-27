@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- As in values/, plus: no system focus outline round the whole app.
+         Android draws one on the focused view once a hardware key is
+         pressed, which for a Flutter app is a green frame round the entire
+         screen; Flutter draws its own focus where it is wanted. -->
+    <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">?android:colorBackground</item>
+        <item name="android:defaultFocusHighlightEnabled">false</item>
+    </style>
+</resources>

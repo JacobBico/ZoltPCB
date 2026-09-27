@@ -572,6 +572,9 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   /// Adds a microcontroller with what it needs to run round it: decoupling,
   /// crystal, reset and boot buttons, after showing what was found.
   Future<void> _addStarter(SymbolIndexEntry entry) async {
+    // The search is done with: without this, closing the dialog hands focus
+    // back to the search box and the keyboard comes up over the new circuit.
+    FocusManager.instance.primaryFocus?.unfocus();
     final libraries = ref.read(symbolLibraryRepositoryProvider);
     final symbol = await libraries.loadSymbol(entry.libId);
     if (symbol == null) {

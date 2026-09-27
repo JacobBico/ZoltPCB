@@ -178,6 +178,48 @@ void main() {
     }
   });
 
+  test(
+    'the generic parts come with footprints, spaced for their labels',
+    () async {
+      await build(
+        options: const StarterOptions(
+          supplyLibId: 'power:VCC',
+          reset: false,
+          boot: false,
+        ),
+      );
+      final all = await parts.getPartsWithDetails(project.id);
+      final caps = [
+        for (final p in all)
+          if (p.part.libId == 'Device:C') p,
+      ];
+      for (final cap in caps) {
+        expect(
+          cap.part.footprint,
+          cap.part.value == '10uF'
+              ? 'Capacitor_SMD:C_0805_2012Metric'
+              : 'Capacitor_SMD:C_0603_1608Metric',
+          reason: cap.part.reference,
+        );
+      }
+      final crystal = all.firstWhere((p) => p.part.libId == 'Device:Crystal');
+      expect(crystal.part.footprint, 'Crystal:Crystal_SMD_HC49-SD');
+
+      // Parts sharing a row sit far enough apart for "C1 100nF" to fit.
+      final rows = <double, List<double>>{};
+      for (final cap in caps) {
+        final unit = cap.units.first;
+        (rows[unit.y] ??= []).add(unit.x);
+      }
+      for (final xs in rows.values) {
+        xs.sort();
+        for (var i = 1; i < xs.length; i++) {
+          expect(xs[i] - xs[i - 1], greaterThanOrEqualTo(10));
+        }
+      }
+    },
+  );
+
   test('the crystal sits across the oscillator pins with load caps', () async {
     await build();
     final all = await netsByName();

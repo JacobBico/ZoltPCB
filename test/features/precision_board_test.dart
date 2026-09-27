@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zolt/data/libraries/library_file_storage.dart';
@@ -627,6 +628,37 @@ void main() {
     final placed = await boards.getFootprints(project.id);
     final moved = placed.firstWhere((p) => (p.y - 35).abs() > 1);
     expect((moved.y - 46).abs(), lessThanOrEqualTo(0.5));
+  });
+
+  testAppWithStorage('+ and - on a keyboard zoom about the crosshair', (
+    tester,
+    db,
+    storage,
+  ) async {
+    final footprintStorage = InMemoryLibraryStorageFor();
+    final (project, _) = await _board(db, footprintStorage);
+    await pumpApp(
+      tester,
+      Scaffold(body: PrecisionBoardPanel(project: project)),
+      database: db,
+      footprintStorage: footprintStorage,
+    );
+    Offset aimed() {
+      final rect = tester.getRect(find.byType(PrecisionBoardPanel));
+      return _painter(tester).viewport.toSheet(rect.size.center(Offset.zero));
+    }
+
+    final before = _painter(tester).viewport.pixelsPerMm;
+    final sight = aimed();
+    await tester.sendKeyEvent(LogicalKeyboardKey.equal);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(_painter(tester).viewport.pixelsPerMm, closeTo(before * 1.5, 0.01));
+    // What was under the crosshair still is.
+    expect((aimed() - sight).distance, lessThan(0.01));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.minus);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(_painter(tester).viewport.pixelsPerMm, closeTo(before, 0.01));
   });
 
   group('an area you sweep', () {
