@@ -7,6 +7,7 @@ import 'package:zolt/data/repositories/symbol_library_repository.dart';
 import 'package:zolt/features/home/home_screen.dart';
 import 'package:zolt/features/home/whats_new.dart';
 import 'package:zolt/features/learn/learn_library.dart';
+import 'package:zolt/features/learn/learn_screen.dart';
 import 'package:zolt/features/learn/markdown_view.dart';
 import 'package:zolt/features/project/project_screen.dart';
 
@@ -125,6 +126,35 @@ void main() {
         findsOneWidget,
       );
     });
+  });
+
+  testAppWithStorage('a topic lists its notes numbered, with reading times', (
+    tester,
+    db,
+    storage,
+  ) async {
+    // Read for real, outside the test's fake clock, and handed in.
+    final library = (await tester.runAsync(
+      () => LearnLibrary.load(rootBundle),
+    ))!;
+    await pumpApp(
+      tester,
+      const LearnCategoryScreen(categoryId: 'capacitors'),
+      database: db,
+      storage: storage,
+      overrides: [learnLibraryProvider.overrideWith((ref) => library)],
+    );
+    await settleApp(tester);
+    for (final n in ['1', '2', '3']) {
+      expect(find.text(n), findsOneWidget);
+    }
+    expect(find.textContaining('min read'), findsNWidgets(3));
+    expect(find.text('3 NOTES'), findsOneWidget);
+
+    // Tapping the third opens it.
+    await tester.tap(find.text('3'));
+    await settleApp(tester);
+    expect(find.text('Decoupling'), findsWidgets);
   });
 
   testAppWithStorage(

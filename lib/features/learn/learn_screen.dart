@@ -273,19 +273,29 @@ class _LearnCategoryScreenState extends ConsumerState<LearnCategoryScreen> {
                       ),
                     ),
                     child: ListView(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
                       children: [
-                        for (final article in articles)
-                          ListTile(
-                            key: ValueKey('learn-article-${article.path}'),
-                            dense: true,
-                            selected: article.path == open?.path,
-                            selectedTileColor: KicadPalette.surfaceRaised,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(4),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(10, 0, 8, 8),
+                          child: Text(
+                            '${articles.length} '
+                            '${articles.length == 1 ? 'NOTE' : 'NOTES'}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              letterSpacing: 1.2,
+                              color: KicadPalette.textSecondary,
                             ),
-                            title: Text(article.title),
-                            onTap: () => _read(article),
+                          ),
+                        ),
+                        for (var i = 0; i < articles.length; i++)
+                          _NoteStep(
+                            key: ValueKey('learn-article-${articles[i].path}'),
+                            number: i + 1,
+                            article: articles[i],
+                            selected: articles[i].path == open?.path,
+                            first: i == 0,
+                            last: i == articles.length - 1,
+                            onTap: () => _read(articles[i]),
                           ),
                       ],
                     ),
@@ -311,6 +321,135 @@ class _LearnCategoryScreenState extends ConsumerState<LearnCategoryScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// One note in a topic's list: numbered, and joined to the ones either side
+/// like the steps of a lesson, with how long it takes to read.
+class _NoteStep extends StatelessWidget {
+  const _NoteStep({
+    super.key,
+    required this.number,
+    required this.article,
+    required this.selected,
+    required this.first,
+    required this.last,
+    required this.onTap,
+  });
+
+  final int number;
+  final LearnArticle article;
+  final bool selected;
+  final bool first;
+  final bool last;
+  final VoidCallback onTap;
+
+  /// At a steady 200 words a minute, and never under one.
+  String get _readingTime {
+    final words = RegExp(r'\S+').allMatches(article.text).length;
+    return '${(words / 200).ceil().clamp(1, 99)} min read';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
+    final line = KicadPalette.border;
+    Widget rail({required bool visible}) => Expanded(
+      child: Container(width: 2, color: visible ? line : Colors.transparent),
+    );
+
+    return Material(
+      color: selected ? KicadPalette.surfaceRaised : Colors.transparent,
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: onTap,
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 26,
+                child: Column(
+                  children: [
+                    SizedBox(
+                      height: 10,
+                      child: Center(
+                        child: Container(
+                          width: 2,
+                          color: first ? Colors.transparent : line,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      width: 26,
+                      height: 26,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: selected ? accent : KicadPalette.surface,
+                        border: Border.all(
+                          color: selected ? accent : KicadPalette.borderStrong,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Text(
+                        '$number',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: selected
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : KicadPalette.textSecondary,
+                        ),
+                      ),
+                    ),
+                    rail(visible: !last),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 10, 8, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        article.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.3,
+                          fontWeight: selected
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          color: selected
+                              ? KicadPalette.textPrimary
+                              : KicadPalette.textPrimary.withValues(
+                                  alpha: 0.85,
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        _readingTime,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: selected ? accent : KicadPalette.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
