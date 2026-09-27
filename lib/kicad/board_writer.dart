@@ -5,6 +5,7 @@ import '../core/util/ids.dart';
 import '../domain/export/board_document.dart';
 import '../domain/pcb/pcb.dart';
 import '../fab/silk_fonts.dart';
+import 'footprint_flip.dart';
 import 'sexpr/sexpr.dart';
 import 'sexpr/sexpr_writer.dart';
 
@@ -398,6 +399,11 @@ class BoardWriter {
   ) {
     final ref = footprint.ref;
     final side = ref.flipped ? 'B.Cu' : 'F.Cu';
+    // On the back, KiCad wants the footprint turned over top to bottom and
+    // half a turn less than the app keeps it: the same place on the board.
+    final fileRotation = ref.flipped
+        ? normalisedDegrees(ref.rotation - 180)
+        : ref.rotation;
 
     // Everything the library said, minus what placement decides and what
     // only belongs in a standalone `.kicad_mod`. Skipping two items rather
@@ -413,7 +419,11 @@ class BoardWriter {
           (replaced.contains(item.head) || fileOnly.contains(item.head))) {
         continue;
       }
-      body.add(ref.flipped && item is SList ? _flipToBack(item) : item);
+      body.add(
+        ref.flipped && item is SList
+            ? _flipToBack(flipFootprintGeometry(item))
+            : item,
+      );
     }
 
     final placed = <SExpr>[
@@ -421,7 +431,7 @@ class BoardWriter {
       S.text(ref.libId),
       SList([SAtom('layer'), S.text(side)]),
       SList([SAtom('uuid'), S.text(derivedId('footprint:${ref.id}'))]),
-      S.of('at', [ref.x, ref.y, ref.rotation]),
+      S.of('at', [ref.x, ref.y, fileRotation]),
       if (ref.locked) S.of('locked', [SAtom('yes')]),
     ];
 
@@ -441,8 +451,13 @@ class BoardWriter {
       }
       if (item is SList && item.head == 'pad') {
         placed.add(
-          _withNet(_rotatedPad(item, ref.rotation), footprint, numbers),
+          _withNet(_rotatedPad(item, fileRotation), footprint, numbers),
         );
+        continue;
+      }
+      // KiCad keeps a footprint's own text at its angle on the board.
+      if (item is SList && item.head == 'fp_text') {
+        placed.add(_rotatedPad(item, fileRotation));
         continue;
       }
       placed.add(item);
@@ -514,17 +529,32 @@ class BoardWriter {
     final offset = ref.labelOffset;
     final items = <SExpr>[];
     for (final item in property.items) {
-      if (item is SList && item.head == 'at' && offset != null) {
-        // The angle is kept: KiCad writes it already combined with the
-        // footprint's own rotation, and the position is all that moved.
-        final angle = item.items.length > 3 ? item.items[3] : SAtom('0');
+      if (item is SList &&
+          item.head == 'at' &&
+          (offset != null || ref.labelAngle != null)) {
+        // KiCad writes the angle already combined with the footprint's own
+        // rotation. One brought in from KiCad goes back the way it came;
+        // otherwise the library's is kept, and only the position moved.
+        // On the back, the offset is turned over with the rest of the
+        // footprint, and the angle is taken from KiCad's rotation for it.
+        final turned = ref.labelAngle;
+        final angle = turned != null
+            ? SAtom(
+                _number(
+                  normalisedDegrees(
+                    ref.rotation + turned - (ref.flipped ? 180 : 0),
+                  ),
+                ),
+              )
+            : item.items.length > 3
+            ? item.items[3]
+            : SAtom('0');
+        final dx = offset?.dx ?? item.number(1) ?? 0;
+        final dy = offset != null
+            ? (ref.flipped ? -offset.dy : offset.dy)
+            : item.number(2) ?? 0;
         items.add(
-          SList([
-            SAtom('at'),
-            SAtom(_number(offset.dx)),
-            SAtom(_number(offset.dy)),
-            angle,
-          ]),
+          SList([SAtom('at'), SAtom(_number(dx)), SAtom(_number(dy)), angle]),
         );
         continue;
       }

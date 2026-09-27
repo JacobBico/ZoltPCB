@@ -9194,6 +9194,17 @@ class $BoardFootprintsTable extends BoardFootprints
     requiredDuringInsert: false,
     defaultValue: const Constant(1.0),
   );
+  static const VerificationMeta _labelAngleMeta = const VerificationMeta(
+    'labelAngle',
+  );
+  @override
+  late final GeneratedColumn<double> labelAngle = GeneratedColumn<double>(
+    'label_angle',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _labelHiddenMeta = const VerificationMeta(
     'labelHidden',
   );
@@ -9236,6 +9247,7 @@ class $BoardFootprintsTable extends BoardFootprints
     labelX,
     labelY,
     labelSize,
+    labelAngle,
     labelHidden,
     locked,
   ];
@@ -9322,6 +9334,12 @@ class $BoardFootprintsTable extends BoardFootprints
         labelSize.isAcceptableOrUnknown(data['label_size']!, _labelSizeMeta),
       );
     }
+    if (data.containsKey('label_angle')) {
+      context.handle(
+        _labelAngleMeta,
+        labelAngle.isAcceptableOrUnknown(data['label_angle']!, _labelAngleMeta),
+      );
+    }
     if (data.containsKey('label_hidden')) {
       context.handle(
         _labelHiddenMeta,
@@ -9398,6 +9416,10 @@ class $BoardFootprintsTable extends BoardFootprints
         DriftSqlType.double,
         data['${effectivePrefix}label_size'],
       )!,
+      labelAngle: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}label_angle'],
+      ),
       labelHidden: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}label_hidden'],
@@ -9441,6 +9463,11 @@ class BoardFootprintRow extends DataClass
   /// Designator text height, in millimetres.
   final double labelSize;
 
+  /// Which way the designator reads, in degrees from the footprint's own
+  /// direction, so it turns with the part. Null reads level, as a label
+  /// placed here always has.
+  final double? labelAngle;
+
   /// Taken off the silkscreen. The part keeps its reference; the board just
   /// does not print it.
   final bool labelHidden;
@@ -9460,6 +9487,7 @@ class BoardFootprintRow extends DataClass
     this.labelX,
     this.labelY,
     required this.labelSize,
+    this.labelAngle,
     required this.labelHidden,
     required this.locked,
   });
@@ -9482,6 +9510,9 @@ class BoardFootprintRow extends DataClass
       map['label_y'] = Variable<double>(labelY);
     }
     map['label_size'] = Variable<double>(labelSize);
+    if (!nullToAbsent || labelAngle != null) {
+      map['label_angle'] = Variable<double>(labelAngle);
+    }
     map['label_hidden'] = Variable<bool>(labelHidden);
     map['locked'] = Variable<bool>(locked);
     return map;
@@ -9505,6 +9536,9 @@ class BoardFootprintRow extends DataClass
           ? const Value.absent()
           : Value(labelY),
       labelSize: Value(labelSize),
+      labelAngle: labelAngle == null && nullToAbsent
+          ? const Value.absent()
+          : Value(labelAngle),
       labelHidden: Value(labelHidden),
       locked: Value(locked),
     );
@@ -9528,6 +9562,7 @@ class BoardFootprintRow extends DataClass
       labelX: serializer.fromJson<double?>(json['labelX']),
       labelY: serializer.fromJson<double?>(json['labelY']),
       labelSize: serializer.fromJson<double>(json['labelSize']),
+      labelAngle: serializer.fromJson<double?>(json['labelAngle']),
       labelHidden: serializer.fromJson<bool>(json['labelHidden']),
       locked: serializer.fromJson<bool>(json['locked']),
     );
@@ -9548,6 +9583,7 @@ class BoardFootprintRow extends DataClass
       'labelX': serializer.toJson<double?>(labelX),
       'labelY': serializer.toJson<double?>(labelY),
       'labelSize': serializer.toJson<double>(labelSize),
+      'labelAngle': serializer.toJson<double?>(labelAngle),
       'labelHidden': serializer.toJson<bool>(labelHidden),
       'locked': serializer.toJson<bool>(locked),
     };
@@ -9566,6 +9602,7 @@ class BoardFootprintRow extends DataClass
     Value<double?> labelX = const Value.absent(),
     Value<double?> labelY = const Value.absent(),
     double? labelSize,
+    Value<double?> labelAngle = const Value.absent(),
     bool? labelHidden,
     bool? locked,
   }) => BoardFootprintRow(
@@ -9581,6 +9618,7 @@ class BoardFootprintRow extends DataClass
     labelX: labelX.present ? labelX.value : this.labelX,
     labelY: labelY.present ? labelY.value : this.labelY,
     labelSize: labelSize ?? this.labelSize,
+    labelAngle: labelAngle.present ? labelAngle.value : this.labelAngle,
     labelHidden: labelHidden ?? this.labelHidden,
     locked: locked ?? this.locked,
   );
@@ -9598,6 +9636,9 @@ class BoardFootprintRow extends DataClass
       labelX: data.labelX.present ? data.labelX.value : this.labelX,
       labelY: data.labelY.present ? data.labelY.value : this.labelY,
       labelSize: data.labelSize.present ? data.labelSize.value : this.labelSize,
+      labelAngle: data.labelAngle.present
+          ? data.labelAngle.value
+          : this.labelAngle,
       labelHidden: data.labelHidden.present
           ? data.labelHidden.value
           : this.labelHidden,
@@ -9620,6 +9661,7 @@ class BoardFootprintRow extends DataClass
           ..write('labelX: $labelX, ')
           ..write('labelY: $labelY, ')
           ..write('labelSize: $labelSize, ')
+          ..write('labelAngle: $labelAngle, ')
           ..write('labelHidden: $labelHidden, ')
           ..write('locked: $locked')
           ..write(')'))
@@ -9640,6 +9682,7 @@ class BoardFootprintRow extends DataClass
     labelX,
     labelY,
     labelSize,
+    labelAngle,
     labelHidden,
     locked,
   );
@@ -9659,6 +9702,7 @@ class BoardFootprintRow extends DataClass
           other.labelX == this.labelX &&
           other.labelY == this.labelY &&
           other.labelSize == this.labelSize &&
+          other.labelAngle == this.labelAngle &&
           other.labelHidden == this.labelHidden &&
           other.locked == this.locked);
 }
@@ -9676,6 +9720,7 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
   final Value<double?> labelX;
   final Value<double?> labelY;
   final Value<double> labelSize;
+  final Value<double?> labelAngle;
   final Value<bool> labelHidden;
   final Value<bool> locked;
   final Value<int> rowid;
@@ -9692,6 +9737,7 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
     this.labelX = const Value.absent(),
     this.labelY = const Value.absent(),
     this.labelSize = const Value.absent(),
+    this.labelAngle = const Value.absent(),
     this.labelHidden = const Value.absent(),
     this.locked = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -9709,6 +9755,7 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
     this.labelX = const Value.absent(),
     this.labelY = const Value.absent(),
     this.labelSize = const Value.absent(),
+    this.labelAngle = const Value.absent(),
     this.labelHidden = const Value.absent(),
     this.locked = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -9729,6 +9776,7 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
     Expression<double>? labelX,
     Expression<double>? labelY,
     Expression<double>? labelSize,
+    Expression<double>? labelAngle,
     Expression<bool>? labelHidden,
     Expression<bool>? locked,
     Expression<int>? rowid,
@@ -9746,6 +9794,7 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
       if (labelX != null) 'label_x': labelX,
       if (labelY != null) 'label_y': labelY,
       if (labelSize != null) 'label_size': labelSize,
+      if (labelAngle != null) 'label_angle': labelAngle,
       if (labelHidden != null) 'label_hidden': labelHidden,
       if (locked != null) 'locked': locked,
       if (rowid != null) 'rowid': rowid,
@@ -9765,6 +9814,7 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
     Value<double?>? labelX,
     Value<double?>? labelY,
     Value<double>? labelSize,
+    Value<double?>? labelAngle,
     Value<bool>? labelHidden,
     Value<bool>? locked,
     Value<int>? rowid,
@@ -9782,6 +9832,7 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
       labelX: labelX ?? this.labelX,
       labelY: labelY ?? this.labelY,
       labelSize: labelSize ?? this.labelSize,
+      labelAngle: labelAngle ?? this.labelAngle,
       labelHidden: labelHidden ?? this.labelHidden,
       locked: locked ?? this.locked,
       rowid: rowid ?? this.rowid,
@@ -9827,6 +9878,9 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
     if (labelSize.present) {
       map['label_size'] = Variable<double>(labelSize.value);
     }
+    if (labelAngle.present) {
+      map['label_angle'] = Variable<double>(labelAngle.value);
+    }
     if (labelHidden.present) {
       map['label_hidden'] = Variable<bool>(labelHidden.value);
     }
@@ -9854,6 +9908,7 @@ class BoardFootprintsCompanion extends UpdateCompanion<BoardFootprintRow> {
           ..write('labelX: $labelX, ')
           ..write('labelY: $labelY, ')
           ..write('labelSize: $labelSize, ')
+          ..write('labelAngle: $labelAngle, ')
           ..write('labelHidden: $labelHidden, ')
           ..write('locked: $locked, ')
           ..write('rowid: $rowid')
@@ -28446,6 +28501,7 @@ typedef $$BoardFootprintsTableCreateCompanionBuilder =
       Value<double?> labelX,
       Value<double?> labelY,
       Value<double> labelSize,
+      Value<double?> labelAngle,
       Value<bool> labelHidden,
       Value<bool> locked,
       Value<int> rowid,
@@ -28464,6 +28520,7 @@ typedef $$BoardFootprintsTableUpdateCompanionBuilder =
       Value<double?> labelX,
       Value<double?> labelY,
       Value<double> labelSize,
+      Value<double?> labelAngle,
       Value<bool> labelHidden,
       Value<bool> locked,
       Value<int> rowid,
@@ -28576,6 +28633,11 @@ class $$BoardFootprintsTableFilterComposer
 
   ColumnFilters<double> get labelSize => $composableBuilder(
     column: $table.labelSize,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get labelAngle => $composableBuilder(
+    column: $table.labelAngle,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -28695,6 +28757,11 @@ class $$BoardFootprintsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get labelAngle => $composableBuilder(
+    column: $table.labelAngle,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get labelHidden => $composableBuilder(
     column: $table.labelHidden,
     builder: (column) => ColumnOrderings(column),
@@ -28790,6 +28857,11 @@ class $$BoardFootprintsTableAnnotationComposer
 
   GeneratedColumn<double> get labelSize =>
       $composableBuilder(column: $table.labelSize, builder: (column) => column);
+
+  GeneratedColumn<double> get labelAngle => $composableBuilder(
+    column: $table.labelAngle,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<bool> get labelHidden => $composableBuilder(
     column: $table.labelHidden,
@@ -28888,6 +28960,7 @@ class $$BoardFootprintsTableTableManager
                 Value<double?> labelX = const Value.absent(),
                 Value<double?> labelY = const Value.absent(),
                 Value<double> labelSize = const Value.absent(),
+                Value<double?> labelAngle = const Value.absent(),
                 Value<bool> labelHidden = const Value.absent(),
                 Value<bool> locked = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -28904,6 +28977,7 @@ class $$BoardFootprintsTableTableManager
                 labelX: labelX,
                 labelY: labelY,
                 labelSize: labelSize,
+                labelAngle: labelAngle,
                 labelHidden: labelHidden,
                 locked: locked,
                 rowid: rowid,
@@ -28922,6 +28996,7 @@ class $$BoardFootprintsTableTableManager
                 Value<double?> labelX = const Value.absent(),
                 Value<double?> labelY = const Value.absent(),
                 Value<double> labelSize = const Value.absent(),
+                Value<double?> labelAngle = const Value.absent(),
                 Value<bool> labelHidden = const Value.absent(),
                 Value<bool> locked = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -28938,6 +29013,7 @@ class $$BoardFootprintsTableTableManager
                 labelX: labelX,
                 labelY: labelY,
                 labelSize: labelSize,
+                labelAngle: labelAngle,
                 labelHidden: labelHidden,
                 locked: locked,
                 rowid: rowid,

@@ -1198,6 +1198,28 @@ class _FootprintPreview extends CustomPainter {
             path.lineTo(_s(p.x, p.y).dx, _s(p.x, p.y).dy);
           }
           canvas.drawPath(path..close(), paint);
+        case FootprintText(:final text, :final at, :final angle, :final size):
+          final painter = TextPainter(
+            text: TextSpan(
+              text: text,
+              style: TextStyle(
+                color: color,
+                fontSize: math.max(6, size * pixelsPerMm),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            textDirection: TextDirection.ltr,
+          )..layout();
+          final centre = _s(at.x, at.y);
+          canvas
+            ..save()
+            ..translate(centre.dx, centre.dy)
+            ..rotate(-angle * math.pi / 180);
+          painter.paint(
+            canvas,
+            Offset(-painter.width / 2, -painter.height / 2),
+          );
+          canvas.restore();
       }
     }
 

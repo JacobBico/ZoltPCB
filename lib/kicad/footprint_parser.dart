@@ -187,6 +187,27 @@ abstract final class FootprintParser {
               fill: fill,
             ),
           );
+        // Only text the footprint prints itself; its reference and value
+        // are the part's, placed on the board.
+        case 'fp_text' when item.atom(1) == 'user':
+          final effects = item.child('effects');
+          if (item.flag('hide') || (effects?.flag('hide') ?? false)) break;
+          final at = item.child('at');
+          graphics.add(
+            FootprintText(
+              text: item.atom(2) ?? '',
+              at: _point(at),
+              angle: at?.number(3) ?? 0,
+              size: effects?.child('font')?.child('size')?.number(1) ?? 1.0,
+              layer: layer,
+              stroke: StrokeStyle(
+                width:
+                    effects?.child('font')?.child('thickness')?.number(1) ??
+                    0.15,
+                type: StrokeType.fromToken('solid'),
+              ),
+            ),
+          );
       }
     }
     return graphics;

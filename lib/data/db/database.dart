@@ -105,7 +105,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 25;
+  int get schemaVersion => 26;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -340,6 +340,10 @@ class AppDatabase extends _$AppDatabase {
       // already has the column; only one made before this needs it added.
       if (from >= 18 && from < 25) {
         await m.addColumn(schematicSheets, schematicSheets.pins);
+      }
+      // v26: which way a designator reads, as KiCad turned it.
+      if (from >= 5 && from < 26) {
+        await m.addColumn(boardFootprints, boardFootprints.labelAngle);
       }
     },
     beforeOpen: (details) async {

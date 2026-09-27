@@ -174,6 +174,7 @@ class BoardRepository {
         labelY: Value(footprint.labelOffset?.dy),
         labelSize: Value(footprint.labelSize),
         labelHidden: Value(footprint.labelHidden),
+        labelAngle: Value(footprint.labelAngle),
         locked: Value(footprint.locked),
       ),
     );
@@ -208,6 +209,7 @@ class BoardRepository {
                 labelY: Value(f.labelOffset?.dy),
                 labelSize: Value(f.labelSize),
                 labelHidden: Value(f.labelHidden),
+                labelAngle: Value(f.labelAngle),
               ),
             );
       }
@@ -1217,6 +1219,7 @@ class BoardRepository {
             : Offset(row.labelX!, row.labelY!),
         labelSize: row.labelSize,
         labelHidden: row.labelHidden,
+        labelAngle: row.labelAngle,
         locked: row.locked,
       );
 

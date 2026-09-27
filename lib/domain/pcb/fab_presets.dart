@@ -409,10 +409,13 @@ List<DrcViolation> fabViolations(BoardScene scene, FabPreset preset) {
     }
     // The label's box, roughly: stroke-font characters run about 0.8 of
     // their height wide.
+    // Turned on its side, it runs up the board instead of across it.
+    final long = footprint.part.reference.length * height * 0.8;
+    final upright = footprint.ref.labelRotation.abs() > 45;
     final label = Rect.fromCenter(
       center: footprint.labelPosition,
-      width: footprint.part.reference.length * height * 0.8,
-      height: height,
+      width: upright ? height : long,
+      height: upright ? long : height,
     );
     final onPad = scene.footprints
         .expand((f) => f.pads)

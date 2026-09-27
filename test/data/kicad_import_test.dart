@@ -440,6 +440,50 @@ void main() {
     );
   });
 
+  test(
+    'artwork no part owns comes in as a picture, turned as placed',
+    () async {
+      // A logo drawn as a footprint: filled silkscreen and nothing to solder,
+      // on no part of the schematic. Turned a quarter, 4 wide becomes 4 tall.
+      const board = """
+(kicad_pcb (version 20241229) (generator "pcbnew")
+  (general (thickness 1.6))
+  (layers (0 "F.Cu" signal) (2 "B.Cu" signal) (37 "F.SilkS" user)
+    (25 "Edge.Cuts" user))
+  (footprint "Art:LOGO" (layer "F.Cu")
+    (uuid "0b6c1c55-0000-4000-8000-000000000001")
+    (at 50 40 90)
+    (property "Reference" "G***" (at 0 0 90) (layer "F.SilkS")
+      (hide yes) (effects (font (size 1 1))))
+    (property "Value" "LOGO" (at 0 1 90) (layer "F.SilkS")
+      (hide yes) (effects (font (size 1 1))))
+    (attr board_only exclude_from_pos_files exclude_from_bom)
+    (fp_poly (pts (xy -2 -1) (xy 2 -1) (xy 2 1) (xy -2 1))
+      (stroke (width 0) (type solid)) (fill yes) (layer "F.SilkS"))))
+""";
+      final target = _App();
+      final result = await target.importer.import(
+        name: 'Art',
+        schematic:
+            '(kicad_sch (version 20250114) (generator "eeschema") '
+            '(uuid "0b6c1c55-0000-4000-8000-000000000002") (paper "A4") '
+            '(lib_symbols))',
+        board: board,
+      );
+      expect(result.warnings, isEmpty);
+      final pictures = await target.boards.getImages(result.project.id);
+      expect(pictures, hasLength(1));
+      final logo = pictures.single;
+      expect(logo.name, 'LOGO');
+      expect(logo.back, isFalse);
+      expect(logo.position.dx, closeTo(50, 0.1));
+      expect(logo.position.dy, closeTo(40, 0.1));
+      // Two across and four down, once turned.
+      expect(logo.width, closeTo(2, 0.1));
+      expect(logo.rows, greaterThan(logo.columns));
+    },
+  );
+
   test('an import that fails part way leaves no half-made project', () async {
     final project = await design();
     final target = _App();

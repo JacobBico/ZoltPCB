@@ -510,6 +510,11 @@ class BoardFootprints extends Table {
   /// Designator text height, in millimetres.
   RealColumn get labelSize => real().withDefault(const Constant(1.0))();
 
+  /// Which way the designator reads, in degrees from the footprint's own
+  /// direction, so it turns with the part. Null reads level, as a label
+  /// placed here always has.
+  RealColumn get labelAngle => real().nullable()();
+
   /// Taken off the silkscreen. The part keeps its reference; the board just
   /// does not print it.
   BoolColumn get labelHidden => boolean().withDefault(const Constant(false))();

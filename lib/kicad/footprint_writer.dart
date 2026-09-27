@@ -108,6 +108,21 @@ abstract final class FootprintWriter {
       S.of('fill', [SAtom(fill == FillType.none ? 'no' : 'yes')]),
       _layer(graphic.layer),
     ]),
+    FootprintText(:final text, :final at, :final angle, :final size) => S.list(
+      'fp_text',
+      [
+        SAtom('user'),
+        S.text(text),
+        S.of('at', [at.x, at.y, if (angle != 0) angle]),
+        _layer(graphic.layer),
+        S.list('effects', [
+          S.list('font', [
+            S.of('size', [size, size]),
+            S.of('thickness', [graphic.stroke.width]),
+          ]),
+        ]),
+      ],
+    ),
   };
 
   static SList _pad(Pad pad) => SList([

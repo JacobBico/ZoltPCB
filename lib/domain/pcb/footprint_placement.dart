@@ -59,6 +59,15 @@ class FootprintPlacement {
 
   Offset applyPoint(FootprintPoint point) => apply(point.x, point.y);
 
+  /// Which way text at [angle] in the footprint's own frame reads on the
+  /// board, kept upright the way KiCad keeps a footprint's text.
+  double textRotation(double angle) {
+    var a = (rotation + angle) % 360;
+    if (a < 0) a += 360;
+    if (a > 90 && a <= 270) a -= 180;
+    return a;
+  }
+
   /// Maps a point on the board back into footprint space — the inverse of
   /// [apply], for storing something the user placed on the board in the
   /// frame it has to be written in.
@@ -147,6 +156,8 @@ Rect footprintBounds(FootprintDefinition footprint) {
         for (final point in points) {
           add(Offset(point.x, point.y));
         }
+      case FootprintText(:final at):
+        add(Offset(at.x, at.y));
     }
   }
 

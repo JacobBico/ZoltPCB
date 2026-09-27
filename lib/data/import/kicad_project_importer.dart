@@ -11,6 +11,7 @@ import '../../fab/silk_fonts.dart';
 import '../../kicad/schematic_writer.dart';
 import '../../kicad/board_writer.dart';
 import '../../kicad/board_project_writer.dart';
+import '../../kicad/footprint_flip.dart';
 import '../../kicad/sexpr/sexpr.dart';
 import '../../kicad/sexpr/sexpr_parser.dart';
 import '../../kicad/sexpr/sexpr_writer.dart';
@@ -870,6 +871,8 @@ class KicadProjectImporter {
       for (final library in await footprints.getLibraries()) library.nickname,
     };
     final toEmbed = <String, Map<String, (SList, double, bool)>>{};
+    final labels = <String, ({Offset? offset, double? angle, double? size})>{};
+    final footprintArt = <(String, String), List<List<Offset>>>{};
     final placements = <(String, String, double, double, double, bool, bool)>[];
 
     for (final node in root.children('footprint')) {
@@ -877,7 +880,14 @@ class KicadProjectImporter {
       if (!libId.contains(':')) libId = 'Imported:$libId';
       final at = node.child('at');
       final flipped = node.childAtom('layer') == 'B.Cu';
-      final rotation = at?.number(3) ?? 0;
+      // KiCad turns a back-side footprint over top to bottom and keeps its
+      // contents that way; the app mirrors the library's left to right and
+      // turns it half a turn more, which lands everything in the same place
+      // (see flipFootprintGeometry).
+      final fileRotation = at?.number(3) ?? 0;
+      final rotation = flipped
+          ? normalisedDegrees(fileRotation + 180)
+          : fileRotation;
 
       final referenceNode = node
           .children('property')
@@ -886,12 +896,65 @@ class KicadProjectImporter {
       final reference = referenceNode?.atom(2);
       final partId = partIdByReference[reference];
       if (partId == null) {
+        // Nothing to solder and no part of its own: a logo or other artwork
+        // drawn as a footprint. It comes in as a picture on the silkscreen,
+        // where it was, rather than being lost.
+        final artwork = node.children('pad').isEmpty
+            ? _footprintArtwork(
+                node,
+                // As KiCad places what it stores: turned, never mirrored.
+                FootprintPlacement(
+                  x: at?.number(1) ?? 0,
+                  y: at?.number(2) ?? 0,
+                  rotation: fileRotation,
+                ),
+              )
+            : const <String, List<List<Offset>>>{};
+        if (artwork.isNotEmpty) {
+          final value = node
+              .children('property')
+              .where((p) => p.atom(1) == 'Value')
+              .firstOrNull
+              ?.atom(2);
+          final name = (value == null || value.isEmpty)
+              ? libId.split(':').last
+              : value;
+          for (final entry in artwork.entries) {
+            (footprintArt[(entry.key, name)] ??= []).addAll(entry.value);
+          }
+          continue;
+        }
         warnings.add('Footprint ${reference ?? libId} has no matching part');
         continue;
       }
+      // The designator as the layout left it: where, which way and how
+      // big. KiCad writes its place in the footprint's own frame, as the
+      // pads are, and its angle already combined with the footprint's.
+      // One kept on a layer other than the silkscreen is not printed.
+      final referenceAt = referenceNode?.child('at');
+      final referenceLayer = referenceNode?.childAtom('layer');
       final hidden =
           (referenceNode?.flag('hide') ?? false) ||
-          (referenceNode?.child('effects')?.flag('hide') ?? false);
+          (referenceNode?.child('effects')?.flag('hide') ?? false) ||
+          (referenceLayer != null && !referenceLayer.endsWith('.SilkS'));
+      final fontSize = referenceNode
+          ?.child('effects')
+          ?.child('font')
+          ?.child('size')
+          ?.number(1);
+      labels[partId] = (
+        offset: referenceAt == null
+            ? null
+            // Turned back over, for a part on the back.
+            : Offset(
+                referenceAt.number(1) ?? 0,
+                (flipped ? -1 : 1) * (referenceAt.number(2) ?? 0),
+              ),
+        angle: referenceAt == null
+            ? null
+            : (referenceAt.number(3) ?? 0) - fileRotation,
+        size: fontSize,
+      );
 
       if (await footprints.findByLibId(libId) == null) {
         final colon = libId.indexOf(':');
@@ -901,7 +964,7 @@ class KicadProjectImporter {
         final known = forLibrary[footprintName];
         // A copy on the front is the one to learn the footprint from.
         if (known == null || (known.$3 && !flipped)) {
-          forLibrary[footprintName] = (node, rotation, flipped);
+          forLibrary[footprintName] = (node, fileRotation, flipped);
         }
       }
       placements.add((
@@ -954,6 +1017,7 @@ class KicadProjectImporter {
         partId: partId,
         libId: renamed[libId] ?? libId,
       );
+      final label = labels[partId];
       await boards.updatePlacement(
         ref.copyWith(
           x: x,
@@ -962,6 +1026,9 @@ class KicadProjectImporter {
           flipped: flipped,
           placed: true,
           labelHidden: hidden,
+          labelOffset: label?.offset,
+          labelAngle: label?.angle,
+          labelSize: label?.size,
         ),
       );
       footprintCount++;
@@ -1084,6 +1151,9 @@ class KicadProjectImporter {
       final group = groupOf[node.childAtom('uuid') ?? ''] ?? '';
       (pictures[(layer!, group)] ??= []).add(points);
     }
+    for (final entry in footprintArt.entries) {
+      (pictures[entry.key] ??= []).addAll(entry.value);
+    }
     for (final MapEntry(key: (layer, group), value: shapes)
         in pictures.entries) {
       final picture = _rasterise(shapes, back: layer == 'B.SilkS');
@@ -1163,7 +1233,9 @@ class KicadProjectImporter {
     SExpr local(SExpr item) {
       if (item is! SList) return item;
       var result = item;
-      if (result.head == 'pad' && rotation != 0) {
+      // Pads and the footprint's own text carry their angle combined with
+      // the footprint's; the library has it on its own.
+      if ((result.head == 'pad' || result.head == 'fp_text') && rotation != 0) {
         result = SList([
           for (final child in result.items)
             if (child is SList && child.head == 'at')
@@ -1172,7 +1244,7 @@ class KicadProjectImporter {
               child,
         ]);
       }
-      return flipped ? _unflip(result) : result;
+      return flipped ? _unflip(flipFootprintGeometry(result)) : result;
     }
 
     return SList([
@@ -1181,6 +1253,28 @@ class KicadProjectImporter {
       for (final item in node.items.skip(2))
         if (!(item is SList && placementOnly.contains(item.head))) local(item),
     ]);
+  }
+
+  /// A footprint's filled silkscreen shapes, on the board: by layer, each
+  /// an outline in board millimetres.
+  static Map<String, List<List<Offset>>> _footprintArtwork(
+    SList node,
+    FootprintPlacement placement,
+  ) {
+    final out = <String, List<List<Offset>>>{};
+    for (final poly in node.children('fp_poly')) {
+      final layer = poly.childAtom('layer');
+      if (layer != 'F.SilkS' && layer != 'B.SilkS') continue;
+      final fill =
+          poly.childAtom('fill') ?? poly.child('fill')?.childAtom('type');
+      if (fill != 'yes' && fill != 'solid') continue;
+      final points = [
+        for (final xy in poly.child('pts')?.children('xy') ?? const <SList>[])
+          placement.apply(xy.number(1) ?? 0, xy.number(2) ?? 0),
+      ];
+      if (points.length >= 3) (out[layer!] ??= []).add(points);
+    }
+    return out;
   }
 
   static SList _withAngle(SList at, double angle) {

@@ -112,9 +112,7 @@ class Courtyard {
           ..add(j);
       }
     }
-    return [
-      for (final i in hit.toList()..sort()) claimed[i],
-    ];
+    return [for (final i in hit.toList()..sort()) claimed[i]];
   }
 
   static List<Courtyard> forFootprint(PlacedFootprint footprint) {
@@ -165,6 +163,8 @@ class Courtyard {
           ]);
         case FootprintLine(:final start, :final end):
           lines.add((at(start), at(end)));
+        case FootprintText():
+          break;
         case FootprintArc(:final start, :final mid, :final end):
           lines
             ..add((at(start), at(mid)))

@@ -220,6 +220,35 @@ class FootprintPolygon extends FootprintGraphic {
   final FillType fill;
 }
 
+/// Text drawn as part of the footprint itself: a `1` by the first pin, a
+/// `+` on a polarised part, `Pri` and `Sec` on a transformer.
+class FootprintText extends FootprintGraphic {
+  const FootprintText({
+    required this.text,
+    required this.at,
+    required super.layer,
+    required super.stroke,
+    this.angle = 0,
+    this.size = 1.0,
+  });
+
+  /// As the footprint has it; `${REFERENCE}` and `${VALUE}` stand for the
+  /// part's own, see [textFor].
+  final String text;
+  final FootprintPoint at;
+
+  /// Degrees counter-clockwise, in the footprint's own frame.
+  final double angle;
+
+  /// Character height, in millimetres.
+  final double size;
+
+  /// What it reads on [reference] and [value]'s part.
+  String textFor({required String reference, required String value}) => text
+      .replaceAll(r'${REFERENCE}', reference)
+      .replaceAll(r'${VALUE}', value);
+}
+
 /// A complete footprint, as read from one `.kicad_mod` file.
 class FootprintDefinition {
   const FootprintDefinition({

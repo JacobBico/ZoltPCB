@@ -258,7 +258,7 @@ class BoardPainter extends CustomPainter {
         footprint.part.reference,
         viewport.toScreen(footprint.labelPosition),
         height: height,
-        rotation: 0,
+        rotation: ref.labelRotation,
         color: _silk,
         weight: FontWeight.w700,
         // The canvas is already turned over for the underside, so back-side
@@ -442,7 +442,33 @@ class BoardPainter extends CustomPainter {
           path.lineTo(at(point).dx, at(point).dy);
         }
         canvas.drawPath(path..close(), paint);
+      case FootprintText():
+        _paintFootprintText(canvas, footprint, graphic, paint.color);
     }
+  }
+
+  /// A footprint's own text — a `1`, a `+`, `Pri` — where the footprint
+  /// puts it, upright, and the right way round from the side it is seen.
+  void _paintFootprintText(
+    Canvas canvas,
+    PlacedFootprint footprint,
+    FootprintText text,
+    Color color,
+  ) {
+    final height = viewport.lengthToScreen(text.size);
+    if (height < 2) return;
+    _paintSilkText(
+      canvas,
+      text.textFor(
+        reference: footprint.part.reference,
+        value: footprint.part.value,
+      ),
+      viewport.toScreen(footprint.placement.applyPoint(text.at)),
+      height: height,
+      rotation: footprint.placement.textRotation(text.angle),
+      color: color,
+      mirror: footprint.ref.flipped,
+    );
   }
 
   // --- background ------------------------------------------------------
@@ -1078,6 +1104,12 @@ class BoardPainter extends CustomPainter {
           canvas.drawPath(path, Paint()..color = color.withValues(alpha: 0.25));
         }
         canvas.drawPath(path, paint);
+      case FootprintText():
+        // Only what is printed. Nearly every footprint also carries its
+        // reference on the fab layer, which would name each part twice.
+        if (layer == BoardLayer.frontSilk || layer == BoardLayer.backSilk) {
+          _paintFootprintText(canvas, footprint, graphic, color);
+        }
     }
   }
 
@@ -1192,7 +1224,7 @@ class BoardPainter extends CustomPainter {
       footprint.part.reference,
       viewport.toScreen(footprint.labelPosition),
       height: height,
-      rotation: 0,
+      rotation: ref.labelRotation,
       color: ref.labelHidden ? color.withValues(alpha: 0.35) : color,
       mirror: ref.flipped,
       boxed: labelSelected,

@@ -472,6 +472,19 @@ abstract final class FabricationWriter {
               final placed = [for (final p in points) at(p)];
               if (fill != FillType.none) g.region(placed);
               g.stroke(placed, width, close: true);
+            case FootprintText():
+              for (final stroke in StrokeFont.strokes(
+                graphic.textFor(
+                  reference: footprint.part.reference,
+                  value: footprint.part.value,
+                ),
+                centre: at(graphic.at),
+                height: graphic.size,
+                rotation: footprint.placement.textRotation(graphic.angle),
+                mirror: !front,
+              )) {
+                g.stroke(stroke, StrokeFont.strokeWidth(graphic.size));
+              }
           }
         }
       }
@@ -483,6 +496,7 @@ abstract final class FabricationWriter {
           footprint.part.reference,
           centre: footprint.labelPosition,
           height: height,
+          rotation: footprint.ref.labelRotation,
           mirror: !front,
         )) {
           g.stroke(stroke, StrokeFont.strokeWidth(height));
@@ -858,9 +872,7 @@ class _Gerber {
     var merged = [...outer];
     for (final hole in holes) {
       if (hole.length < 3) continue;
-      final inner = (area(hole) > 0) == outward
-          ? hole.reversed.toList()
-          : hole;
+      final inner = (area(hole) > 0) == outward ? hole.reversed.toList() : hole;
       // The shortest bridge: the closest pair of corners, one each side.
       var bestA = 0;
       var bestB = 0;

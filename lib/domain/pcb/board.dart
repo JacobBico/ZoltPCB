@@ -332,12 +332,30 @@ class PlacedFootprintRef {
     this.labelOffset,
     this.labelSize = 1.0,
     this.labelHidden = false,
+    this.labelAngle,
     this.locked = false,
   });
 
   final String id;
   final String projectId;
   final String partId;
+
+  /// Which way the designator reads, in degrees counter-clockwise from the
+  /// footprint's own direction, so it turns with the part — how KiCad keeps
+  /// it. Null reads level whatever the part's rotation, as a designator
+  /// placed here always has.
+  final double? labelAngle;
+
+  /// Which way the designator reads on the board, kept upright the way
+  /// KiCad keeps a footprint's text: never upside down.
+  double get labelRotation {
+    final angle = labelAngle;
+    if (angle == null) return 0;
+    var a = (rotation + angle) % 360;
+    if (a < 0) a += 360;
+    if (a > 90 && a <= 270) a -= 180;
+    return a;
+  }
 
   /// Held where it is. A connector that has to line up with a hole in a
   /// case gets locked once, and then stays put through every later pass of
@@ -383,6 +401,7 @@ class PlacedFootprintRef {
     bool clearLabelOffset = false,
     double? labelSize,
     bool? labelHidden,
+    double? labelAngle,
     bool? locked,
   }) => PlacedFootprintRef(
     id: id,
@@ -397,6 +416,7 @@ class PlacedFootprintRef {
     labelOffset: clearLabelOffset ? null : (labelOffset ?? this.labelOffset),
     labelSize: labelSize ?? this.labelSize,
     labelHidden: labelHidden ?? this.labelHidden,
+    labelAngle: labelAngle ?? this.labelAngle,
     locked: locked ?? this.locked,
   );
 }
