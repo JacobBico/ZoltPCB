@@ -134,6 +134,47 @@ class BoardPainter extends CustomPainter {
     );
 
     _paintGrid(canvas, size);
+    _paintBoardCached(canvas);
+    _paintPendingRoute(canvas);
+  }
+
+  /// The board as it was last drawn, kept for the next frame.
+  ///
+  /// Panning and pinching change nothing on the board, only where it is
+  /// seen from — and drawing a board of a few hundred parts from scratch
+  /// took longer than a frame on a phone, so moving about a large board
+  /// stuttered. The drawing is kept and laid down again moved and scaled,
+  /// until something on it changes or the zoom has moved far enough from
+  /// the one it was drawn at that line weights and text would show it.
+  static final _drawn = <_DrawnBoard>[];
+
+  void _paintBoardCached(Canvas canvas) {
+    final key = _DrawnKey.of(this);
+    var drawn = _drawn.where((d) => d.fits(key, viewport)).firstOrNull;
+    if (drawn == null) {
+      final recorder = ui.PictureRecorder();
+      _paintBoard(Canvas(recorder));
+      drawn = _DrawnBoard(key, viewport, recorder.endRecording());
+      // A few, for boards drawn side by side: the editor and a preview.
+      if (_drawn.length >= 3) _drawn.removeAt(0);
+    } else {
+      _drawn.remove(drawn);
+    }
+    _drawn.add(drawn);
+    final scale = viewport.pixelsPerMm / drawn.viewport.pixelsPerMm;
+    canvas
+      ..save()
+      ..translate(
+        viewport.origin.dx - drawn.viewport.origin.dx * scale,
+        viewport.origin.dy - drawn.viewport.origin.dy * scale,
+      )
+      ..scale(scale)
+      ..drawPicture(drawn.picture)
+      ..restore();
+  }
+
+  /// Everything on the board, at [viewport].
+  void _paintBoard(Canvas canvas) {
     // Pours go under everything: they are the background copper, and a
     // track drawn over one has to stay readable.
     _paintZones(canvas);
@@ -156,7 +197,6 @@ class BoardPainter extends CustomPainter {
     _paintImages(canvas);
     _paintDimensions(canvas);
     if (showRatsnest) _paintRatsnest(canvas);
-    _paintPendingRoute(canvas);
   }
 
   // --- fabrication preview ---------------------------------------------
@@ -1353,19 +1393,8 @@ class BoardPainter extends CustomPainter {
     bool boxed = false,
     FontWeight weight = FontWeight.w500,
   }) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(
-          color: color,
-          fontSize: height,
-          fontFamily: 'monospace',
-          fontWeight: weight,
-          height: 1,
-        ),
-      ),
-      textDirection: ui.TextDirection.ltr,
-    )..layout();
+    final painter = _laidOut(text, color, weight);
+    final scale = height / _layoutSize;
 
     canvas
       ..save()
@@ -1373,6 +1402,7 @@ class BoardPainter extends CustomPainter {
       // Board space is Y-down, so counter-clockwise is a negative turn.
       ..rotate(-rotation * math.pi / 180);
     if (mirror) canvas.scale(-1, 1);
+    canvas.scale(scale);
 
     final box = Rect.fromCenter(
       center: Offset.zero,
@@ -1382,15 +1412,53 @@ class BoardPainter extends CustomPainter {
     painter.paint(canvas, box.topLeft);
     if (boxed) {
       canvas.drawRect(
-        box.inflate(2),
+        box.inflate(2 / scale),
         Paint()
           ..color = KicadPalette.highlight
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1,
+          ..strokeWidth = 1 / scale,
       );
     }
     canvas.restore();
-    painter.dispose();
+  }
+
+  /// The size text is laid out at, before it is scaled to the zoom.
+  static const _layoutSize = 32.0;
+
+  /// Text already laid out, kept from one frame to the next.
+  ///
+  /// Laying out a line of text is most of the cost of drawing it, and a
+  /// board has a designator on every part: laid out afresh on every frame
+  /// of a pan or a pinch, they were most of the time the board took to
+  /// draw. Laid out once at one size and scaled, each costs a draw.
+  static final _layouts = <(String, int, FontWeight, double), TextPainter>{};
+
+  static TextPainter _laidOut(
+    String text,
+    Color color,
+    FontWeight weight, [
+    double size = _layoutSize,
+  ]) {
+    final key = (text, color.toARGB32(), weight, size);
+    // Most recently used last, so the oldest go first when it is full.
+    final kept = _layouts.remove(key);
+    if (kept != null) return _layouts[key] = kept;
+    if (_layouts.length >= 4000) {
+      _layouts.remove(_layouts.keys.first)?.dispose();
+    }
+    return _layouts[key] = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: color,
+          fontSize: size,
+          fontFamily: 'monospace',
+          fontWeight: weight,
+          height: 1,
+        ),
+      ),
+      textDirection: ui.TextDirection.ltr,
+    )..layout();
   }
 
   // --- overlays --------------------------------------------------------
@@ -1517,18 +1585,7 @@ class BoardPainter extends CustomPainter {
     required Color color,
     required double size,
   }) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(
-          color: color,
-          fontSize: size,
-          fontFamily: 'monospace',
-          height: 1,
-        ),
-      ),
-      textDirection: ui.TextDirection.ltr,
-    )..layout();
+    final painter = _laidOut(text, color, FontWeight.normal, size);
     painter.paint(
       canvas,
       center - Offset(painter.width / 2, painter.height / 2),
@@ -1563,4 +1620,77 @@ class BoardPainter extends CustomPainter {
       old.selectedTextId != selectedTextId ||
       old.selectedImageId != selectedImageId ||
       old.selectedLabelId != selectedLabelId;
+}
+
+/// Everything but the view that a drawing of the board depends on.
+class _DrawnKey {
+  _DrawnKey.of(BoardPainter p)
+    : scene = p.scene,
+      palette = p.palette,
+      activeLayer = p.activeLayer,
+      selectedFootprintId = p.selectedFootprintId,
+      selectedTrackId = p.selectedTrackId,
+      highlightedNetId = p.highlightedNetId,
+      collisions = p.collisions,
+      showRatsnest = p.showRatsnest,
+      showOutlineGrips = p.showOutlineGrips,
+      draggingOutline = p.draggingOutline,
+      selectedOutlineHandle = p.selectedOutlineHandle,
+      selectedEdgeId = p.selectedEdgeId,
+      selectedZoneId = p.selectedZoneId,
+      selectedTextId = p.selectedTextId,
+      selectedImageId = p.selectedImageId,
+      selectedLabelId = p.selectedLabelId;
+
+  final BoardScene scene;
+  final AppPalette palette;
+  final CopperLayer activeLayer;
+  final String? selectedFootprintId;
+  final String? selectedTrackId;
+  final String? highlightedNetId;
+  final List<Courtyard> collisions;
+  final bool showRatsnest;
+  final bool showOutlineGrips;
+  final bool draggingOutline;
+  final int? selectedOutlineHandle;
+  final String? selectedEdgeId;
+  final String? selectedZoneId;
+  final String? selectedTextId;
+  final String? selectedImageId;
+  final String? selectedLabelId;
+
+  bool matches(_DrawnKey o) =>
+      identical(scene, o.scene) &&
+      palette == o.palette &&
+      activeLayer == o.activeLayer &&
+      selectedFootprintId == o.selectedFootprintId &&
+      selectedTrackId == o.selectedTrackId &&
+      highlightedNetId == o.highlightedNetId &&
+      identical(collisions, o.collisions) &&
+      showRatsnest == o.showRatsnest &&
+      showOutlineGrips == o.showOutlineGrips &&
+      draggingOutline == o.draggingOutline &&
+      selectedOutlineHandle == o.selectedOutlineHandle &&
+      selectedEdgeId == o.selectedEdgeId &&
+      selectedZoneId == o.selectedZoneId &&
+      selectedTextId == o.selectedTextId &&
+      selectedImageId == o.selectedImageId &&
+      selectedLabelId == o.selectedLabelId;
+}
+
+/// A drawing of the board, and the view it was drawn at.
+class _DrawnBoard {
+  _DrawnBoard(this.key, this.viewport, this.picture);
+
+  final _DrawnKey key;
+  final SchematicViewport viewport;
+  final ui.Picture picture;
+
+  /// Whether this drawing can stand in for one of [key] at [view]: the
+  /// same board, and a zoom close enough that scaling it does not show.
+  bool fits(_DrawnKey other, SchematicViewport view) {
+    if (!key.matches(other)) return false;
+    final ratio = view.pixelsPerMm / viewport.pixelsPerMm;
+    return ratio > 0.8 && ratio < 1.25;
+  }
 }

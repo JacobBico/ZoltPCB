@@ -420,7 +420,7 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
   /// Which parts are standing on each other, worked out against the board
   /// as it would be if the part on the crosshair were put down here.
-  (BoardScene, Offset, String?, List<Courtyard>)? _collided;
+  (BoardScene, BoardScene, Offset, String?, List<Courtyard>)? _collided;
 
   /// What the Holes tool puts down: an M3 mounting hole until changed.
   BoardFeatureSpec _featureSpec = const BoardFeatureSpec();
@@ -4956,15 +4956,19 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     BoardScene preview,
     Offset at,
   ) {
+    // Asked on every frame, and a pan moves the crosshair on every frame
+    // without moving anything on the board: with nothing carried the
+    // preview is the board itself, and the answer is the one already had.
     final cached = _collided;
     if (cached != null &&
-        identical(cached.$1, committed) &&
-        cached.$2 == at &&
-        cached.$3 == _carryingId) {
-      return cached.$4;
+        (identical(cached.$2, preview) ||
+            (identical(cached.$1, committed) &&
+                cached.$3 == at &&
+                cached.$4 == _carryingId))) {
+      return cached.$5;
     }
     final found = Courtyard.collisions(preview);
-    _collided = (committed, at, _carryingId, found);
+    _collided = (committed, preview, at, _carryingId, found);
     return found;
   }
 

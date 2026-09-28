@@ -561,6 +561,19 @@ class BoardScene {
       (byNet[netId] ??= []).add(pad);
     }
 
+    // Each net's own copper, gathered once: going through every track on
+    // the board for every net is what made a large board slow to redraw.
+    final tracksByNet = <String, List<Track>>{};
+    for (final track in tracks) {
+      if (track.netId case final netId?) {
+        (tracksByNet[netId] ??= []).add(track);
+      }
+    }
+    final viasByNet = <String, List<Via>>{};
+    for (final via in vias) {
+      if (via.netId case final netId?) (viasByNet[netId] ??= []).add(via);
+    }
+
     final lines = <RatsnestLine>[];
     for (final entry in byNet.entries) {
       final netPads = entry.value;
@@ -568,8 +581,8 @@ class BoardScene {
 
       final groups = _copperGroups(
         netPads,
-        tracks,
-        vias,
+        tracksByNet[entry.key] ?? const [],
+        viasByNet[entry.key] ?? const [],
         entry.key,
         [
           for (final join in joins)
@@ -643,8 +656,9 @@ class BoardScene {
     String padNode(int index) => 'pad:$index';
 
     /// Joins a point to any pad whose copper covers it.
+    final near = _PadIndex(pads);
     void bindToPads(Offset point, CopperLayer layer) {
-      for (var i = 0; i < pads.length; i++) {
+      for (final i in near.at(point)) {
         final pad = pads[i];
         if (!pad.reaches(layer)) continue;
         if (pad.contains(point, toleranceMm: _touchMm)) {
@@ -694,17 +708,17 @@ class BoardScene {
     }
 
     // A piece of pour joins everything it touches.
+    final padIndex = joins.isEmpty
+        ? const <String, int>{}
+        : {for (var i = pads.length - 1; i >= 0; i--) pads[i].id: i};
     for (final (index, join) in joins.indexed) {
       final node = 'pour:$index';
       for (final pad in join.pads) {
-        final i = pads.indexWhere((p) => identical(p, pad) || p.id == pad.id);
-        if (i >= 0) union(node, padNode(i));
+        final i = padIndex[pad.id];
+        if (i != null) union(node, padNode(i));
       }
       for (final track in join.tracks) {
-        union(
-          node,
-          pointNode(Offset(track.startX, track.startY), track.layer),
-        );
+        union(node, pointNode(Offset(track.startX, track.startY), track.layer));
       }
       for (final via in join.vias) {
         union(node, pointNode(Offset(via.x, via.y), CopperLayer.front));
@@ -769,8 +783,9 @@ class BoardScene {
 
     // Which net each pad is on, joined into the graph as its own node.
     final padNets = <String, String>{};
+    final near = _PadIndex(pads);
     void bindToPads(Offset point, CopperLayer layer) {
-      for (var i = 0; i < pads.length; i++) {
+      for (final i in near.at(point)) {
         final pad = pads[i];
         final net = pad.netId;
         if (net == null || !pad.reaches(layer)) continue;
@@ -790,19 +805,31 @@ class BoardScene {
       bindToPads(end, track.layer);
     }
 
+    // Track ends by where they are, for finding those inside a via.
+    final ends = <(int, int), List<(Offset, CopperLayer)>>{};
+    for (final track in tracks) {
+      for (final end in [
+        Offset(track.startX, track.startY),
+        Offset(track.endX, track.endY),
+      ]) {
+        (ends[_PadIndex.cellOf(end)] ??= []).add((end, track.layer));
+      }
+    }
+
     for (final via in vias) {
       final at = Offset(via.x, via.y);
       for (final layer in CopperLayer.values) {
         union('via:${via.id}', pointNode(at, layer));
         bindToPads(at, layer);
       }
-      for (final track in tracks) {
-        for (final end in [
-          Offset(track.startX, track.startY),
-          Offset(track.endX, track.endY),
-        ]) {
-          if ((end - at).distance <= via.diameter / 2 + _touchMm) {
-            union('via:${via.id}', pointNode(end, track.layer));
+      final reach = via.diameter / 2 + _touchMm;
+      for (final cell in _PadIndex.cellsOver(
+        Rect.fromCircle(center: at, radius: reach),
+      )) {
+        for (final (end, layer)
+            in ends[cell] ?? const <(Offset, CopperLayer)>[]) {
+          if ((end - at).distance <= reach) {
+            union('via:${via.id}', pointNode(end, layer));
           }
         }
       }
@@ -910,4 +937,47 @@ double distanceToSegment(Offset p, Offset a, Offset b) {
   var t = ((p.dx - a.dx) * dx + (p.dy - a.dy) * dy) / lengthSquared;
   t = t.clamp(0.0, 1.0);
   return (p - Offset(a.dx + t * dx, a.dy + t * dy)).distance;
+}
+
+/// Pads by where they sit on the board, so the pads under a point are
+/// found among the few nearby rather than by trying every pad there is.
+class _PadIndex {
+  _PadIndex(List<PlacedPad> pads) {
+    for (var i = 0; i < pads.length; i++) {
+      final pad = pads[i];
+      // Far enough for any shape turned any way, and the touch tolerance.
+      final reach =
+          math.sqrt(
+                pad.pad.sizeX * pad.pad.sizeX + pad.pad.sizeY * pad.pad.sizeY,
+              ) /
+              2 +
+          0.01;
+      for (final cell in cellsOver(
+        Rect.fromCircle(center: pad.position, radius: reach),
+      )) {
+        (_cells[cell] ??= []).add(i);
+      }
+    }
+  }
+
+  /// Millimetres on a side: a few pads' worth.
+  static const _cell = 2.0;
+
+  final _cells = <(int, int), List<int>>{};
+
+  /// The indices of the pads that might cover [point].
+  List<int> at(Offset point) => _cells[cellOf(point)] ?? const [];
+
+  static (int, int) cellOf(Offset point) =>
+      ((point.dx / _cell).floor(), (point.dy / _cell).floor());
+
+  static Iterable<(int, int)> cellsOver(Rect box) sync* {
+    final (x0, y0) = cellOf(box.topLeft);
+    final (x1, y1) = cellOf(box.bottomRight);
+    for (var x = x0; x <= x1; x++) {
+      for (var y = y0; y <= y1; y++) {
+        yield (x, y);
+      }
+    }
+  }
 }

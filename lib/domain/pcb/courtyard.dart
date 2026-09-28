@@ -51,6 +51,10 @@ class Courtyard {
   bool overlaps(Courtyard other) {
     if (other.back != back) return false;
     if (!bounds.overlaps(other.bounds)) return false;
+    return _outlinesOverlap(other);
+  }
+
+  bool _outlinesOverlap(Courtyard other) {
     for (final a in outlines) {
       for (final b in other.outlines) {
         if (polygonsOverlap(a, b)) return true;
@@ -100,13 +104,24 @@ class Courtyard {
   /// rule check.
   static List<Courtyard> collisions(BoardScene scene) {
     final claimed = claims(scene);
+    final boxes = [for (final courtyard in claimed) courtyard.bounds];
+    // Left to right: once a box starts past this one's right edge, so does
+    // every box after it, and none of them can overlap it. Asked on every
+    // move of a part being carried, so every pair on the board is too many.
+    final order = List.generate(claimed.length, (i) => i)
+      ..sort((a, b) => boxes[a].left.compareTo(boxes[b].left));
     final hit = <int>{};
-    for (var i = 0; i < claimed.length; i++) {
-      for (var j = i + 1; j < claimed.length; j++) {
+    for (var x = 0; x < order.length; x++) {
+      final i = order[x];
+      for (var y = x + 1; y < order.length; y++) {
+        final j = order[y];
+        if (boxes[j].left >= boxes[i].right) break;
+        if (claimed[i].back != claimed[j].back) continue;
         if (claimed[i].footprint.ref.id == claimed[j].footprint.ref.id) {
           continue;
         }
-        if (!claimed[i].overlaps(claimed[j])) continue;
+        if (!boxes[i].overlaps(boxes[j])) continue;
+        if (!claimed[i]._outlinesOverlap(claimed[j])) continue;
         hit
           ..add(i)
           ..add(j);
