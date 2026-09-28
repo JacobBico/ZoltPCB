@@ -9,6 +9,7 @@ import 'package:zolt/data/import/kicad_project_importer.dart';
 import 'package:zolt/data/libraries/library_file_storage.dart';
 import 'package:zolt/data/repositories/board_repository.dart';
 import 'package:zolt/data/repositories/footprint_library_repository.dart';
+import 'package:zolt/data/repositories/label_repository.dart';
 import 'package:zolt/data/repositories/net_repository.dart';
 import 'package:zolt/data/repositories/part_repository.dart';
 import 'package:zolt/data/repositories/project_repository.dart';
@@ -95,6 +96,7 @@ void main() {
           symbols: libraries,
           footprints: FootprintLibraryRepository(db, InMemoryLibraryStorage()),
           sheets: sheetRepository,
+          labels: LabelRepository(db),
         );
         final result = await importer.import(
           name: top.replaceAll('.kicad_sch', ''),
@@ -152,6 +154,34 @@ void main() {
               nets: appNets,
             ),
         ];
+        // Every label on every sheet is kept, as the files drew it — all
+        // but those naming a bus, which the import does not follow yet. A
+        // demo's folder can hold files of another design beside it.
+        final keptLabels = await LabelRepository(db).getAll(result.project.id);
+        final used = {
+          for (final text in sheetFiles.values.followedBy([
+            File('${dir.path}/$top').readAsStringSync(),
+          ]))
+            for (final m in RegExp(
+              r'\(property "Sheetfile" "([^"]+)"',
+            ).allMatches(text))
+              m[1]!.split('/').last,
+        };
+        final drawnLabels = [
+          for (final text in [
+            File('${dir.path}/$top').readAsStringSync(),
+            for (final MapEntry(:key, :value) in sheetFiles.entries)
+              if (used.contains(key)) value,
+          ])
+            for (final m in RegExp(
+              r'^\t\((?:label|global_label|hierarchical_label) "([^"]*)"',
+              multiLine: true,
+            ).allMatches(text))
+              // `{slash}` and the like are escapes, not a bus's braces.
+              if (!isBusName(m[1]!.replaceAll(_escape, '_'))) m[1]!,
+        ];
+        expect(keptLabels, hasLength(drawnLabels.length));
+
         // A bus pin (`D[0..7]`, `UART{TX, RX}`) carries many nets, which
         // the import does not follow member by member yet.
         bool bus(String name) => name.contains('[') || name.contains('{');
@@ -188,6 +218,7 @@ void main() {
           nets: appNets,
           symbols: symbols,
           drawnWires: await NetRepository(db).getWires(result.project.id),
+          labels: await LabelRepository(db).getAll(result.project.id),
           sheets: sheets,
         );
         final files = const SchematicWriter().writeFiles(
@@ -248,6 +279,10 @@ void main() {
     );
   }
 }
+
+final _escape = RegExp(
+  r'\{(slash|backslash|colon|lt|gt|dblquote|quote|tab|return|brace)\}',
+);
 
 /// Whether every pin of [net] is on one of [nets].
 bool _within(String net, Set<String> nets) {

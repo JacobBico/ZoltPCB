@@ -43,6 +43,7 @@ part 'database.g.dart';
     BoardFeatures,
     BoardDimensions,
     SchematicSheets,
+    SchematicLabels,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -105,7 +106,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 26;
+  int get schemaVersion => 27;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -344,6 +345,11 @@ class AppDatabase extends _$AppDatabase {
       // v26: which way a designator reads, as KiCad turned it.
       if (from >= 5 && from < 26) {
         await m.addColumn(boardFootprints, boardFootprints.labelAngle);
+      }
+      // v27: labels as a KiCad file drew them.
+      if (from < 27) {
+        await m.createTable(schematicLabels);
+        await m.createIndex(idxSchematicLabelsProject);
       }
     },
     beforeOpen: (details) async {

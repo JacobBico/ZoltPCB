@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'dart:math' as math;
 import 'dart:ui';
 
+import '../../core/util/ids.dart';
 import '../../domain/geometry/placement.dart';
 import '../../domain/models/models.dart';
 import '../../domain/pcb/pcb.dart';
@@ -18,6 +19,7 @@ import '../../kicad/sexpr/sexpr_writer.dart';
 import '../../kicad/symbol_parser.dart';
 import '../repositories/board_repository.dart';
 import '../repositories/footprint_library_repository.dart';
+import '../repositories/label_repository.dart';
 import '../repositories/net_repository.dart';
 import '../repositories/part_repository.dart';
 import '../repositories/project_repository.dart';
@@ -71,10 +73,15 @@ class KicadProjectImporter {
     required this.symbols,
     required this.footprints,
     this.sheets,
+    this.labels,
   });
 
   /// Where sub-sheets go. Without it, only the top sheet is brought in.
   final SheetRepository? sheets;
+
+  /// Where the file's own labels are kept, so each sheet shows the ones
+  /// it was drawn with. Without it, the app labels nets its own way.
+  final LabelRepository? labels;
 
   final ProjectRepository projects;
   final PartRepository parts;
@@ -404,22 +411,14 @@ class KicadProjectImporter {
       }
     }
 
-    final installed = {
-      for (final library in await symbols.getLibraries()) library.nickname,
-    };
+    // Into the library of that name, beside what it already has: each
+    // sheet brings only the symbols it uses.
     for (final entry in byLibrary.entries) {
-      if (installed.contains(entry.key)) continue;
-      final library = SList([
-        SAtom('kicad_symbol_lib'),
-        S.of('version', [20241209]),
-        SList([SAtom('generator'), S.text('zolt')]),
-        ...entry.value,
-      ]);
       try {
-        await symbols.import(
-          fileName: '${entry.key}.kicad_sym',
-          bytes: utf8.encode(const SExprWriter().write(library)),
-        );
+        await symbols.addSymbols(entry.key, {
+          for (final symbol in entry.value)
+            symbol.atom(1)!: const SExprWriter().write(symbol),
+        });
       } catch (error) {
         warnings.add('Could not add the ${entry.key} symbols: $error');
       }
@@ -641,6 +640,36 @@ class KicadProjectImporter {
         }
       }
     }
+    // The labels as drawn, kept to be shown and written back as they were.
+    final labelStore = this.labels;
+    if (labelStore != null) {
+      await labelStore.addAll([
+        for (final kind in SchematicLabelKind.values)
+          for (final label in root.children(kind.token))
+            // A bus's label stays out, as the bus does, until buses come
+            // in: written back onto an ordinary wire, KiCad would take it
+            // for a bus and join its members to whatever is there.
+            if (label.atom(1) case final text? when !isBusName(_unescape(text)))
+              SchematicLabel(
+                id: newId(),
+                projectId: project.id,
+                sheetId: sheetId,
+                kind: kind,
+                text: _unescape(text),
+                position: _at(label),
+                angle: label.child('at')?.number(3) ?? 0,
+                size:
+                    label
+                        .child('effects')
+                        ?.child('font')
+                        ?.child('size')
+                        ?.number(1) ??
+                    1.27,
+                shape: label.childAtom('shape') ?? 'bidirectional',
+              ),
+      ]);
+    }
+
     final junctions = [for (final j in root.children('junction')) _at(j)];
 
     // Union-find over pins, then wires, then labels.
@@ -852,14 +881,46 @@ class KicadProjectImporter {
     };
     final appNets = await nets.getNets(project.id);
     final netIdByName = {for (final n in appNets) n.displayName: n.net.id};
+
+    // Which of the app's nets each of the board's is, found first through
+    // the pads on it: each pad names its part's pin, which the schematic
+    // has already joined. The names often differ between the two — KiCad
+    // picks one label of a net crossing sheets and the app another, and an
+    // unnamed net's `Net-(C17-Pad1)` depends on which pin comes first — and
+    // copper matched by name alone came in on no net at all.
+    final pinNet = <String, String>{
+      for (final net in appNets)
+        for (final e in net.endpoints)
+          '${e.part.reference}\u0000${e.pin.number}': net.net.id,
+    };
+    final byBoardNet = <String, String>{};
+    for (final footprint in root.children('footprint')) {
+      final reference = footprint
+          .children('property')
+          .where((p) => p.atom(1) == 'Reference')
+          .firstOrNull
+          ?.atom(2);
+      if (reference == null) continue;
+      for (final pad in footprint.children('pad')) {
+        final net = pad.child('net');
+        final id = pinNet['$reference\u0000${pad.atom(1)}'];
+        if (net == null || id == null) continue;
+        // By number and by name, whichever the copper says.
+        for (final token in [net.atom(1), net.atom(2)]) {
+          if (token != null && token.isNotEmpty) byBoardNet[token] ??= id;
+        }
+      }
+    }
+    String? netNamed(String? name) => name == null || name.isEmpty
+        ? null
+        : byBoardNet[name] ?? netIdByName[name];
     String? netOf(SList node) {
       final net = node.child('net');
       if (net == null) return null;
       final raw = net.atom(1);
       final number = int.tryParse(raw ?? '');
-      final name = number == null ? raw : netNames[number];
-      if (name == null || name.isEmpty) return null;
-      return netIdByName[name];
+      return byBoardNet[raw] ??
+          netNamed(number == null ? raw : netNames[number]);
     }
 
     // --- footprints
@@ -1092,7 +1153,7 @@ class KicadProjectImporter {
         projectId: project.id,
         layer: layer,
         points: points,
-        netId: netIdByName[netName],
+        netId: netOf(node) ?? netNamed(netName),
         netName: netName,
         clearance: connect?.childNumber('clearance') ?? 0.5,
         minThickness: node.childNumber('min_thickness') ?? 0.25,

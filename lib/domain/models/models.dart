@@ -13,6 +13,7 @@ export 'part_clone.dart';
 export 'part_spec.dart';
 export 'pin.dart';
 export 'project.dart';
+export 'schematic_label.dart';
 export 'schematic_note.dart';
 export 'schematic_sheet.dart';
 export 'sheet_connections.dart';

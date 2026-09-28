@@ -7,6 +7,7 @@ import '../core/theme/kicad_palette.dart';
 import 'schematic_painter_support.dart';
 import 'schematic_scene.dart';
 import '../domain/geometry/drawn_wire_geometry.dart';
+import '../domain/models/schematic_label.dart';
 import '../domain/models/schematic_note.dart';
 import '../domain/models/schematic_sheet.dart';
 import '../domain/models/sheet_views.dart';
@@ -35,7 +36,11 @@ class SchematicPainter extends CustomPainter {
     this.sheetBoxes = const [],
     this.selectedSheetId,
     this.offSheetLabels = const [],
+    this.storedLabels = const [],
   }) : palette = KicadPalette.current;
+
+  /// Labels as the sheet's KiCad file drew them, each where it was put.
+  final List<SchematicLabel> storedLabels;
 
   /// The sub-sheets on this sheet, as boxes.
   final List<SheetBoxView> sheetBoxes;
@@ -108,6 +113,7 @@ class SchematicPainter extends CustomPainter {
     _paintNetLabels(canvas);
     _paintSheetBoxes(canvas);
     _paintOffSheetLabels(canvas);
+    _paintStoredLabels(canvas);
     _paintPendingWire(canvas);
     _paintSelectionBox(canvas);
   }
@@ -252,6 +258,65 @@ class SchematicPainter extends CustomPainter {
       SheetSide.bottom => at + Offset(-text.width / 2, -gap - text.height),
     };
     text.paint(canvas, origin);
+  }
+
+  /// Labels as KiCad draws them, from their anchor on the wire: a local
+  /// label as text just above it, a global or hierarchical one in its flag.
+  /// Turned a quarter, they read upwards; half, they run leftwards.
+  void _paintStoredLabels(Canvas canvas) {
+    for (final label in storedLabels) {
+      final size = math.max(6.0, viewport.lengthToScreen(label.size));
+      final colour = label.kind == SchematicLabelKind.local
+          ? KicadPalette.label
+          : KicadPalette.globalLabel;
+      final text = _label(label.text, colour, size);
+      final quarter = ((label.angle / 90).round() % 4 + 4) % 4;
+      // Along the text, away from the anchor: +1 to its right (or up),
+      // -1 to its left (or down).
+      final along = quarter == 0 || quarter == 1 ? 1.0 : -1.0;
+      canvas
+        ..save()
+        ..translate(
+          viewport.toScreen(label.position).dx,
+          viewport.toScreen(label.position).dy,
+        );
+      if (quarter.isOdd) canvas.rotate(-math.pi / 2);
+
+      if (label.kind == SchematicLabelKind.local) {
+        final x = along > 0 ? size * 0.15 : -size * 0.15 - text.width;
+        text.paint(canvas, Offset(x, -text.height - size * 0.05));
+      } else {
+        // The flag: pointed at the anchor for a hierarchical label and for
+        // an input, square otherwise, around the text.
+        final h = text.height + 2;
+        final pointed =
+            label.kind == SchematicLabelKind.hierarchical ||
+            label.shape == 'input' ||
+            label.shape == 'bidirectional';
+        final start = pointed ? h / 2 : 0.0;
+        final end = start + text.width + h * 0.6;
+        Offset p(double x, double y) => Offset(x * along, y);
+        final flag = Path()
+          ..moveTo(p(0, 0).dx, 0)
+          ..lineTo(p(start, -h / 2).dx, -h / 2)
+          ..lineTo(p(end, -h / 2).dx, -h / 2)
+          ..lineTo(p(end, h / 2).dx, h / 2)
+          ..lineTo(p(start, h / 2).dx, h / 2)
+          ..close();
+        canvas.drawPath(
+          flag,
+          Paint()
+            ..color = colour
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.2,
+        );
+        final x = along > 0
+            ? start + h * 0.3
+            : -(start + h * 0.3) - text.width;
+        text.paint(canvas, Offset(x, -text.height / 2));
+      }
+      canvas.restore();
+    }
   }
 
   /// Names at pins whose nets carry on elsewhere: a flag shape for a
@@ -443,6 +508,8 @@ class SchematicPainter extends CustomPainter {
         for (final pin in scene.pins) pin.sheetPosition,
         for (final view in sheetBoxes)
           for (final pin in view.pins) pin.at,
+        // A wire ending on a label ends on something.
+        for (final label in storedLabels) label.position,
       ],
     );
     if (ends.isEmpty) return;
@@ -919,5 +986,6 @@ class SchematicPainter extends CustomPainter {
       old.sheetBoxes != sheetBoxes ||
       old.selectedSheetId != selectedSheetId ||
       old.offSheetLabels != offSheetLabels ||
+      !listEquals(old.storedLabels, storedLabels) ||
       old.selectedNoteId != selectedNoteId;
 }

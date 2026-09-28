@@ -18,6 +18,7 @@ import '../../kicad/bom_writer.dart';
 import '../../kicad/schematic_writer.dart';
 import '../repositories/board_repository.dart';
 import '../repositories/footprint_library_repository.dart';
+import '../repositories/label_repository.dart';
 import '../repositories/net_repository.dart';
 import '../repositories/note_repository.dart';
 import '../repositories/part_repository.dart';
@@ -85,10 +86,14 @@ class ProjectExporter {
     this.footprints,
     this.notes,
     this.sheets,
+    this.labels,
   });
 
   /// The sub-sheets; optional, as a design without them is one sheet.
   final SheetRepository? sheets;
+
+  /// Labels a KiCad file drew; optional, as a design made here has none.
+  final LabelRepository? labels;
 
   final ProjectRepository projects;
   final PartRepository parts;
@@ -136,6 +141,7 @@ class ProjectExporter {
       routeHints: hints,
       drawnWires: await nets.getWires(projectId),
       notes: await notes?.getAll(projectId) ?? const [],
+      labels: await labels?.getAll(projectId) ?? const [],
       sheets: await sheets?.getAll(projectId) ?? const [],
     );
   }
@@ -356,14 +362,21 @@ class ProjectExporter {
       for (final sheet in links.tree.inPageOrder()) sheet.id,
     ]) {
       final sheet = document.onSheet(sheetId);
-      final scene = SchematicScene.build(
+      var scene = SchematicScene.build(
         paper: document.project.paper,
         parts: sheet.parts,
         nets: sheet.nets,
         symbols: sheet.symbols,
         routeHints: sheet.routeHints,
         drawnWires: sheet.drawnWires,
+        labelAnchors: [for (final label in sheet.labels) label.position],
       );
+      // Printed as it shows: a sheet's own labels, and none of the app's
+      // for the nets they name.
+      final labelled = {
+        for (final label in sheet.labels) ?scene.netAt(label.position),
+      };
+      scene = scene.withoutLabelsFor(labelled);
       final (boxes, labels) = document.sheets.isEmpty
           ? (const <SheetBoxView>[], const <OffSheetLabel>[])
           : sheetOverlays(links: links, scene: scene, sheetId: sheetId);
@@ -372,7 +385,11 @@ class ProjectExporter {
           scene: scene,
           notes: sheet.notes,
           sheetBoxes: boxes,
-          offSheetLabels: labels,
+          offSheetLabels: [
+            for (final label in labels)
+              if (!labelled.contains(label.netId)) label,
+          ],
+          storedLabels: sheet.labels,
         ),
       );
     }

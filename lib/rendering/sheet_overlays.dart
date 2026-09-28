@@ -42,6 +42,7 @@ import 'schematic_scene.dart';
             // a box on it: a plain one.
             name: up ? SheetBoxView.upwardName(here, net) : net.displayName,
             hierarchical: up,
+            netId: net.id,
           ),
   ];
   return (boxes, labels);

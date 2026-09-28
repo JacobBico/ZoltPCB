@@ -219,6 +219,28 @@ class SchematicWriter {
     return out;
   }
 
+  /// A label as the file had it: its kind, place, angle and size.
+  static SList _storedLabel(SchematicLabel label) {
+    final quarter = ((label.angle / 90).round() % 4 + 4) % 4;
+    final leftwards = quarter == 2 || quarter == 3;
+    final local = label.kind == SchematicLabelKind.local;
+    return SList([
+      SAtom(label.kind.token),
+      S.text(label.text),
+      if (!local) SList([SAtom('shape'), SAtom(label.shape)]),
+      S.of('at', [label.position.dx, label.position.dy, quarter * 90]),
+      if (label.kind == SchematicLabelKind.global)
+        S.flag('fields_autoplaced', true),
+      SymbolWriter.effects(
+        size: label.size,
+        justify: local
+            ? (leftwards ? 'right bottom' : 'left bottom')
+            : (leftwards ? 'right' : 'left'),
+      ),
+      SList([SAtom('uuid'), S.text(label.id)]),
+    ]);
+  }
+
   static SList _label(String kind, String name, Offset at, String uuid) =>
       SList([
         SAtom(kind),
@@ -418,7 +440,61 @@ class SchematicWriter {
   ]) {
     final labels = <SList>[];
 
+    // The labels the sheet came with, written back where they were; the
+    // nets they name need none of the writer's own here.
+    final netOfPin = document.netByPin;
+    String? netAt(Offset at) {
+      for (final wire in connectivity.wires) {
+        if (wire.points.length < 2 || !wire.isDrawn) continue;
+        if (DrawnWireGeometry.nearestRun(wire.points, at).$2 < 0.01) {
+          return wire.netId;
+        }
+      }
+      for (final entry in connectivity.pinPositions.entries) {
+        if ((entry.value - at).distance < 0.01) return netOfPin[entry.key]?.id;
+      }
+      return null;
+    }
+
+    final storedFor = <String, List<SchematicLabel>>{};
+    for (final label in document.labels) {
+      labels.add(_storedLabel(label));
+      if (netAt(label.position) case final netId?) {
+        (storedFor[netId] ??= []).add(label);
+      }
+    }
+
     for (final net in document.nets) {
+      // A net the sheet labelled itself: each piece of it here with a label
+      // of its own needs nothing more. A piece without one — joined in the
+      // file by something else — is given the same label, so it still
+      // joins by the same name.
+      if (storedFor[net.id] case final own?) {
+        final model = own.first;
+        for (final (piece, pieceLabels) in connectivity.piecesWithLabels(
+          net,
+          own,
+        )) {
+          if (pieceLabels.isNotEmpty) continue;
+          final here = [
+            for (final e in piece)
+              if (connectivity.pinPositions.containsKey(e.pin.id)) e,
+          ];
+          if (here.isEmpty ||
+              here.any((e) => e.part.reference.startsWith('#PWR'))) {
+            continue;
+          }
+          labels.add(
+            _label(
+              model.kind.token,
+              model.text,
+              connectivity.pinPositions[here.first.pin.id]!,
+              derivedId('piece:${model.id}:${here.first.node.id}'),
+            ),
+          );
+        }
+        continue;
+      }
       final name = net.displayName;
       final drawn = connectivity.spannedNetIds.contains(net.id);
 
@@ -719,6 +795,7 @@ class _Connectivity {
         for (final e in net.endpoints)
           if (e.part.isPowerSymbol) e.pin.id,
     };
+    final anchors = [for (final label in document.labels) label.position];
     final routed = [
       for (final entry in pinsByNet.entries)
         ...NetRouting.routeNetWithDrawn(
@@ -729,10 +806,16 @@ class _Connectivity {
           hints: document.routeHints,
           labelledPins: labelledPins,
           powerPins: powerPins,
+          labelAnchors: anchors,
         ),
     ];
 
-    final safe = _dropUnsafe(routed, positions, netByPin);
+    // Where the sheet's own labels sit, and the net each is on: a wire of
+    // another net run over one would be joined to it by KiCad.
+    final labelNets = <(Offset, String?)>[
+      for (final at in anchors) (at, _netUnder(at, document, positions)),
+    ];
+    final safe = _dropUnsafe(routed, positions, netByPin, labelNets);
 
     return _Connectivity(
       pinPositions: positions,
@@ -774,7 +857,15 @@ class _Connectivity {
 
   /// One endpoint from each separately wired piece of [net].
   /// The separate pieces of [net]: pins the wires join, together.
-  List<List<NetEndpoint>> pieces(NetWithEndpoints net) {
+  List<List<NetEndpoint>> pieces(NetWithEndpoints net) => [
+    for (final (piece, _) in piecesWithLabels(net, const [])) piece,
+  ];
+
+  /// [net]'s separate pieces, each with the [labels] anchored on it.
+  List<(List<NetEndpoint>, List<SchematicLabel>)> piecesWithLabels(
+    NetWithEndpoints net,
+    List<SchematicLabel> labels,
+  ) {
     final parent = <String, String>{};
     String find(String a) {
       var root = parent.putIfAbsent(a, () => a);
@@ -818,11 +909,32 @@ class _Connectivity {
         }
       }
     }
+    // A label joins the piece whose wire or pin it sits on.
+    for (var k = 0; k < labels.length; k++) {
+      final at = labels[k].position;
+      for (var i = 0; i < netWires.length; i++) {
+        if (netWires[i].points.length < 2) continue;
+        if (DrawnWireGeometry.nearestRun(netWires[i].points, at).$2 < 0.01) {
+          union('l$k', 'w$i');
+        }
+      }
+      for (final e in net.endpoints) {
+        final pin = pinPositions[e.pin.id];
+        if (pin != null && (pin - at).distance < 0.01) union('l$k', e.pin.id);
+      }
+    }
     final pieces = <String, List<NetEndpoint>>{};
     for (final e in net.endpoints) {
       (pieces[find(e.pin.id)] ??= []).add(e);
     }
-    return [for (final piece in pieces.values) piece];
+    final labelsOf = <String, List<SchematicLabel>>{};
+    for (var k = 0; k < labels.length; k++) {
+      (labelsOf[find('l$k')] ??= []).add(labels[k]);
+    }
+    return [
+      for (final MapEntry(key: root, value: piece) in pieces.entries)
+        (piece, labelsOf[root] ?? const <SchematicLabel>[]),
+    ];
   }
 
   /// One pin from each separate piece of [net]: the pins wires join are a
@@ -841,10 +953,31 @@ class _Connectivity {
   static const _touchMm = 0.01;
 
   /// Removes wires that would join something the user did not.
+  /// The net of the drawn wire or the pin under [at], if any.
+  static String? _netUnder(
+    Offset at,
+    SchematicDocument document,
+    Map<String, Offset> positions,
+  ) {
+    for (final wire in document.drawnWires) {
+      if (wire.points.length < 2) continue;
+      if (DrawnWireGeometry.nearestRun(wire.points, at).$2 < 0.01) {
+        return wire.netId;
+      }
+    }
+    for (final entry in positions.entries) {
+      if ((entry.value - at).distance < 0.01) {
+        return document.netByPin[entry.key]?.id;
+      }
+    }
+    return null;
+  }
+
   static List<RoutedWire> _dropUnsafe(
     List<RoutedWire> wires,
     Map<String, Offset> positions,
     Map<String, NetWithEndpoints> netByPin,
+    List<(Offset, String?)> labelNets,
   ) {
     final kept = <RoutedWire>[];
 
@@ -858,6 +991,15 @@ class _Connectivity {
         if (wire.distanceTo(entry.value) <= _touchMm) {
           safe = false;
           break;
+        }
+      }
+      // So does one routed over another net's label.
+      if (safe && !wire.isDrawn) {
+        for (final (at, netId) in labelNets) {
+          if (netId != wire.netId && wire.distanceTo(at) <= _touchMm) {
+            safe = false;
+            break;
+          }
         }
       }
 

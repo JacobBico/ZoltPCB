@@ -18586,6 +18586,599 @@ class SchematicSheetsCompanion extends UpdateCompanion<SchematicSheetRow> {
   }
 }
 
+class $SchematicLabelsTable extends SchematicLabels
+    with TableInfo<$SchematicLabelsTable, SchematicLabelRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SchematicLabelsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _projectIdMeta = const VerificationMeta(
+    'projectId',
+  );
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+    'project_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES projects (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _sheetIdMeta = const VerificationMeta(
+    'sheetId',
+  );
+  @override
+  late final GeneratedColumn<String> sheetId = GeneratedColumn<String>(
+    'sheet_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _contentMeta = const VerificationMeta(
+    'content',
+  );
+  @override
+  late final GeneratedColumn<String> content = GeneratedColumn<String>(
+    'content',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _xMeta = const VerificationMeta('x');
+  @override
+  late final GeneratedColumn<double> x = GeneratedColumn<double>(
+    'x',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _yMeta = const VerificationMeta('y');
+  @override
+  late final GeneratedColumn<double> y = GeneratedColumn<double>(
+    'y',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _angleMeta = const VerificationMeta('angle');
+  @override
+  late final GeneratedColumn<double> angle = GeneratedColumn<double>(
+    'angle',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _sizeMeta = const VerificationMeta('size');
+  @override
+  late final GeneratedColumn<double> size = GeneratedColumn<double>(
+    'size',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1.27),
+  );
+  static const VerificationMeta _shapeMeta = const VerificationMeta('shape');
+  @override
+  late final GeneratedColumn<String> shape = GeneratedColumn<String>(
+    'shape',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('bidirectional'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    projectId,
+    sheetId,
+    kind,
+    content,
+    x,
+    y,
+    angle,
+    size,
+    shape,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'schematic_labels';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SchematicLabelRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('project_id')) {
+      context.handle(
+        _projectIdMeta,
+        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_projectIdMeta);
+    }
+    if (data.containsKey('sheet_id')) {
+      context.handle(
+        _sheetIdMeta,
+        sheetId.isAcceptableOrUnknown(data['sheet_id']!, _sheetIdMeta),
+      );
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('content')) {
+      context.handle(
+        _contentMeta,
+        content.isAcceptableOrUnknown(data['content']!, _contentMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_contentMeta);
+    }
+    if (data.containsKey('x')) {
+      context.handle(_xMeta, x.isAcceptableOrUnknown(data['x']!, _xMeta));
+    } else if (isInserting) {
+      context.missing(_xMeta);
+    }
+    if (data.containsKey('y')) {
+      context.handle(_yMeta, y.isAcceptableOrUnknown(data['y']!, _yMeta));
+    } else if (isInserting) {
+      context.missing(_yMeta);
+    }
+    if (data.containsKey('angle')) {
+      context.handle(
+        _angleMeta,
+        angle.isAcceptableOrUnknown(data['angle']!, _angleMeta),
+      );
+    }
+    if (data.containsKey('size')) {
+      context.handle(
+        _sizeMeta,
+        size.isAcceptableOrUnknown(data['size']!, _sizeMeta),
+      );
+    }
+    if (data.containsKey('shape')) {
+      context.handle(
+        _shapeMeta,
+        shape.isAcceptableOrUnknown(data['shape']!, _shapeMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SchematicLabelRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SchematicLabelRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      projectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_id'],
+      )!,
+      sheetId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sheet_id'],
+      ),
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      content: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}content'],
+      )!,
+      x: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}x'],
+      )!,
+      y: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}y'],
+      )!,
+      angle: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}angle'],
+      )!,
+      size: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}size'],
+      )!,
+      shape: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}shape'],
+      )!,
+    );
+  }
+
+  @override
+  $SchematicLabelsTable createAlias(String alias) {
+    return $SchematicLabelsTable(attachedDatabase, alias);
+  }
+}
+
+class SchematicLabelRow extends DataClass
+    implements Insertable<SchematicLabelRow> {
+  final String id;
+  final String projectId;
+
+  /// The sub-sheet it is on; null for the top sheet.
+  final String? sheetId;
+
+  /// KiCad's `label`, `global_label` or `hierarchical_label`.
+  final String kind;
+  final String content;
+  final double x;
+  final double y;
+  final double angle;
+  final double size;
+  final String shape;
+  const SchematicLabelRow({
+    required this.id,
+    required this.projectId,
+    this.sheetId,
+    required this.kind,
+    required this.content,
+    required this.x,
+    required this.y,
+    required this.angle,
+    required this.size,
+    required this.shape,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['project_id'] = Variable<String>(projectId);
+    if (!nullToAbsent || sheetId != null) {
+      map['sheet_id'] = Variable<String>(sheetId);
+    }
+    map['kind'] = Variable<String>(kind);
+    map['content'] = Variable<String>(content);
+    map['x'] = Variable<double>(x);
+    map['y'] = Variable<double>(y);
+    map['angle'] = Variable<double>(angle);
+    map['size'] = Variable<double>(size);
+    map['shape'] = Variable<String>(shape);
+    return map;
+  }
+
+  SchematicLabelsCompanion toCompanion(bool nullToAbsent) {
+    return SchematicLabelsCompanion(
+      id: Value(id),
+      projectId: Value(projectId),
+      sheetId: sheetId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sheetId),
+      kind: Value(kind),
+      content: Value(content),
+      x: Value(x),
+      y: Value(y),
+      angle: Value(angle),
+      size: Value(size),
+      shape: Value(shape),
+    );
+  }
+
+  factory SchematicLabelRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SchematicLabelRow(
+      id: serializer.fromJson<String>(json['id']),
+      projectId: serializer.fromJson<String>(json['projectId']),
+      sheetId: serializer.fromJson<String?>(json['sheetId']),
+      kind: serializer.fromJson<String>(json['kind']),
+      content: serializer.fromJson<String>(json['content']),
+      x: serializer.fromJson<double>(json['x']),
+      y: serializer.fromJson<double>(json['y']),
+      angle: serializer.fromJson<double>(json['angle']),
+      size: serializer.fromJson<double>(json['size']),
+      shape: serializer.fromJson<String>(json['shape']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'projectId': serializer.toJson<String>(projectId),
+      'sheetId': serializer.toJson<String?>(sheetId),
+      'kind': serializer.toJson<String>(kind),
+      'content': serializer.toJson<String>(content),
+      'x': serializer.toJson<double>(x),
+      'y': serializer.toJson<double>(y),
+      'angle': serializer.toJson<double>(angle),
+      'size': serializer.toJson<double>(size),
+      'shape': serializer.toJson<String>(shape),
+    };
+  }
+
+  SchematicLabelRow copyWith({
+    String? id,
+    String? projectId,
+    Value<String?> sheetId = const Value.absent(),
+    String? kind,
+    String? content,
+    double? x,
+    double? y,
+    double? angle,
+    double? size,
+    String? shape,
+  }) => SchematicLabelRow(
+    id: id ?? this.id,
+    projectId: projectId ?? this.projectId,
+    sheetId: sheetId.present ? sheetId.value : this.sheetId,
+    kind: kind ?? this.kind,
+    content: content ?? this.content,
+    x: x ?? this.x,
+    y: y ?? this.y,
+    angle: angle ?? this.angle,
+    size: size ?? this.size,
+    shape: shape ?? this.shape,
+  );
+  SchematicLabelRow copyWithCompanion(SchematicLabelsCompanion data) {
+    return SchematicLabelRow(
+      id: data.id.present ? data.id.value : this.id,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      sheetId: data.sheetId.present ? data.sheetId.value : this.sheetId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      content: data.content.present ? data.content.value : this.content,
+      x: data.x.present ? data.x.value : this.x,
+      y: data.y.present ? data.y.value : this.y,
+      angle: data.angle.present ? data.angle.value : this.angle,
+      size: data.size.present ? data.size.value : this.size,
+      shape: data.shape.present ? data.shape.value : this.shape,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SchematicLabelRow(')
+          ..write('id: $id, ')
+          ..write('projectId: $projectId, ')
+          ..write('sheetId: $sheetId, ')
+          ..write('kind: $kind, ')
+          ..write('content: $content, ')
+          ..write('x: $x, ')
+          ..write('y: $y, ')
+          ..write('angle: $angle, ')
+          ..write('size: $size, ')
+          ..write('shape: $shape')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    projectId,
+    sheetId,
+    kind,
+    content,
+    x,
+    y,
+    angle,
+    size,
+    shape,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SchematicLabelRow &&
+          other.id == this.id &&
+          other.projectId == this.projectId &&
+          other.sheetId == this.sheetId &&
+          other.kind == this.kind &&
+          other.content == this.content &&
+          other.x == this.x &&
+          other.y == this.y &&
+          other.angle == this.angle &&
+          other.size == this.size &&
+          other.shape == this.shape);
+}
+
+class SchematicLabelsCompanion extends UpdateCompanion<SchematicLabelRow> {
+  final Value<String> id;
+  final Value<String> projectId;
+  final Value<String?> sheetId;
+  final Value<String> kind;
+  final Value<String> content;
+  final Value<double> x;
+  final Value<double> y;
+  final Value<double> angle;
+  final Value<double> size;
+  final Value<String> shape;
+  final Value<int> rowid;
+  const SchematicLabelsCompanion({
+    this.id = const Value.absent(),
+    this.projectId = const Value.absent(),
+    this.sheetId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.content = const Value.absent(),
+    this.x = const Value.absent(),
+    this.y = const Value.absent(),
+    this.angle = const Value.absent(),
+    this.size = const Value.absent(),
+    this.shape = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SchematicLabelsCompanion.insert({
+    required String id,
+    required String projectId,
+    this.sheetId = const Value.absent(),
+    required String kind,
+    required String content,
+    required double x,
+    required double y,
+    this.angle = const Value.absent(),
+    this.size = const Value.absent(),
+    this.shape = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       projectId = Value(projectId),
+       kind = Value(kind),
+       content = Value(content),
+       x = Value(x),
+       y = Value(y);
+  static Insertable<SchematicLabelRow> custom({
+    Expression<String>? id,
+    Expression<String>? projectId,
+    Expression<String>? sheetId,
+    Expression<String>? kind,
+    Expression<String>? content,
+    Expression<double>? x,
+    Expression<double>? y,
+    Expression<double>? angle,
+    Expression<double>? size,
+    Expression<String>? shape,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (projectId != null) 'project_id': projectId,
+      if (sheetId != null) 'sheet_id': sheetId,
+      if (kind != null) 'kind': kind,
+      if (content != null) 'content': content,
+      if (x != null) 'x': x,
+      if (y != null) 'y': y,
+      if (angle != null) 'angle': angle,
+      if (size != null) 'size': size,
+      if (shape != null) 'shape': shape,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SchematicLabelsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? projectId,
+    Value<String?>? sheetId,
+    Value<String>? kind,
+    Value<String>? content,
+    Value<double>? x,
+    Value<double>? y,
+    Value<double>? angle,
+    Value<double>? size,
+    Value<String>? shape,
+    Value<int>? rowid,
+  }) {
+    return SchematicLabelsCompanion(
+      id: id ?? this.id,
+      projectId: projectId ?? this.projectId,
+      sheetId: sheetId ?? this.sheetId,
+      kind: kind ?? this.kind,
+      content: content ?? this.content,
+      x: x ?? this.x,
+      y: y ?? this.y,
+      angle: angle ?? this.angle,
+      size: size ?? this.size,
+      shape: shape ?? this.shape,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
+    if (sheetId.present) {
+      map['sheet_id'] = Variable<String>(sheetId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (content.present) {
+      map['content'] = Variable<String>(content.value);
+    }
+    if (x.present) {
+      map['x'] = Variable<double>(x.value);
+    }
+    if (y.present) {
+      map['y'] = Variable<double>(y.value);
+    }
+    if (angle.present) {
+      map['angle'] = Variable<double>(angle.value);
+    }
+    if (size.present) {
+      map['size'] = Variable<double>(size.value);
+    }
+    if (shape.present) {
+      map['shape'] = Variable<String>(shape.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SchematicLabelsCompanion(')
+          ..write('id: $id, ')
+          ..write('projectId: $projectId, ')
+          ..write('sheetId: $sheetId, ')
+          ..write('kind: $kind, ')
+          ..write('content: $content, ')
+          ..write('x: $x, ')
+          ..write('y: $y, ')
+          ..write('angle: $angle, ')
+          ..write('size: $size, ')
+          ..write('shape: $shape, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -18633,6 +19226,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this,
   );
   late final $SchematicSheetsTable schematicSheets = $SchematicSheetsTable(
+    this,
+  );
+  late final $SchematicLabelsTable schematicLabels = $SchematicLabelsTable(
     this,
   );
   late final Index idxPartsProject = Index(
@@ -18731,6 +19327,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'idx_schematic_sheets_project',
     'CREATE INDEX idx_schematic_sheets_project ON schematic_sheets (project_id)',
   );
+  late final Index idxSchematicLabelsProject = Index(
+    'idx_schematic_labels_project',
+    'CREATE INDEX idx_schematic_labels_project ON schematic_labels (project_id)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -18767,6 +19367,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     boardFeatures,
     boardDimensions,
     schematicSheets,
+    schematicLabels,
     idxPartsProject,
     idxPartUnitsPart,
     idxPartPinsPart,
@@ -18791,6 +19392,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     idxBoardFeaturesProject,
     idxBoardDimensionsProject,
     idxSchematicSheetsProject,
+    idxSchematicLabelsProject,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -19045,6 +19647,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('schematic_sheets', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'projects',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('schematic_labels', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -19448,6 +20057,29 @@ final class $$ProjectsTableReferences
 
     final cache = $_typedResult.readTableOrNull(
       _schematicSheetsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$SchematicLabelsTable, List<SchematicLabelRow>>
+  _schematicLabelsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.schematicLabels,
+    aliasName: $_aliasNameGenerator(
+      db.projects.id,
+      db.schematicLabels.projectId,
+    ),
+  );
+
+  $$SchematicLabelsTableProcessedTableManager get schematicLabelsRefs {
+    final manager = $$SchematicLabelsTableTableManager(
+      $_db,
+      $_db.schematicLabels,
+    ).filter((f) => f.projectId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _schematicLabelsRefsTable($_db),
     );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
@@ -19971,6 +20603,31 @@ class $$ProjectsTableFilterComposer
           }) => $$SchematicSheetsTableFilterComposer(
             $db: $db,
             $table: $db.schematicSheets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> schematicLabelsRefs(
+    Expression<bool> Function($$SchematicLabelsTableFilterComposer f) f,
+  ) {
+    final $$SchematicLabelsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.schematicLabels,
+      getReferencedColumn: (t) => t.projectId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SchematicLabelsTableFilterComposer(
+            $db: $db,
+            $table: $db.schematicLabels,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -20542,6 +21199,31 @@ class $$ProjectsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> schematicLabelsRefs<T extends Object>(
+    Expression<T> Function($$SchematicLabelsTableAnnotationComposer a) f,
+  ) {
+    final $$SchematicLabelsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.schematicLabels,
+      getReferencedColumn: (t) => t.projectId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SchematicLabelsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.schematicLabels,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$ProjectsTableTableManager
@@ -20577,6 +21259,7 @@ class $$ProjectsTableTableManager
             bool boardFeaturesRefs,
             bool boardDimensionsRefs,
             bool schematicSheetsRefs,
+            bool schematicLabelsRefs,
           })
         > {
   $$ProjectsTableTableManager(_$AppDatabase db, $ProjectsTable table)
@@ -20663,6 +21346,7 @@ class $$ProjectsTableTableManager
                 boardFeaturesRefs = false,
                 boardDimensionsRefs = false,
                 schematicSheetsRefs = false,
+                schematicLabelsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -20686,6 +21370,7 @@ class $$ProjectsTableTableManager
                     if (boardFeaturesRefs) db.boardFeatures,
                     if (boardDimensionsRefs) db.boardDimensions,
                     if (schematicSheetsRefs) db.schematicSheets,
+                    if (schematicLabelsRefs) db.schematicLabels,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -21085,6 +21770,27 @@ class $$ProjectsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (schematicLabelsRefs)
+                        await $_getPrefetchedData<
+                          ProjectRow,
+                          $ProjectsTable,
+                          SchematicLabelRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProjectsTableReferences
+                              ._schematicLabelsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProjectsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).schematicLabelsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.projectId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -21125,6 +21831,7 @@ typedef $$ProjectsTableProcessedTableManager =
         bool boardFeaturesRefs,
         bool boardDimensionsRefs,
         bool schematicSheetsRefs,
+        bool schematicLabelsRefs,
       })
     >;
 typedef $$PartsTableCreateCompanionBuilder =
@@ -35307,6 +36014,433 @@ typedef $$SchematicSheetsTableProcessedTableManager =
       SchematicSheetRow,
       PrefetchHooks Function({bool projectId})
     >;
+typedef $$SchematicLabelsTableCreateCompanionBuilder =
+    SchematicLabelsCompanion Function({
+      required String id,
+      required String projectId,
+      Value<String?> sheetId,
+      required String kind,
+      required String content,
+      required double x,
+      required double y,
+      Value<double> angle,
+      Value<double> size,
+      Value<String> shape,
+      Value<int> rowid,
+    });
+typedef $$SchematicLabelsTableUpdateCompanionBuilder =
+    SchematicLabelsCompanion Function({
+      Value<String> id,
+      Value<String> projectId,
+      Value<String?> sheetId,
+      Value<String> kind,
+      Value<String> content,
+      Value<double> x,
+      Value<double> y,
+      Value<double> angle,
+      Value<double> size,
+      Value<String> shape,
+      Value<int> rowid,
+    });
+
+final class $$SchematicLabelsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $SchematicLabelsTable,
+          SchematicLabelRow
+        > {
+  $$SchematicLabelsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $ProjectsTable _projectIdTable(_$AppDatabase db) =>
+      db.projects.createAlias(
+        $_aliasNameGenerator(db.schematicLabels.projectId, db.projects.id),
+      );
+
+  $$ProjectsTableProcessedTableManager get projectId {
+    final $_column = $_itemColumn<String>('project_id')!;
+
+    final manager = $$ProjectsTableTableManager(
+      $_db,
+      $_db.projects,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_projectIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$SchematicLabelsTableFilterComposer
+    extends Composer<_$AppDatabase, $SchematicLabelsTable> {
+  $$SchematicLabelsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sheetId => $composableBuilder(
+    column: $table.sheetId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get content => $composableBuilder(
+    column: $table.content,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get x => $composableBuilder(
+    column: $table.x,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get y => $composableBuilder(
+    column: $table.y,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get angle => $composableBuilder(
+    column: $table.angle,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get size => $composableBuilder(
+    column: $table.size,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get shape => $composableBuilder(
+    column: $table.shape,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ProjectsTableFilterComposer get projectId {
+    final $$ProjectsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableFilterComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SchematicLabelsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SchematicLabelsTable> {
+  $$SchematicLabelsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sheetId => $composableBuilder(
+    column: $table.sheetId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get content => $composableBuilder(
+    column: $table.content,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get x => $composableBuilder(
+    column: $table.x,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get y => $composableBuilder(
+    column: $table.y,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get angle => $composableBuilder(
+    column: $table.angle,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get size => $composableBuilder(
+    column: $table.size,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get shape => $composableBuilder(
+    column: $table.shape,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ProjectsTableOrderingComposer get projectId {
+    final $$ProjectsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableOrderingComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SchematicLabelsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SchematicLabelsTable> {
+  $$SchematicLabelsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get sheetId =>
+      $composableBuilder(column: $table.sheetId, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get content =>
+      $composableBuilder(column: $table.content, builder: (column) => column);
+
+  GeneratedColumn<double> get x =>
+      $composableBuilder(column: $table.x, builder: (column) => column);
+
+  GeneratedColumn<double> get y =>
+      $composableBuilder(column: $table.y, builder: (column) => column);
+
+  GeneratedColumn<double> get angle =>
+      $composableBuilder(column: $table.angle, builder: (column) => column);
+
+  GeneratedColumn<double> get size =>
+      $composableBuilder(column: $table.size, builder: (column) => column);
+
+  GeneratedColumn<String> get shape =>
+      $composableBuilder(column: $table.shape, builder: (column) => column);
+
+  $$ProjectsTableAnnotationComposer get projectId {
+    final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SchematicLabelsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SchematicLabelsTable,
+          SchematicLabelRow,
+          $$SchematicLabelsTableFilterComposer,
+          $$SchematicLabelsTableOrderingComposer,
+          $$SchematicLabelsTableAnnotationComposer,
+          $$SchematicLabelsTableCreateCompanionBuilder,
+          $$SchematicLabelsTableUpdateCompanionBuilder,
+          (SchematicLabelRow, $$SchematicLabelsTableReferences),
+          SchematicLabelRow,
+          PrefetchHooks Function({bool projectId})
+        > {
+  $$SchematicLabelsTableTableManager(
+    _$AppDatabase db,
+    $SchematicLabelsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SchematicLabelsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SchematicLabelsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SchematicLabelsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> projectId = const Value.absent(),
+                Value<String?> sheetId = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String> content = const Value.absent(),
+                Value<double> x = const Value.absent(),
+                Value<double> y = const Value.absent(),
+                Value<double> angle = const Value.absent(),
+                Value<double> size = const Value.absent(),
+                Value<String> shape = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SchematicLabelsCompanion(
+                id: id,
+                projectId: projectId,
+                sheetId: sheetId,
+                kind: kind,
+                content: content,
+                x: x,
+                y: y,
+                angle: angle,
+                size: size,
+                shape: shape,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String projectId,
+                Value<String?> sheetId = const Value.absent(),
+                required String kind,
+                required String content,
+                required double x,
+                required double y,
+                Value<double> angle = const Value.absent(),
+                Value<double> size = const Value.absent(),
+                Value<String> shape = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SchematicLabelsCompanion.insert(
+                id: id,
+                projectId: projectId,
+                sheetId: sheetId,
+                kind: kind,
+                content: content,
+                x: x,
+                y: y,
+                angle: angle,
+                size: size,
+                shape: shape,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$SchematicLabelsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({projectId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (projectId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.projectId,
+                                referencedTable:
+                                    $$SchematicLabelsTableReferences
+                                        ._projectIdTable(db),
+                                referencedColumn:
+                                    $$SchematicLabelsTableReferences
+                                        ._projectIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$SchematicLabelsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SchematicLabelsTable,
+      SchematicLabelRow,
+      $$SchematicLabelsTableFilterComposer,
+      $$SchematicLabelsTableOrderingComposer,
+      $$SchematicLabelsTableAnnotationComposer,
+      $$SchematicLabelsTableCreateCompanionBuilder,
+      $$SchematicLabelsTableUpdateCompanionBuilder,
+      (SchematicLabelRow, $$SchematicLabelsTableReferences),
+      SchematicLabelRow,
+      PrefetchHooks Function({bool projectId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -35372,4 +36506,6 @@ class $AppDatabaseManager {
       $$BoardDimensionsTableTableManager(_db, _db.boardDimensions);
   $$SchematicSheetsTableTableManager get schematicSheets =>
       $$SchematicSheetsTableTableManager(_db, _db.schematicSheets);
+  $$SchematicLabelsTableTableManager get schematicLabels =>
+      $$SchematicLabelsTableTableManager(_db, _db.schematicLabels);
 }

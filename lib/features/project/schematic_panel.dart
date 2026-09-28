@@ -206,6 +206,8 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   /// Sub-sheets on the open sheet, and the one picked or being dragged.
   List<SheetBoxView> _sheetBoxes = const [];
   List<OffSheetLabel> _offSheetLabels = const [];
+  List<SchematicLabel> _storedLabels = const [];
+  Set<String> _labelledNets = const {};
   String? _selectedSheetId;
   SchematicSheet? _candidateSheet;
   Offset? _draggingSheetAt;
@@ -271,7 +273,14 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     final drawn =
         ref.watch(sheetWiresProvider(widget.project.id)).value ??
         const <SchematicWire>[];
-    var scene = _sceneFor(parts, nets, symbols, hints, drawn);
+    // A sheet from KiCad shows the labels it was drawn with, where they
+    // were drawn, and none of the app's own for the nets they name. The
+    // pieces of a net they join are joined by name, not by a wire.
+    _storedLabels =
+        ref.watch(sheetLabelsProvider(widget.project.id)).value ??
+        const <SchematicLabel>[];
+    final anchors = _labelAnchors(_storedLabels);
+    var scene = _sceneFor(parts, nets, symbols, hints, drawn, anchors);
 
     final live = _draggingUnits;
     final carried = {for (final wire in _dragWires) wire.id};
@@ -298,6 +307,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
         symbols: symbols,
         routeHints: hints,
         drawnWires: drawnLive,
+        labelAnchors: anchors,
       );
     }
 
@@ -326,6 +336,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
               pinBId: segment.pinB,
             ),
         ],
+        labelAnchors: anchors,
       );
     }
 
@@ -361,6 +372,11 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     if (draggingLabel != null && labelAt != null) {
       scene = scene.withLabelMoved(draggingLabel.netId, labelAt);
     }
+
+    _labelledNets = {
+      for (final label in _storedLabels) ?scene.netAt(label.position),
+    };
+    scene = scene.withoutLabelsFor(_labelledNets);
 
     final notes =
         ref.watch(sheetNotesProvider(widget.project.id)).value ??
@@ -417,6 +433,17 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   Object? _cachedSymbols;
   Object? _cachedHints;
   Object? _cachedDrawn;
+  Object? _cachedAnchors;
+  List<SchematicLabel>? _anchorsFrom;
+  List<Offset> _anchors = const [];
+
+  List<Offset> _labelAnchors(List<SchematicLabel> labels) {
+    if (!identical(labels, _anchorsFrom)) {
+      _anchorsFrom = labels;
+      _anchors = [for (final label in labels) label.position];
+    }
+    return _anchors;
+  }
 
   /// The scene, rebuilt only when something it is drawn from has changed.
   ///
@@ -430,6 +457,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     Map<String, SymbolDefinition> symbols,
     Map<String, List<double>> hints,
     List<SchematicWire> drawn,
+    List<Offset> anchors,
   ) {
     final cached = _cachedScene;
     if (cached != null &&
@@ -437,7 +465,8 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
         identical(nets, _cachedNets) &&
         identical(symbols, _cachedSymbols) &&
         identical(hints, _cachedHints) &&
-        identical(drawn, _cachedDrawn)) {
+        identical(drawn, _cachedDrawn) &&
+        identical(anchors, _cachedAnchors)) {
       return cached;
     }
 
@@ -448,8 +477,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       symbols: symbols,
       routeHints: hints,
       drawnWires: drawn,
+      labelAnchors: anchors,
     );
     _cachedDrawn = drawn;
+    _cachedAnchors = anchors;
     _cachedScene = scene;
     _cachedParts = parts;
     _cachedNets = nets;
@@ -768,6 +799,7 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
                         sheetBoxes: _sheetBoxes,
                         selectedSheetId: _selectedSheetId,
                         offSheetLabels: _offSheetLabels,
+                        storedLabels: _storedLabels,
                         zigzagResistors:
                             ref.watch(appearanceProvider).resistorStyle ==
                             ResistorStyle.ansi,
@@ -3215,7 +3247,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       movedTo: _draggingSheetAt,
     );
     _sheetBoxes = boxes;
-    _offSheetLabels = labels;
+    _offSheetLabels = [
+      for (final label in labels)
+        if (!_labelledNets.contains(label.netId)) label,
+    ];
   }
 
   /// Where on the hierarchy this sheet is — Top › Power › Regulator —

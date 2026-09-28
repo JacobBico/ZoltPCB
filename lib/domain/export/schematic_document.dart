@@ -15,6 +15,7 @@ class SchematicDocument {
     this.routeHints = const {},
     this.drawnWires = const [],
     this.notes = const [],
+    this.labels = const [],
     this.sheets = const [],
     this.generator = 'zolt',
     this.generatorVersion = '1.0',
@@ -52,6 +53,10 @@ class SchematicDocument {
       for (final note in notes)
         if (note.sheetId == sheetId) note,
     ],
+    labels: [
+      for (final label in labels)
+        if (label.sheetId == sheetId) label,
+    ],
     sheets: sheets,
     generator: generator,
     generatorVersion: generatorVersion,
@@ -78,6 +83,9 @@ class SchematicDocument {
 
   /// Text and boxes on the sheet.
   final List<SchematicNote> notes;
+
+  /// Labels as a KiCad file drew them, written back as they were.
+  final List<SchematicLabel> labels;
 
   final String generator;
   final String generatorVersion;

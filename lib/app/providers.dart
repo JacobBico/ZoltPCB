@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/db/database.dart';
 import '../data/repositories/font_repository.dart';
 import '../data/repositories/picture_repository.dart';
+import '../data/repositories/label_repository.dart';
 import '../data/repositories/net_repository.dart';
 import '../data/repositories/pin_swap.dart';
 import '../data/repositories/active_sheet.dart';
@@ -188,8 +189,34 @@ final kicadImporterProvider = Provider<KicadProjectImporter>(
     symbols: ref.watch(symbolLibraryRepositoryProvider),
     footprints: ref.watch(footprintLibraryRepositoryProvider),
     sheets: ref.watch(sheetRepositoryProvider),
+    labels: ref.watch(labelRepositoryProvider),
   ),
 );
+
+final labelRepositoryProvider = Provider<LabelRepository>(
+  (ref) => LabelRepository(ref.watch(databaseProvider)),
+);
+
+/// A project's labels as its KiCad file drew them.
+final schematicLabelsProvider =
+    StreamProvider.family<List<SchematicLabel>, String>(
+      (ref, projectId) => ref.watch(labelRepositoryProvider).watch(projectId),
+      isAutoDispose: true,
+    );
+
+/// The labels a KiCad file drew on the open sheet.
+final sheetLabelsProvider =
+    Provider.family<AsyncValue<List<SchematicLabel>>, String>((ref, projectId) {
+      final sheet = ref.watch(openSheetProvider(projectId));
+      return ref
+          .watch(schematicLabelsProvider(projectId))
+          .whenData(
+            (labels) => [
+              for (final label in labels)
+                if (label.sheetId == sheet) label,
+            ],
+          );
+    });
 
 /// Every project, most recently modified first.
 final projectListProvider = StreamProvider<List<Project>>(
@@ -589,6 +616,7 @@ final projectExporterProvider = Provider<ProjectExporter>(
     footprints: ref.watch(footprintLibraryRepositoryProvider),
     notes: ref.watch(noteRepositoryProvider),
     sheets: ref.watch(sheetRepositoryProvider),
+    labels: ref.watch(labelRepositoryProvider),
     outputDirectory: ref.watch(exportDirectoryProvider),
   ),
 );

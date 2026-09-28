@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:isolate';
 
 import 'package:drift/drift.dart';
@@ -158,6 +159,49 @@ class SymbolLibraryRepository {
       _db.symbolLibraries,
     )..where((t) => t.id.equals(libraryId))).getSingle();
     return _toInfo(info);
+  }
+
+  /// Adds [symbols] — each the whole text of one `(symbol "Name" …)`, by
+  /// name — to the library called [nickname]. Symbols it already has are
+  /// left as they are; with no library of that name, one is made of them.
+  ///
+  /// A KiCad design embeds only the symbols each of its sheets uses, so a
+  /// library brought in from one sheet is missing those of the next.
+  Future<void> addSymbols(String nickname, Map<String, String> symbols) async {
+    if (symbols.isEmpty) return;
+    final existing = await (_db.select(
+      _db.symbolLibraries,
+    )..where((t) => t.nickname.equals(nickname))).getSingleOrNull();
+    var text =
+        '(kicad_symbol_lib\n\t(version 20241209)\n'
+        '\t(generator "zolt")\n)';
+    var missing = symbols;
+    if (existing != null && _storage.exists(existing.fileName)) {
+      final names = {
+        for (final row in await (_db.select(
+          _db.symbolIndexEntries,
+        )..where((t) => t.libraryId.equals(existing.id))).get())
+          row.name,
+      };
+      missing = {
+        for (final entry in symbols.entries)
+          if (!names.contains(entry.key)) entry.key: entry.value,
+      };
+      if (missing.isEmpty) return;
+      text = utf8.decode(
+        await _storage.readAll(existing.fileName),
+        allowMalformed: true,
+      );
+    }
+    final end = text.lastIndexOf(')');
+    if (end < 0) return;
+    await import(
+      fileName: '$nickname.kicad_sym',
+      bytes: utf8.encode(
+        '${text.substring(0, end).trimRight()}\n'
+        '${missing.values.join('\n')}\n)\n',
+      ),
+    );
   }
 
   Future<void> deleteLibrary(String id) async {

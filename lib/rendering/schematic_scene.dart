@@ -150,6 +150,7 @@ class SchematicScene {
     Map<String, List<double>> routeHints = const {},
     required Map<String, SymbolDefinition> symbols,
     List<SchematicWire> drawnWires = const [],
+    List<Offset> labelAnchors = const [],
   }) {
     final netByPin = <String, NetWithEndpoints>{
       for (final net in nets)
@@ -248,6 +249,7 @@ class SchematicScene {
           drawnByNet[entry.key] ?? const [],
           labelledPins: labelledPins,
           powerPins: powerPins,
+          labelAnchors: labelAnchors,
         ),
       );
     }
@@ -441,6 +443,49 @@ class SchematicScene {
 
   /// The same scene with one label somewhere else, for showing a drag in
   /// progress before it is written down.
+  /// The net a label anchored at [at] names: the wire it touches, or else
+  /// a pin it sits on — how KiCad works it out.
+  String? netAt(Offset at) {
+    String? on(bool drawn) {
+      for (final wire in wires) {
+        if (wire.points.length < 2 || (wire.drawnId != null) != drawn) {
+          continue;
+        }
+        if (DrawnWireGeometry.nearestRun(wire.points, at).$2 < 0.01) {
+          return wire.netId;
+        }
+      }
+      return null;
+    }
+
+    // The wires drawn on the sheet first: a label was put on one of those,
+    // never on a wire the app routed itself.
+    if (on(true) case final netId?) return netId;
+    for (final entry in pinsByNet.entries) {
+      for (final pin in entry.value) {
+        if ((pin.sheetPosition - at).distance < 0.01) return entry.key;
+      }
+    }
+    return on(false);
+  }
+
+  /// This scene without its own labels for [netIds]: nets whose labels the
+  /// sheet already has, as a KiCad file drew them.
+  SchematicScene withoutLabelsFor(Set<String> netIds) => netIds.isEmpty
+      ? this
+      : SchematicScene(
+          paper: paper,
+          units: units,
+          pins: pins,
+          nets: nets,
+          pinsByNet: pinsByNet,
+          wires: wires,
+          labels: [
+            for (final label in labels)
+              if (!netIds.contains(label.netId)) label,
+          ],
+        );
+
   SchematicScene withLabelMoved(String netId, Offset at) => SchematicScene(
     paper: paper,
     units: units,
@@ -604,6 +649,7 @@ class SchematicScene {
     List<SchematicWire> drawn, {
     Set<String> labelledPins = const {},
     Set<String> powerPins = const {},
+    List<Offset> labelAnchors = const [],
   }) {
     final routable = [for (final pin in pins) pin.routable];
 
@@ -626,6 +672,10 @@ class SchematicScene {
     final nearby = [
       for (final o in obstacles)
         if (o.overlaps(reach)) o,
+    ];
+    final anchors = [
+      for (final at in labelAnchors)
+        if (reach.contains(at)) at,
     ];
 
     final signature = StringBuffer();
@@ -657,6 +707,11 @@ class SchematicScene {
       if (labelledPins.contains(pin.id)) signature.write('L${pin.id}');
       if (powerPins.contains(pin.id)) signature.write('P${pin.id}');
     }
+    for (final at in anchors) {
+      signature.write(
+        'a${at.dx.toStringAsFixed(3)},${at.dy.toStringAsFixed(3)}',
+      );
+    }
     final key = signature.toString();
 
     final cached = _routeCache[netId];
@@ -670,6 +725,7 @@ class SchematicScene {
       hints: routeHints,
       labelledPins: labelledPins,
       powerPins: powerPins,
+      labelAnchors: anchors,
     );
     if (_routeCache.length > 4000) _routeCache.clear();
     _routeCache[netId] = (key, routed);

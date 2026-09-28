@@ -133,9 +133,13 @@ class OffSheetLabel {
     required this.at,
     required this.name,
     required this.hierarchical,
+    this.netId,
   });
 
   final Offset at;
   final String name;
   final bool hierarchical;
+
+  /// The net it names.
+  final String? netId;
 }

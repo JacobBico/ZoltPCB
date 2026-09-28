@@ -7,6 +7,7 @@ import 'package:flutter/painting.dart';
 import '../core/theme/kicad_palette.dart';
 import '../data/export/pdf_writer.dart';
 import 'schematic_painter.dart';
+import '../domain/models/schematic_label.dart';
 import '../domain/models/schematic_note.dart';
 import '../domain/models/sheet_views.dart';
 import 'schematic_scene.dart';
@@ -38,12 +39,14 @@ class SchematicPdfPage {
     this.notes = const [],
     this.sheetBoxes = const [],
     this.offSheetLabels = const [],
+    this.storedLabels = const [],
   });
 
   final SchematicScene scene;
   final List<SchematicNote> notes;
   final List<SheetBoxView> sheetBoxes;
   final List<OffSheetLabel> offSheetLabels;
+  final List<SchematicLabel> storedLabels;
 }
 
 /// The whole sheet as a PDF, page-sized, drawn by the canvas's own painter.
@@ -101,6 +104,7 @@ Future<RasterPage> _renderPage(
     notes: sheet.notes,
     sheetBoxes: sheet.sheetBoxes,
     offSheetLabels: sheet.offSheetLabels,
+    storedLabels: sheet.storedLabels,
   ).paint(canvas, Size(width.toDouble(), height.toDouble()));
 
   final image = await recorder.endRecording().toImage(width, height);

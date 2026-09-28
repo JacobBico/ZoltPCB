@@ -808,6 +808,31 @@ class ProjectSnapshots extends Table {
 /// Not connectivity and not a component: a note says what a section is
 /// for, a box groups it. Both are exported to KiCad as its own text and
 /// rectangle items.
+/// Labels as a KiCad file drew them, each on its sheet (see
+/// `SchematicLabel`).
+@TableIndex(name: 'idx_schematic_labels_project', columns: {#projectId})
+@DataClassName('SchematicLabelRow')
+class SchematicLabels extends Table {
+  TextColumn get id => text()();
+  TextColumn get projectId =>
+      text().references(Projects, #id, onDelete: KeyAction.cascade)();
+
+  /// The sub-sheet it is on; null for the top sheet.
+  TextColumn get sheetId => text().nullable()();
+
+  /// KiCad's `label`, `global_label` or `hierarchical_label`.
+  TextColumn get kind => text()();
+  TextColumn get content => text()();
+  RealColumn get x => real()();
+  RealColumn get y => real()();
+  RealColumn get angle => real().withDefault(const Constant(0))();
+  RealColumn get size => real().withDefault(const Constant(1.27))();
+  TextColumn get shape => text().withDefault(const Constant('bidirectional'))();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
 @TableIndex(name: 'idx_schematic_notes_project', columns: {#projectId})
 @DataClassName('SchematicNoteRow')
 class SchematicNotes extends Table {

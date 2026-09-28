@@ -139,6 +139,10 @@ abstract final class NetRouting {
   /// between them — drawing that wire across the whole sheet is what the
   /// symbol exists to avoid. With neither set the routing is exactly what
   /// it always was.
+  ///
+  /// [labelAnchors] are where labels drawn on the sheet sit, as a KiCad
+  /// file brings them: a piece with one on its wires or pins is joined by
+  /// that label's name just the same.
   static List<RoutedWire> routeNetWithDrawn(
     String netId,
     List<RoutablePin> pins, {
@@ -147,6 +151,7 @@ abstract final class NetRouting {
     Map<String, List<double>> hints = const {},
     Set<String> labelledPins = const {},
     Set<String> powerPins = const {},
+    List<Offset> labelAnchors = const [],
   }) {
     final byId = {for (final pin in pins) pin.id: pin};
     final wires = <RoutedWire>[];
@@ -237,6 +242,15 @@ abstract final class NetRouting {
         union(members.first, other);
       }
     }
+    final labelledHere = <String>{
+      for (final at in labelAnchors) ...[
+        for (final pin in pins)
+          if ((pin.position - at).distance < 0.01) pin.id,
+        for (var i = 0; i < placed.length; i++)
+          if (DrawnWireGeometry.nearestRun(placed[i], at).$2 < 0.01)
+            ...?pinsOfGroup[findWire(i)],
+      ],
+    };
 
     // One representative pin list per piece, then a spanning tree between
     // pieces using the closest pair of pins each time.
@@ -273,7 +287,9 @@ abstract final class NetRouting {
       for (var i = 0; i < pieces.length; i++)
         if (pieces[i].any(
           (pin) =>
-              labelledPins.contains(pin.id) || powerPins.contains(pin.id),
+              labelledPins.contains(pin.id) ||
+              powerPins.contains(pin.id) ||
+              labelledHere.contains(pin.id),
         ))
           i,
     };
