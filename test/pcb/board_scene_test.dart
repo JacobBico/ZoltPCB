@@ -298,6 +298,71 @@ void main() {
       expect(half.ratsnest, hasLength(1));
     });
 
+    // KiCad boards run one straight track over a row of pads as often as
+    // they stop at each one.
+    test('a track run straight over a pad reaches it', () async {
+      final d = await divider();
+      final scene = d.scene(
+        tracks: [
+          track(d.netId, id: 'a', x1: 11, y1: 10, x2: 11, y2: 5),
+          track(d.netId, id: 'b', x1: 11, y1: 5, x2: 19, y2: 5),
+          // Over R2's pad 1 at (19, 10), ending on neither side of it.
+          track(d.netId, id: 'c', x1: 19, y1: 5, x2: 19, y2: 15),
+        ],
+      );
+
+      expect(scene.ratsnest, isEmpty);
+    });
+
+    test('a track ending on the middle of another joins it', () async {
+      final d = await divider();
+      final scene = d.scene(
+        tracks: [
+          track(d.netId, id: 'a', x1: 11, y1: 10, x2: 11, y2: 5),
+          // From R2's pad up past the first track's line...
+          track(d.netId, id: 'b', x1: 19, y1: 10, x2: 19, y2: 5),
+          // ...and one run between them, each end teed into one part way.
+          track(d.netId, id: 'c', x1: 11, y1: 7, x2: 19, y2: 7),
+        ],
+      );
+
+      expect(scene.ratsnest, isEmpty);
+    });
+
+    test('a via part way along a track joins it', () async {
+      final d = await divider();
+      Via via(String id, double x, double y) => Via(
+        id: id,
+        projectId: 'p',
+        netId: d.netId,
+        x: x,
+        y: y,
+        diameter: 0.8,
+        drill: 0.4,
+      );
+      final scene = d.scene(
+        tracks: [
+          // R1 down a via to the back...
+          track(d.netId, id: 'a', x1: 11, y1: 10, x2: 13, y2: 10),
+          // ...where a track passes over that via, not ending at it...
+          track(
+            d.netId,
+            id: 'b',
+            x1: 13,
+            y1: 6,
+            x2: 13,
+            y2: 14,
+            layer: CopperLayer.back,
+          ),
+          // ...and back up another to R2.
+          track(d.netId, id: 'c', x1: 13, y1: 14, x2: 19, y2: 10),
+        ],
+        vias: [via('v1', 13, 10), via('v2', 13, 14)],
+      );
+
+      expect(scene.ratsnest, isEmpty);
+    });
+
     test('a track that stops short of a pad settles nothing', () async {
       final d = await divider();
       // Ends 2 mm shy of R2's pad, which is 1 mm wide.

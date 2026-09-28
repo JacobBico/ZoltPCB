@@ -321,10 +321,10 @@ void _islandTests() {
         ),
       );
       expect(plan.joins, hasLength(1));
-      expect(
-        plan.joins.single.pads.map((p) => p.reference).toSet(),
-        {'R1', 'R2'},
-      );
+      expect(plan.joins.single.pads.map((p) => p.reference).toSet(), {
+        'R1',
+        'R2',
+      });
       expect(plan.warnings, isEmpty);
     });
 
@@ -348,6 +348,50 @@ void _islandTests() {
       ];
       // Each half touches one pad only, so neither joins anything.
       expect(gnd, isEmpty);
+      expect(plan.warnings, isEmpty);
+    });
+
+    // A capacitor across a battery's terminals, each pad in its own net's
+    // pour where the two meet: cut out of both, it joined neither.
+    test('a part where two pours meet joins each pad to its own', () {
+      List<Offset> half(double from, double to) => [
+        Offset(from, 0),
+        Offset(to, 0),
+        Offset(to, 30),
+        Offset(from, 30),
+      ];
+      final plan = _plan(
+        _scene(
+          zones: [
+            _zone(
+              'bat',
+              net: 'bat',
+              points: half(0, 20),
+              connection: PadConnection.solid,
+            ),
+            _zone(
+              'gnd',
+              net: 'gnd',
+              points: half(20, 40),
+              connection: PadConnection.solid,
+            ),
+          ],
+          footprints: [
+            _pad(const Offset(5, 15), 'bat', reference: 'BT1'),
+            _pad(const Offset(35, 15), 'gnd', reference: 'BT2'),
+            // Each a millimetre from the other net's pour.
+            _pad(const Offset(18.5, 15), 'bat', reference: 'C1'),
+            _pad(const Offset(21.5, 15), 'gnd', reference: 'C2'),
+          ],
+        ),
+      );
+      Set<String> joined(String net) => {
+        for (final join in plan.joins)
+          if (join.netId == net)
+            for (final pad in join.pads) pad.reference,
+      };
+      expect(joined('bat'), {'BT1', 'C1'});
+      expect(joined('gnd'), {'BT2', 'C2'});
       expect(plan.warnings, isEmpty);
     });
 
@@ -444,9 +488,7 @@ void _islandTests() {
     test('a pad the spokes miss is not counted as joined', () {
       final plan = _plan(
         _scene(
-          zones: [
-            _zone('gnd', net: 'gnd'),
-          ],
+          zones: [_zone('gnd', net: 'gnd')],
           footprints: [
             _pad(const Offset(8, 8), 'gnd'),
             // Right against the board's edge: no spoke lands inside it,

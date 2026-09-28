@@ -271,16 +271,55 @@ abstract final class PourFill {
       return (foreign, gap);
     }
 
+    // Each pour as poured, for cutting other nets' copper out of it alone.
+    final poured = {
+      for (final zone in zones) zone: clipToRect(zone.points, box),
+    };
+
+    // Copper of another net is cut out of the pours round it — but only
+    // out of those of other nets. A part standing where two pours meet, a
+    // capacitor across a battery's two terminals, is on one of them: cut
+    // out of both, it was joined to neither. With a pour of its own net
+    // nearby, the cut is made in each other pour's outline alone.
+    void clearOf(
+      String? netId,
+      Rect box,
+      PourShape shape,
+      List<Offset> Function() outline,
+    ) {
+      final near = over(box);
+      final mine = netId == null
+          ? const <BoardZone>[]
+          : [
+              for (final zone in near)
+                if (zone.netId == netId) zone,
+            ];
+      if (mine.isEmpty) {
+        steps.add(PourStep.clear(shape));
+        return;
+      }
+      final window = outline();
+      for (final zone in near) {
+        if (zone.netId == netId) continue;
+        final cut = _clipToConvex(poured[zone]!, window);
+        if (cut.length >= 3) steps.add(PourStep.clear(PourRegion(cut)));
+      }
+    }
+
     for (final track in scene.tracks) {
       if (track.layer != layer) continue;
       final a = Offset(track.startX, track.startY);
       final b = Offset(track.endX, track.endY);
-      final (foreign, gap) = clearFor(
-        track.netId,
-        Rect.fromPoints(a, b).inflate(track.width + 1),
-      );
+      final box = Rect.fromPoints(a, b).inflate(track.width + 1);
+      final (foreign, gap) = clearFor(track.netId, box);
       if (foreign) {
-        steps.add(PourStep.clear(PourStroke([a, b], track.width + gap * 2)));
+        final width = track.width + gap * 2;
+        clearOf(
+          track.netId,
+          box,
+          PourStroke([a, b], width),
+          () => _capsule(a, b, width),
+        );
       }
     }
     // A via on the pour's own net joins it however the pour says: poured
@@ -300,11 +339,15 @@ abstract final class PourFill {
           )
           .lastOrNull;
       final (foreign, gap) = clearFor(via.netId, box);
-      if (foreign || own?.viaConnection == PadConnection.none) {
-        steps.add(
-          PourStep.clear(
-            PourDisc(at, via.diameter + math.max(gap, own?.clearance ?? 0) * 2),
-          ),
+      final diameter = via.diameter + math.max(gap, own?.clearance ?? 0) * 2;
+      if (own?.viaConnection == PadConnection.none) {
+        steps.add(PourStep.clear(PourDisc(at, diameter)));
+      } else if (foreign) {
+        clearOf(
+          via.netId,
+          box,
+          PourDisc(at, diameter),
+          () => _capsule(at, at, diameter),
         );
       } else if (own != null && own.viaConnection == PadConnection.thermal) {
         thermalVias.add((at, via.diameter, own));
@@ -330,9 +373,15 @@ abstract final class PourFill {
           )
           .lastOrNull;
       final (foreign, gap) = clearFor(pad.netId, box);
-      if (foreign || own?.padConnection == PadConnection.none) {
-        steps.add(
-          PourStep.clear(PourPad(pad, math.max(gap, own?.clearance ?? 0))),
+      final grow = math.max(gap, own?.clearance ?? 0);
+      if (own?.padConnection == PadConnection.none) {
+        steps.add(PourStep.clear(PourPad(pad, grow)));
+      } else if (foreign) {
+        clearOf(
+          pad.netId,
+          box,
+          PourPad(pad, grow),
+          () => _padOutline(pad, grow),
         );
       } else if (own != null && own.padConnection == PadConnection.thermal) {
         thermal.add((pad, own));
@@ -550,6 +599,112 @@ abstract final class PourFill {
   }
 
   /// [polygon] cut down to what lies inside [rect] (Sutherland–Hodgman).
+  /// How many corners stand in for half a circle in a cut's outline.
+  static const _arcSteps = 8;
+
+  /// A track's copper grown to [width], as a convex outline a little
+  /// outside the true one, so a cut made with it clears at least as much.
+  /// A point where [a] is [b]: a disc.
+  static List<Offset> _capsule(Offset a, Offset b, double width) {
+    final along = b - a;
+    final heading = along.distance < 1e-9
+        ? 0.0
+        : math.atan2(along.dy, along.dx);
+    // Far enough out that the flats clear the true curve.
+    final r = width / 2 / math.cos(math.pi / (_arcSteps * 2));
+    Offset at(Offset centre, double angle) =>
+        centre + Offset(math.cos(angle), math.sin(angle)) * r;
+    return [
+      for (var i = 0; i <= _arcSteps; i++)
+        at(b, heading - math.pi / 2 + math.pi * i / _arcSteps),
+      for (var i = 0; i <= _arcSteps; i++)
+        at(a, heading + math.pi / 2 + math.pi * i / _arcSteps),
+    ];
+  }
+
+  /// A pad's outline grown by [grow], as a convex polygon: the shape
+  /// [padPath] draws, its rounded corners a little outside the true arc.
+  static List<Offset> _padOutline(PlacedPad pad, double grow) {
+    final w = pad.pad.sizeX + grow * 2;
+    final h = pad.pad.sizeY + grow * 2;
+    final radius = math.min(
+      math.min(w, h) / 2,
+      switch (pad.pad.shape) {
+        PadShape.circle || PadShape.oval => math.min(w, h) / 2,
+        PadShape.roundrect =>
+          math.min(pad.pad.sizeX, pad.pad.sizeY) * pad.pad.roundrectRatio +
+              grow,
+        _ => grow,
+      },
+    );
+    final quarter = _arcSteps ~/ 2;
+    final r = radius / math.cos(math.pi / (quarter * 4));
+    final local = <Offset>[];
+    for (final (corner, start) in [
+      (Offset(w / 2 - radius, h / 2 - radius), 0.0),
+      (Offset(-(w / 2 - radius), h / 2 - radius), math.pi / 2),
+      (Offset(-(w / 2 - radius), -(h / 2 - radius)), math.pi),
+      (Offset(w / 2 - radius, -(h / 2 - radius)), math.pi * 3 / 2),
+    ]) {
+      if (radius <= 1e-9) {
+        local.add(corner);
+        continue;
+      }
+      for (var i = 0; i <= quarter; i++) {
+        final angle = start + math.pi / 2 * i / quarter;
+        local.add(corner + Offset(math.cos(angle), math.sin(angle)) * r);
+      }
+    }
+    // Turned as [padPath] turns it.
+    final radians = -pad.angle * math.pi / 180;
+    final cos = math.cos(radians);
+    final sin = math.sin(radians);
+    return [
+      for (final p in local)
+        pad.position +
+            Offset(p.dx * cos - p.dy * sin, p.dx * sin + p.dy * cos),
+    ];
+  }
+
+  /// [subject] cut down to the part of it inside [window], a convex
+  /// polygon: Sutherland and Hodgman's clip, one edge of the window at a
+  /// time. Where the part inside comes in pieces they are joined by edges
+  /// that run out and back along the window's edge and enclose nothing.
+  static List<Offset> _clipToConvex(List<Offset> subject, List<Offset> window) {
+    if (subject.length < 3 || window.length < 3) return const [];
+    // Which way round the window goes, so inside is on the same side of
+    // every edge.
+    var area = 0.0;
+    for (var i = 0; i < window.length; i++) {
+      final a = window[i];
+      final b = window[(i + 1) % window.length];
+      area += a.dx * b.dy - b.dx * a.dy;
+    }
+    final turn = area >= 0 ? 1.0 : -1.0;
+    var out = subject;
+    for (var i = 0; i < window.length && out.isNotEmpty; i++) {
+      final a = window[i];
+      final b = window[(i + 1) % window.length];
+      final edge = b - a;
+      if (edge.distance < 1e-12) continue;
+      double side(Offset p) =>
+          turn * (edge.dx * (p.dy - a.dy) - edge.dy * (p.dx - a.dx));
+      final input = out;
+      out = <Offset>[];
+      for (var j = 0; j < input.length; j++) {
+        final p = input[j];
+        final q = input[(j + 1) % input.length];
+        final sp = side(p);
+        final sq = side(q);
+        if (sp >= 0) out.add(p);
+        if ((sp >= 0) != (sq >= 0)) {
+          out.add(p + (q - p) * (sp / (sp - sq)));
+        }
+      }
+    }
+    return out;
+  }
+
   static List<Offset> clipToRect(List<Offset> polygon, Rect rect) {
     var out = polygon;
     for (final (inside, cross)

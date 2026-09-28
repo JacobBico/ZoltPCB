@@ -73,6 +73,41 @@ class PlacedPad {
         local.dy.abs() <= pad.sizeY / 2 + toleranceMm;
   }
 
+  /// Whether the run from [a] to [b] passes over the pad's copper — by the
+  /// same shapes as [contains].
+  bool crosses(Offset a, Offset b, {double toleranceMm = 0}) {
+    if (pad.shape == PadShape.circle) {
+      return distanceToSegment(position, a, b) <= pad.sizeX / 2 + toleranceMm;
+    }
+    // The part of the run inside the pad's box, in the pad's own frame.
+    final from = _toLocal(a);
+    final d = _toLocal(b) - from;
+    final hx = pad.sizeX / 2 + toleranceMm;
+    final hy = pad.sizeY / 2 + toleranceMm;
+    var enter = 0.0;
+    var leave = 1.0;
+    for (final (p, q) in [
+      (-d.dx, from.dx + hx),
+      (d.dx, hx - from.dx),
+      (-d.dy, from.dy + hy),
+      (d.dy, hy - from.dy),
+    ]) {
+      if (p == 0) {
+        if (q < 0) return false;
+        continue;
+      }
+      final t = q / p;
+      if (p < 0) {
+        if (t > leave) return false;
+        if (t > enter) enter = t;
+      } else {
+        if (t < enter) return false;
+        if (t < leave) leave = t;
+      }
+    }
+    return true;
+  }
+
   Offset _toLocal(Offset point) {
     final d = point - position;
     final radians = -angle * math.pi / 180;
@@ -671,18 +706,25 @@ class BoardScene {
       find(padNode(i));
     }
 
-    for (final track in tracks) {
-      if (track.netId != netId) continue;
-      final start = Offset(track.startX, track.startY);
-      final end = Offset(track.endX, track.endY);
+    final own = [
+      for (final track in tracks)
+        if (track.netId == netId) track,
+    ];
+    final ownVias = [
+      for (final via in vias)
+        if (via.netId == netId) via,
+    ];
+    String startOf(Track track) =>
+        pointNode(Offset(track.startX, track.startY), track.layer);
 
-      union(pointNode(start, track.layer), pointNode(end, track.layer));
-      bindToPads(start, track.layer);
-      bindToPads(end, track.layer);
+    for (final track in own) {
+      union(
+        startOf(track),
+        pointNode(Offset(track.endX, track.endY), track.layer),
+      );
     }
 
-    for (final via in vias) {
-      if (via.netId != netId) continue;
+    for (final via in ownVias) {
       final at = Offset(via.x, via.y);
       // A via is a plated hole through every layer: it joins all of them
       // at its own point. Layers the board does not have carry no copper,
@@ -691,21 +733,19 @@ class BoardScene {
         union(pointNode(at, CopperLayer.front), pointNode(at, layer));
         bindToPads(at, layer);
       }
-
-      // A track ending anywhere inside the via's barrel reaches it, the
-      // same way a track ending inside a pad reaches the pad.
-      for (final track in tracks) {
-        if (track.netId != netId) continue;
-        for (final end in [
-          Offset(track.startX, track.startY),
-          Offset(track.endX, track.endY),
-        ]) {
-          if ((end - at).distance <= via.diameter / 2 + _touchMm) {
-            union(pointNode(end, track.layer), pointNode(at, track.layer));
-          }
-        }
-      }
     }
+
+    _contacts(
+      pads,
+      own,
+      ownVias,
+      onPad: (t, p) => union(startOf(own[t]), padNode(p)),
+      onTrack: (t, o) => union(startOf(own[t]), startOf(own[o])),
+      onVia: (t, v) => union(
+        startOf(own[t]),
+        pointNode(Offset(ownVias[v].x, ownVias[v].y), CopperLayer.front),
+      ),
+    );
 
     // A piece of pour joins everything it touches.
     final padIndex = joins.isEmpty
@@ -801,19 +841,6 @@ class BoardScene {
       final end = Offset(track.endX, track.endY);
       union('track:${track.id}', pointNode(start, track.layer));
       union('track:${track.id}', pointNode(end, track.layer));
-      bindToPads(start, track.layer);
-      bindToPads(end, track.layer);
-    }
-
-    // Track ends by where they are, for finding those inside a via.
-    final ends = <(int, int), List<(Offset, CopperLayer)>>{};
-    for (final track in tracks) {
-      for (final end in [
-        Offset(track.startX, track.startY),
-        Offset(track.endX, track.endY),
-      ]) {
-        (ends[_PadIndex.cellOf(end)] ??= []).add((end, track.layer));
-      }
     }
 
     for (final via in vias) {
@@ -822,18 +849,22 @@ class BoardScene {
         union('via:${via.id}', pointNode(at, layer));
         bindToPads(at, layer);
       }
-      final reach = via.diameter / 2 + _touchMm;
-      for (final cell in _PadIndex.cellsOver(
-        Rect.fromCircle(center: at, radius: reach),
-      )) {
-        for (final (end, layer)
-            in ends[cell] ?? const <(Offset, CopperLayer)>[]) {
-          if ((end - at).distance <= reach) {
-            union('via:${via.id}', pointNode(end, layer));
-          }
-        }
-      }
     }
+
+    _contacts(
+      pads,
+      tracks,
+      vias,
+      onPad: (t, p) {
+        final net = pads[p].netId;
+        if (net == null) return;
+        padNets['pad:$p'] = net;
+        union('track:${tracks[t].id}', 'pad:$p');
+      },
+      onTrack: (t, o) =>
+          union('track:${tracks[t].id}', 'track:${tracks[o].id}'),
+      onVia: (t, v) => union('track:${tracks[t].id}', 'via:${vias[v].id}'),
+    );
 
     final netsByGroup = <String, Set<String>>{};
     for (final entry in padNets.entries) {
@@ -868,6 +899,82 @@ class BoardScene {
       staleTracks: staleTracks,
       staleVias: staleVias,
     );
+  }
+
+  /// What the [tracks] touch, beyond two tracks meeting end to end: every
+  /// pad a track's run crosses, not only one it ends in; another track a
+  /// track ends on anywhere along it; and every via on a track's run.
+  ///
+  /// A board drawn in KiCad routes one straight track through a row of
+  /// pads as often as it stops at each, and tees one track into the middle
+  /// of another; reading only where tracks end left those pads unrouted.
+  static void _contacts(
+    List<PlacedPad> pads,
+    List<Track> tracks,
+    List<Via> vias, {
+    required void Function(int track, int pad) onPad,
+    required void Function(int track, int other) onTrack,
+    required void Function(int track, int via) onVia,
+  }) {
+    final padsAt = _PadIndex(pads);
+    // Tracks by the cells their copper passes through.
+    final tracksAt = <(int, int), List<int>>{};
+    for (var i = 0; i < tracks.length; i++) {
+      final track = tracks[i];
+      final box = Rect.fromPoints(
+        Offset(track.startX, track.startY),
+        Offset(track.endX, track.endY),
+      ).inflate(track.width / 2 + _touchMm);
+      for (final cell in _PadIndex.cellsOver(box)) {
+        (tracksAt[cell] ??= []).add(i);
+      }
+    }
+
+    for (var i = 0; i < tracks.length; i++) {
+      final track = tracks[i];
+      final a = Offset(track.startX, track.startY);
+      final b = Offset(track.endX, track.endY);
+      for (final p in padsAt.within(Rect.fromPoints(a, b))) {
+        final pad = pads[p];
+        if (pad.reaches(track.layer) &&
+            pad.crosses(a, b, toleranceMm: _touchMm)) {
+          onPad(i, p);
+        }
+      }
+      for (final end in [a, b]) {
+        for (final o in tracksAt[_PadIndex.cellOf(end)] ?? const <int>[]) {
+          final other = tracks[o];
+          if (o == i || other.layer != track.layer) continue;
+          final distance = distanceToSegment(
+            end,
+            Offset(other.startX, other.startY),
+            Offset(other.endX, other.endY),
+          );
+          if (distance <= other.width / 2 + _touchMm) onTrack(i, o);
+        }
+      }
+    }
+
+    for (var v = 0; v < vias.length; v++) {
+      final via = vias[v];
+      final at = Offset(via.x, via.y);
+      final reach = via.diameter / 2 + _touchMm;
+      final seen = <int>{};
+      for (final cell in _PadIndex.cellsOver(
+        Rect.fromCircle(center: at, radius: reach),
+      )) {
+        for (final t in tracksAt[cell] ?? const <int>[]) {
+          if (!seen.add(t)) continue;
+          final track = tracks[t];
+          final distance = distanceToSegment(
+            at,
+            Offset(track.startX, track.startY),
+            Offset(track.endX, track.endY),
+          );
+          if (distance <= reach) onVia(t, v);
+        }
+      }
+    }
   }
 
   /// The two pads, one from each group, that are closest together.
@@ -967,6 +1074,11 @@ class _PadIndex {
 
   /// The indices of the pads that might cover [point].
   List<int> at(Offset point) => _cells[cellOf(point)] ?? const [];
+
+  /// The indices of the pads that might reach into [box], each once.
+  Set<int> within(Rect box) => {
+    for (final cell in cellsOver(box)) ...?_cells[cell],
+  };
 
   static (int, int) cellOf(Offset point) =>
       ((point.dx / _cell).floor(), (point.dy / _cell).floor());
