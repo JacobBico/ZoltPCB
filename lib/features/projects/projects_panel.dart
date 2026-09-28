@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -131,7 +134,18 @@ class ProjectsPanel extends ConsumerWidget {
       '',
     );
 
-    report('Opening $topName…');
+    // A large design takes a while on a phone. A bar that moves, and says
+    // what it is on, until the project is in or the import has failed —
+    // not a message that is gone before the import is.
+    final progress = ValueNotifier<(double, String)>((0, 'Reading $topName'));
+    final navigator = Navigator.of(context, rootNavigator: true);
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _ImportProgress(name: baseName, progress: progress),
+      ),
+    );
     final KicadImportResult result;
     try {
       result = await ref
@@ -145,14 +159,18 @@ class ProjectsPanel extends ConsumerWidget {
               for (final entry in schematics.entries)
                 if (entry.key != topName) entry.key: entry.value,
             },
+            onProgress: (done, stage) => progress.value = (done, stage),
           );
     } on KicadImportException catch (error) {
+      navigator.pop();
       if (context.mounted) report(error.message);
       return;
     } catch (error) {
+      navigator.pop();
       if (context.mounted) report('Could not open that project: $error');
       return;
     }
+    navigator.pop();
     if (!context.mounted) return;
 
     report(
@@ -517,5 +535,63 @@ class _ProjectMenu extends ConsumerWidget {
 
     if (confirmed != true) return;
     await ref.read(projectRepositoryProvider).delete(project.id);
+  }
+}
+
+/// How far opening a KiCad project has got: a bar, and the step it is on.
+/// It cannot be closed; it goes when the import is done, or has failed.
+class _ImportProgress extends StatelessWidget {
+  const _ImportProgress({required this.name, required this.progress});
+
+  final String name;
+  final ValueListenable<(double, String)> progress;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      child: AlertDialog(
+        title: Text('Opening $name', overflow: TextOverflow.ellipsis),
+        content: SizedBox(
+          width: 420,
+          child: ValueListenableBuilder<(double, String)>(
+            valueListenable: progress,
+            builder: (context, value, _) {
+              final (done, stage) = value;
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      key: const ValueKey('import-progress'),
+                      value: done,
+                      minHeight: 8,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          stage,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                      Text(
+                        '${(done * 100).round()}%',
+                        style: TextStyle(color: KicadPalette.textSecondary),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -2380,6 +2380,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
         return;
       }
       if (pendingId != null && _tapWiring) {
+        if (_boxPinNear(sheet, _hitToleranceMm(viewport)) case final boxPin?) {
+          await _connectToSheetPin(scene, pendingId, boxPin);
+          return;
+        }
         final wire = scene.wireNear(sheet, _wireToleranceMm(viewport));
         if (wire != null) {
           final (run, _) = DrawnWireGeometry.nearestRun(wire.points, sheet);
@@ -2665,6 +2669,128 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
   ///
   /// Reached by letting go of a dragged wire on a pin or, with wiring by
   /// taps chosen, by tapping the pin it ends on.
+  /// The pin of a sheet's box nearest [at], within [toleranceMm].
+  SheetBoxPin? _boxPinNear(Offset at, double toleranceMm) {
+    SheetBoxPin? best;
+    var bestDistance = toleranceMm;
+    for (final box in _sheetBoxes) {
+      for (final pin in box.pins) {
+        final distance = (pin.at - at).distance;
+        if (distance <= bestDistance) {
+          bestDistance = distance;
+          best = pin;
+        }
+      }
+    }
+    return best;
+  }
+
+  /// Why a sheet's pin with nothing behind it cannot be wired.
+  String _emptySheetPin(SheetBoxPin pin) =>
+      'Nothing inside the sheet is on ${pin.name} yet';
+
+  /// A pin of [netId] on any sheet, for joining a net to it from a sheet
+  /// where it has none.
+  String? _anyPinOf(String? netId) =>
+      (ref.read(projectNetsProvider(widget.project.id)).value ?? const [])
+          .where((n) => n.net.id == netId)
+          .firstOrNull
+          ?.endpoints
+          .firstOrNull
+          ?.pin
+          .id;
+
+  /// Keeps sheets' pins on their nets when those nets are joined into
+  /// [to]: a pin named for the net that is gone would otherwise lose it.
+  Future<void> _repointSheetPins(Set<String?> from, String to) async {
+    final sheets =
+        ref.read(projectSheetsProvider(widget.project.id)).value ??
+        const <SchematicSheet>[];
+    final repository = ref.read(sheetRepositoryProvider);
+    for (final sheet in sheets) {
+      if (!sheet.pins.any((p) => p.netId != to && from.contains(p.netId))) {
+        continue;
+      }
+      await repository.update(
+        sheet.copyWith(
+          pins: [
+            for (final pin in sheet.pins)
+              from.contains(pin.netId) ? pin.withNet(to) : pin,
+          ],
+        ),
+      );
+    }
+  }
+
+  /// Joins a pin to the net a sheet's pin carries into the sheet, and draws
+  /// the wire the drag took there. Drawn always: nothing routes a wire to
+  /// a sheet's pin by itself, so without it there would be nothing to see.
+  Future<void> _connectToSheetPin(
+    SchematicScene scene,
+    String fromId,
+    SheetBoxPin target,
+  ) async {
+    final corners = _wireCorners;
+    ref.read(pendingPinProvider.notifier).set(null);
+    setState(() => _wireCorners = const []);
+    final net = target.net;
+    final into = net?.endpoints.firstOrNull?.pin.id;
+    if (net == null || into == null) {
+      _notify(_emptySheetPin(target));
+      return;
+    }
+    final from = scene.pins.where((p) => p.id == fromId).firstOrNull;
+    if (from == null) return;
+
+    final repository = ref.read(netRepositoryProvider);
+    final projectId = widget.project.id;
+    final sheetId = _currentSheet;
+    final points = DrawnWireGeometry.orthogonalPath([
+      from.sheetPosition,
+      ...corners,
+      target.at,
+    ]);
+    try {
+      final snapshot = await repository.capture(projectId, [fromId, into]);
+      SchematicWire? drawn;
+      Future<String> join() async {
+        final joined = (await repository.connectPins(fromId, into)).net.id;
+        await _repointSheetPins({from.netId, net.id}, joined);
+        return joined;
+      }
+
+      await _atomically(() async {
+        final joined = await join();
+        drawn = await repository.addWire(
+          sheetId: sheetId,
+          projectId: projectId,
+          points: points,
+          pinAId: fromId,
+          netId: joined,
+        );
+      });
+      if (!mounted) return;
+      unawaited(HapticFeedback.lightImpact());
+      setState(() => _highlightedNetId = null);
+      _notify('Wire to ${target.name}');
+      _record(
+        'Connect ${from.label} to ${target.name}',
+        undo: () async {
+          if (drawn case final wire?) await repository.deleteWire(wire.id);
+          await repository.restore(snapshot);
+        },
+        redo: () async {
+          final joined = await join();
+          if (drawn case final wire?) {
+            await repository.restoreWire(wire.copyWith(netId: joined));
+          }
+        },
+      );
+    } on InvalidConnectionException catch (e) {
+      if (mounted) _notify(e.message);
+    }
+  }
+
   Future<void> _connectPins(
     SchematicScene scene,
     String fromId,
@@ -2765,6 +2891,22 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
         _dragStartSheet = sheet;
         _dragOriginalPosition = label.position;
         return;
+      }
+
+      // A press on a sheet's pin pulls a wire out of it, on the net the pin
+      // carries into the sheet — ahead of the box itself, which the pin
+      // sits on the edge of.
+      if (!_placing && !_boxSelecting && _selectedUnitIds.isEmpty) {
+        final grab = math.max(0.6, 14 / viewport.pixelsPerMm);
+        if (_boxPinNear(sheet, grab) case final boxPin?) {
+          if (boxPin.net case final net?) {
+            _branchFrom = boxPin.at;
+            _branchNetId = net.id;
+            _branchTo = null;
+            return;
+          }
+          _notify(_emptySheetPin(boxPin));
+        }
       }
 
       // A picked sheet's box moves under the finger that lands on it.
@@ -2944,7 +3086,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       final pin = scene.pinNear(sheet, _hitToleranceMm(start));
       setState(() {
         _isDraggingUnit = true;
-        _branchTo = pin?.sheetPosition ?? _snapToGrid(sheet);
+        _branchTo =
+            pin?.sheetPosition ??
+            _boxPinNear(sheet, _hitToleranceMm(start))?.at ??
+            _snapToGrid(sheet);
       });
       return;
     }
@@ -2953,11 +3098,15 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       final travelled = (details.localFocalPoint - _gestureStartLocal).distance;
       if (!_isDraggingUnit && travelled < _dragSlopPx) return;
       final sheet = start.toSheet(details.localFocalPoint);
-      // Onto a pin under the finger exactly; otherwise onto the grid.
+      // Onto a pin under the finger exactly — a part's or a sheet's —
+      // otherwise onto the grid.
       final pin = scene.pinNear(sheet, _hitToleranceMm(start));
       setState(() {
         _isDraggingUnit = true;
-        _wireDragAt = pin?.sheetPosition ?? _snapToGrid(sheet);
+        _wireDragAt =
+            pin?.sheetPosition ??
+            _boxPinNear(sheet, _hitToleranceMm(start))?.at ??
+            _snapToGrid(sheet);
       });
       return;
     }
@@ -4465,6 +4614,10 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       await _connectPins(scene, pendingId, pin);
       return;
     }
+    if (_boxPinNear(at, 1e-6) case final boxPin?) {
+      await _connectToSheetPin(scene, pendingId, boxPin);
+      return;
+    }
 
     final viewport = _viewport;
     final wire = viewport == null
@@ -4508,13 +4661,21 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     final projectId = widget.project.id;
 
     final pin = scene.pinNear(to, _landingMm);
-    final onto = pin != null || viewport == null
+    final boxPin = pin == null ? _boxPinNear(to, _landingMm) : null;
+    final onto = pin != null || boxPin != null || viewport == null
         ? null
         : scene.wireNear(to, _wireToleranceMm(viewport) / 2);
+    if (boxPin != null && boxPin.net == null) {
+      _notify(_emptySheetPin(boxPin));
+      setState(() {});
+      return;
+    }
 
     var end = to;
     if (pin != null) {
       end = pin.sheetPosition;
+    } else if (boxPin != null) {
+      end = boxPin.at;
     } else if (onto != null) {
       final (run, _) = DrawnWireGeometry.nearestRun(onto.points, to);
       end = _onRun(onto.points, run, to);
@@ -4547,21 +4708,25 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
       return;
     }
 
-    final members = scene.pinsByNet[netId] ?? const <PlacedPin>[];
-    final ontoNet = pin?.netId ?? onto?.netId;
+    // A net here may have no pin on this sheet at all — one pulled out of
+    // a sheet's pin, or dropped on one — so a pin of it is looked for on
+    // any sheet.
+    final member =
+        (scene.pinsByNet[netId] ?? const <PlacedPin>[]).firstOrNull?.id ??
+        _anyPinOf(netId);
+    final ontoNet = pin?.netId ?? boxPin?.net?.id ?? onto?.netId;
     final joinTo =
         pin?.id ??
+        boxPin?.net?.endpoints.firstOrNull?.pin.id ??
         (onto == null
             ? null
             : (scene.pinsByNet[onto.netId] ?? const <PlacedPin>[])
-                  .firstOrNull
-                  ?.id);
+                      .firstOrNull
+                      ?.id ??
+                  _anyPinOf(onto.netId));
     final joins = joinTo != null && ontoNet != netId;
 
-    final snapshot = await repository.capture(projectId, [
-      ?joinTo,
-      ?members.firstOrNull?.id,
-    ]);
+    final snapshot = await repository.capture(projectId, [?joinTo, ?member]);
 
     // Carrying a wire on in the direction it was already going makes that
     // wire longer. Two wires in a straight line with nothing between them
@@ -4574,13 +4739,13 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     Future<void> draw() async {
       var net = netId;
       if (joins) {
-        final member = members.firstOrNull;
         if (member == null) {
           await repository.addPinToNet(netId, joinTo);
         } else {
-          net = (await repository.connectPins(member.id, joinTo)).net.id;
+          net = (await repository.connectPins(member, joinTo)).net.id;
         }
         net = await repository.netIdForPin(joinTo) ?? net;
+        await _repointSheetPins({netId, ontoNet}, net);
       }
       if (carriedOn case (final wire, final longer, final ends)) {
         await repository.updateWire(wire.copyWith(points: longer));
@@ -4614,6 +4779,8 @@ class _SchematicPanelState extends ConsumerState<SchematicPanel> {
     _notify(
       pin != null
           ? 'Wire to ${pin.label}'
+          : boxPin != null
+          ? 'Wire to ${boxPin.name}'
           : onto != null
           ? 'Nets joined'
           : 'Branch drawn — drag from its end to carry on',

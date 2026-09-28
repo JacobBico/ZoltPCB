@@ -102,7 +102,23 @@ class KicadProjectImporter {
     /// The project's other `.kicad_sch` files, by file name: the sheets
     /// the top one refers to.
     Map<String, String> sheetFiles = const {},
+
+    /// Told how far the import has got, from 0 to 1, and what it is doing.
+    /// A large design takes a while on a phone.
+    void Function(double done, String stage)? onProgress,
   }) async {
+    _onProgress = onProgress;
+    _sheetsDone = 0;
+    // Every use of a sheet is a sheet brought in, and the top one besides.
+    _sheetsTotal =
+        1 +
+        [schematic, ...sheetFiles.values].fold<int>(
+          0,
+          (n, text) =>
+              n + RegExp(r'\(property\s+"Sheetfile"').allMatches(text).length,
+        );
+    _schematicShare = board == null ? 0.95 : 0.5;
+    _report(0, 'Reading the schematic');
     final SList root;
     try {
       root = SExprParser.parseDocument(schematic);
@@ -128,6 +144,20 @@ class KicadProjectImporter {
       return _importInto(project, root, board, projectFile, sheetFiles);
     });
   }
+
+  void Function(double done, String stage)? _onProgress;
+  var _sheetsDone = 0;
+  var _sheetsTotal = 1;
+
+  /// How much of the import the schematic is: most of it without a board.
+  var _schematicShare = 0.5;
+
+  void _report(double done, String stage) =>
+      _onProgress?.call(done.clamp(0.0, 1.0), stage);
+
+  /// A step through the board's part of the import, [done] of the way.
+  void _reportBoard(double done, String stage) =>
+      _report(_schematicShare + (1 - _schematicShare) * done, stage);
 
   Future<KicadImportResult> _importInto(
     Project project,
@@ -155,8 +185,10 @@ class KicadProjectImporter {
       links: links,
       warnings: warnings,
     );
+    _report(_schematicShare, 'Joining the sheets');
     await _nameLinkedNets(project, links);
     await _givePinsTheirNets(project, links);
+    await _drawLooseWires(project, links);
     final netCount = (await nets.getNets(project.id)).length;
 
     var footprintCount = 0;
@@ -170,6 +202,8 @@ class KicadProjectImporter {
       );
     }
 
+    _report(1, 'Done');
+    _onProgress = null;
     return KicadImportResult(
       project: project,
       warnings: warnings,
@@ -195,6 +229,12 @@ class KicadProjectImporter {
     required _SheetLinks links,
     required List<String> warnings,
   }) async {
+    _report(
+      _schematicShare * _sheetsDone / _sheetsTotal,
+      pathName == '/'
+          ? 'Schematic: the top sheet'
+          : 'Schematic: ${pathName.substring(1, pathName.length - 1)}',
+    );
     final definitions = await _installSymbols(file, warnings);
     var count = await _placeParts(
       project,
@@ -279,6 +319,7 @@ class KicadProjectImporter {
       extraLabels: pinPoints,
       links: links,
     );
+    _sheetsDone++;
 
     for (final (childId, _, fileName, childPath) in children) {
       // A sheet in a folder of its own (`sch/power.kicad_sch`) is picked as
@@ -345,6 +386,32 @@ class KicadProjectImporter {
       } else if (wanted != name) {
         await nets.renameNet(net.net.id, wanted);
       }
+    }
+  }
+
+  /// The wires between sheet boxes, drawn now their net is known: the one
+  /// the boxes' pins at their ends carry.
+  Future<void> _drawLooseWires(Project project, _SheetLinks links) async {
+    if (links.loose.isEmpty) return;
+    final byName = {
+      for (final net in await nets.getNets(project.id))
+        ?net.net.name: net.net.id,
+    };
+    for (final (sheetId, a, b, joining) in links.loose) {
+      final key = links.resolve(joining);
+      final netId =
+          links.netOf[key] ??
+          switch (links.preferred[key]) {
+            final name? => byName[name],
+            null => null,
+          };
+      if (netId == null) continue;
+      await nets.addWire(
+        projectId: project.id,
+        points: [a, b],
+        netId: netId,
+        sheetId: sheetId,
+      );
     }
   }
 
@@ -834,7 +901,17 @@ class KicadProjectImporter {
     // The wires as they were drawn, on the nets they turned out to carry.
     for (var i = 0; i < wires.length; i++) {
       final group = pinsOf[find(wireBase + i)];
-      if (group == null || group.isEmpty) continue;
+      if (group == null || group.isEmpty) {
+        // Between sheet boxes, with no part here: kept for when the net
+        // the boxes' pins carry is known.
+        final joining = (namesOf[find(wireBase + i)] ?? const <String>[])
+            .where((n) => n.startsWith(_SheetLinks.marker))
+            .firstOrNull;
+        if (joining != null && links != null) {
+          links.loose.add((sheetId, wires[i].$1, wires[i].$2, joining));
+        }
+        continue;
+      }
       final netId = await nets.netIdForPin(group.first);
       if (netId == null) continue;
       final (a, b) = wires[i];
@@ -924,6 +1001,7 @@ class KicadProjectImporter {
     }
 
     // --- footprints
+    _reportBoard(0.05, 'Board: footprints');
     final partIdByReference = {
       for (final part in await parts.getPartsWithDetails(project.id))
         part.part.reference: part.part.id,
@@ -1073,6 +1151,12 @@ class KicadProjectImporter {
 
     var footprintCount = 0;
     for (final (partId, libId, x, y, rotation, flipped, hidden) in placements) {
+      if (footprintCount % 10 == 0) {
+        _reportBoard(
+          0.1 + 0.35 * footprintCount / placements.length,
+          'Board: placing footprints',
+        );
+      }
       final ref = await boards.assignFootprint(
         projectId: project.id,
         partId: partId,
@@ -1096,11 +1180,22 @@ class KicadProjectImporter {
     }
 
     // --- copper
+    _reportBoard(0.45, 'Board: tracks');
+    final trackTotal =
+        root.children('segment').length + root.children('arc').length;
     var trackCount = 0;
+    var tracksRead = 0;
     CopperLayer? copper(String? token) =>
         token == null ? null : CopperLayer.fromToken(token);
     for (final kind in const ['segment', 'arc']) {
       for (final node in root.children(kind)) {
+        // By the file's tracks, not the segments an arc becomes.
+        if (++tracksRead % 50 == 0) {
+          _reportBoard(
+            0.45 + 0.4 * tracksRead / math.max(1, trackTotal),
+            'Board: tracks',
+          );
+        }
         final layer = copper(node.childAtom('layer'));
         if (layer == null) continue;
         final start = _xy(node.child('start'));
@@ -1146,14 +1241,23 @@ class KicadProjectImporter {
           _xy(xy),
       ];
       if (points.length < 3) continue;
-      final netName = node.childAtom('net_name') ?? '';
+      final written = node.childAtom('net_name') ?? '';
+      final netId = netOf(node) ?? netNamed(written);
+      // Named as the schematic names it: KiCad 9 writes no `net_name`,
+      // only the net, and a pour on GND called nothing reads as on none.
+      final netName =
+          appNets
+              .where((net) => net.net.id == netId)
+              .firstOrNull
+              ?.displayName ??
+          written;
       final connect = node.child('connect_pads');
       final fill = node.child('fill');
       await boards.addZone(
         projectId: project.id,
         layer: layer,
         points: points,
-        netId: netOf(node) ?? netNamed(netName),
+        netId: netId,
         netName: netName,
         clearance: connect?.childNumber('clearance') ?? 0.5,
         minThickness: node.childNumber('min_thickness') ?? 0.25,
@@ -1169,6 +1273,7 @@ class KicadProjectImporter {
     }
 
     // --- silkscreen text
+    _reportBoard(0.9, 'Board: silkscreen and outline');
     for (final node in root.children('gr_text')) {
       final layer = node.childAtom('layer');
       if (layer != 'F.SilkS' && layer != 'B.SilkS') continue;
@@ -1736,6 +1841,11 @@ class _SheetLinks {
 
   /// The net each joining name ended up on, before it was renamed.
   final netOf = <String, String>{};
+
+  /// Wires with no part on them, between the pins of sheet boxes: which
+  /// net they are on is known only once every sheet is in. Each with its
+  /// sheet, its ends, and a joining name it carries.
+  final loose = <(String?, Offset, Offset, String)>[];
 
   String key(String sheetId, String pin) => '$marker$sheetId$marker$pin';
 

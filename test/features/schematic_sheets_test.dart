@@ -98,4 +98,94 @@ void main() {
       );
     },
   );
+
+  testAppWithStorage(
+    'a wire joins a sheet\'s pin to a part, dragged either way',
+    (tester, db, storage) async {
+      final project = await ProjectRepository(db).create(name: 'Sheets');
+      final parts = PartRepository(db);
+      final nets = NetRepository(db);
+      final r1 = await parts.addPart(project.id, resistorSpec());
+      final r2 = await parts.addPart(project.id, resistorSpec(value: '4k7'));
+      final r3 = await parts.addPart(project.id, resistorSpec(value: '1k'));
+      final sheet = await SheetRepository(
+        db,
+      ).add(projectId: project.id, name: 'Out', at: const Offset(66.04, 30.48));
+      // R1 and R3 on the top sheet, R2 inside Out: VMID goes into the box.
+      await parts.updateUnitPlacement(
+        r1.units.first.copyWith(x: 40.64, y: 50.8, placed: true),
+      );
+      await parts.updateUnitPlacement(
+        r3.units.first.copyWith(x: 50.8, y: 38.1, placed: true),
+      );
+      await parts.updateUnitPlacement(
+        r2.units.first.copyWith(
+          x: 50.8,
+          y: 50.8,
+          placed: true,
+          sheetId: sheet.id,
+        ),
+      );
+      final vmid = await nets.connectPins(r1.pins[1].id, r2.pins[0].id);
+      await nets.renameNet(vmid.net.id, 'VMID');
+
+      await pumpApp(
+        tester,
+        Scaffold(body: SchematicPanel(project: project)),
+        database: db,
+        storage: storage,
+      );
+      final boxPin = _painter(tester).sheetBoxes.single.pins.single;
+      expect(boxPin.name, 'VMID');
+
+      Future<void> drag(Offset fromSheet, Offset toSheet) async {
+        final a = _screen(tester, fromSheet);
+        final b = _screen(tester, toSheet);
+        final gesture = await tester.startGesture(a);
+        for (var i = 1; i <= 10; i++) {
+          await gesture.moveTo(Offset.lerp(a, b, i / 10)!);
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        await gesture.up();
+        await settleApp(tester);
+      }
+
+      Future<Set<String>> onVmid() async => {
+        for (final net in await nets.getNets(project.id))
+          if (net.endpoints.any((e) => e.pin.id == r2.pins[0].id))
+            for (final e in net.endpoints) e.pin.id,
+      };
+      bool near(Offset a, Offset b) => (a - b).distance < 1e-3;
+      final r3Pins = _painter(
+        tester,
+      ).scene.pins.where((p) => p.partId == r3.part.id).toList();
+      final top = r3Pins.reduce(
+        (a, b) => a.sheetPosition.dy < b.sheetPosition.dy ? a : b,
+      );
+      final bottom = r3Pins.firstWhere((p) => p != top);
+
+      // From R3's pin onto the box's: R3 is on VMID, by a wire to the box.
+      await drag(top.sheetPosition, boxPin.at);
+      expect(await onVmid(), contains(top.pin.id));
+      var wires = await nets.getWires(project.id);
+      expect(wires, hasLength(1));
+      expect(near(wires.single.points.first, top.sheetPosition), isTrue);
+      expect(near(wires.single.points.last, boxPin.at), isTrue);
+
+      // Undone, both are gone.
+      await _tapAction(tester, 'Undo');
+      expect(await onVmid(), isNot(contains(top.pin.id)));
+      expect(await nets.getWires(project.id), isEmpty);
+
+      // Out of the box's pin onto R3's other one: the same, the other way.
+      await drag(boxPin.at, bottom.sheetPosition);
+      expect(await onVmid(), contains(bottom.pin.id));
+      wires = await nets.getWires(project.id);
+      expect(wires, hasLength(1));
+      expect(near(wires.single.points.first, boxPin.at), isTrue);
+      expect(near(wires.single.points.last, bottom.sheetPosition), isTrue);
+      // Still one pin on the box, carrying the net it carried.
+      expect(_painter(tester).sheetBoxes.single.pins.single.name, 'VMID');
+    },
+  );
 }

@@ -182,6 +182,48 @@ void main() {
         ];
         expect(keptLabels, hasLength(drawnLabels.length));
 
+        // Every wire that ends on a sheet box's pin comes in, as it was
+        // drawn: a wire between two boxes, with no part of its own on it,
+        // used to be dropped, leaving the boxes unjoined on the page.
+        String spot(double x, double y) =>
+            '${x.toStringAsFixed(2)},${y.toStringAsFixed(2)}';
+        final keptEnds = {
+          for (final wire in await NetRepository(
+            db,
+          ).getWires(result.project.id))
+            for (final p in wire.points) spot(p.dx, p.dy),
+        };
+        var onBoxes = 0;
+        for (final text in [
+          File('${dir.path}/$top').readAsStringSync(),
+          for (final MapEntry(:key, :value) in sheetFiles.entries)
+            if (used.contains(key)) value,
+        ]) {
+          final boxPins = {
+            for (final sheet in text.split('\n\t(sheet\n').skip(1))
+              for (final m in RegExp(
+                r'\(pin "[^"]*" \w+\s*\(at ([\d.\-]+) ([\d.\-]+)',
+              ).allMatches(sheet.split('\n\t(').first))
+                spot(double.parse(m[1]!), double.parse(m[2]!)),
+          };
+          for (final m in RegExp(
+            r'\(wire\s*\(pts\s*\(xy ([\d.\-]+) ([\d.\-]+)\)\s*'
+            r'\(xy ([\d.\-]+) ([\d.\-]+)\)',
+          ).allMatches(text)) {
+            final a = spot(double.parse(m[1]!), double.parse(m[2]!));
+            final b = spot(double.parse(m[3]!), double.parse(m[4]!));
+            if (!boxPins.contains(a) && !boxPins.contains(b)) continue;
+            onBoxes++;
+            expect(
+              keptEnds.containsAll([a, b]),
+              isTrue,
+              reason: 'the wire from $a to $b',
+            );
+          }
+        }
+        // ignore: avoid_print
+        print('$folder: $onBoxes wires on sheet pins');
+
         // A bus pin (`D[0..7]`, `UART{TX, RX}`) carries many nets, which
         // the import does not follow member by member yet.
         bool bus(String name) => name.contains('[') || name.contains('{');

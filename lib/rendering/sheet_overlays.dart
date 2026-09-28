@@ -28,6 +28,21 @@ import 'schematic_scene.dart';
       ? null
       : links.tree.sheets.where((s) => s.id == sheetId).firstOrNull;
   final pinAt = {for (final pin in scene.pins) pin.id: pin.sheetPosition};
+  // A net wired here to the pin of a box on this sheet shows where it goes
+  // by the wire; its name at a pin as well would say so twice.
+  final wiredDown = <String>{
+    for (final box in boxes)
+      for (final pin in box.pins)
+        if (pin.net case final net?)
+          if (scene.wires.any(
+            (w) =>
+                w.netId == net.id &&
+                w.points.isNotEmpty &&
+                ((w.points.first - pin.at).distance < 0.01 ||
+                    (w.points.last - pin.at).distance < 0.01),
+          ))
+            net.id,
+  };
   final labels = [
     for (final net in links.leaving(sheetId))
       if (net.endpoints.map((e) => pinAt[e.pin.id]).nonNulls.firstOrNull
@@ -35,15 +50,16 @@ import 'schematic_scene.dart';
         if (inside != null &&
                 links.sheetsOf(net).any((s) => !inside.contains(s))
             case final up)
-          OffSheetLabel(
-            at: at,
-            // Leaving this sheet for its parent: KiCad's hierarchical label,
-            // named as the pin on this sheet's box is. Only going down into
-            // a box on it: a plain one.
-            name: up ? SheetBoxView.upwardName(here, net) : net.displayName,
-            hierarchical: up,
-            netId: net.id,
-          ),
+          if (up || !wiredDown.contains(net.id))
+            OffSheetLabel(
+              at: at,
+              // Leaving this sheet for its parent: KiCad's hierarchical label,
+              // named as the pin on this sheet's box is. Only going down into
+              // a box on it: a plain one.
+              name: up ? SheetBoxView.upwardName(here, net) : net.displayName,
+              hierarchical: up,
+              netId: net.id,
+            ),
   ];
   return (boxes, labels);
 }

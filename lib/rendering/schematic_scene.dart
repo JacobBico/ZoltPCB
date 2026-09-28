@@ -253,6 +253,23 @@ class SchematicScene {
         ),
       );
     }
+    // A net with no pin on this sheet — a wire between two sheet boxes —
+    // is drawn as it was laid: there is nothing here to route it between.
+    for (final MapEntry(key: netId, value: laid) in drawnByNet.entries) {
+      if (byNet.containsKey(netId)) continue;
+      for (final wire in laid) {
+        if (wire.points.length < 2) continue;
+        wires.add(
+          RoutedWire(
+            netId: netId,
+            pinAId: wire.pinAId ?? '',
+            pinBId: wire.pinBId ?? '',
+            points: wire.points,
+            drawnId: wire.id,
+          ),
+        );
+      }
+    }
 
     return SchematicScene(
       paper: paper,
