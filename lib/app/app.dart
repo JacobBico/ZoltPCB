@@ -3,8 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/theme/app_theme.dart';
+import '../data/repositories/settings_repository.dart';
 import '../features/home/home_screen.dart';
+import '../features/home/welcome.dart';
 import 'appearance.dart';
+import 'providers.dart';
 
 class ZoltApp extends ConsumerStatefulWidget {
   const ZoltApp({super.key});
@@ -14,6 +17,29 @@ class ZoltApp extends ConsumerStatefulWidget {
 }
 
 class _ZoltAppState extends ConsumerState<ZoltApp> {
+  final _navigator = GlobalKey<NavigatorState>();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _welcome());
+  }
+
+  /// A hello, once, the first time the app is opened. Someone who already
+  /// has designs is not new, whatever the settings say: an update that
+  /// brings the welcome in does not greet them as a stranger.
+  Future<void> _welcome() async {
+    final settings = ref.read(settingsRepositoryProvider);
+    if (await settings.get(SettingsRepository.welcomedKey) != null) return;
+    // Marked first, so it is never shown twice, even if the app is closed
+    // with the welcome still up.
+    await settings.set(SettingsRepository.welcomedKey, 'yes');
+    final projects = await ref.read(projectSummariesProvider.future);
+    final context = _navigator.currentContext;
+    if (projects.isNotEmpty || context == null || !context.mounted) return;
+    await WelcomeDialog.show(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     final appearance = ref.watch(appearanceProvider);
@@ -38,6 +64,7 @@ class _ZoltAppState extends ConsumerState<ZoltApp> {
     });
 
     return MaterialApp(
+      navigatorKey: _navigator,
       title: 'Zolt',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.build(appearance.palette),

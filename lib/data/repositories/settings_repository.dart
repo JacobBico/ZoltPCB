@@ -32,6 +32,9 @@ class SettingsRepository {
   /// Whether the first-launch checklist was put away before it was done.
   static const checklistDismissedKey = 'home.checklist_dismissed';
 
+  /// Whether the welcome has been shown: once, on the app's first launch.
+  static const welcomedKey = 'home.welcomed';
+
   Future<String?> get(String key) async {
     final row = await (_db.select(
       _db.appSettings,
