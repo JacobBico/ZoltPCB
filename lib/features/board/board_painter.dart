@@ -671,20 +671,25 @@ class BoardPainter extends CustomPainter {
       if (zone.locked) {
         _paintLock(
           canvas,
-          viewport.toScreen(zone.bounds.center) + const Offset(0, -12),
+          viewport.toScreen(_captionPoint(zone)) + const Offset(0, -12),
         );
       }
       if (caption.isNotEmpty && viewport.pixelsPerMm > 2) {
         _paintText(
           canvas,
           caption,
-          viewport.toScreen(zone.bounds.center),
+          viewport.toScreen(_captionPoint(zone)),
           color: base.withValues(alpha: onActive ? 0.95 : 0.5),
           size: 10,
         );
       }
     }
   }
+
+  /// Where a pour's name and padlock go, worked out once per pour.
+  static final _captions = Expando<Offset>();
+  static Offset _captionPoint(BoardZone zone) =>
+      _captions[zone] ??= zone.labelPoint;
 
   /// A small padlock, so what is held says so without being selected.
   void _paintLock(Canvas canvas, Offset at) {

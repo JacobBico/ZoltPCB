@@ -173,6 +173,60 @@ class BoardZone {
     return inside;
   }
 
+  /// Where the pour's name is written: the point inside it furthest from
+  /// its edges, where there is most room round the words.
+  ///
+  /// The middle of the box round an L-shaped or cut-cornered pour can be
+  /// outside the pour altogether, or over its neighbour, which put a
+  /// battery pour's name on the ground pour beside it. Searched on a
+  /// coarse grid, then again finer round the best point found.
+  Offset get labelPoint {
+    if (points.length < 3) return bounds.center;
+    double room(Offset p) {
+      var nearest = double.infinity;
+      for (var i = 0, j = points.length - 1; i < points.length; j = i++) {
+        final a = points[j];
+        final b = points[i];
+        final d = b - a;
+        final length = d.dx * d.dx + d.dy * d.dy;
+        var t = length == 0
+            ? 0.0
+            : ((p.dx - a.dx) * d.dx + (p.dy - a.dy) * d.dy) / length;
+        t = t.clamp(0.0, 1.0);
+        final gap = (p - (a + d * t)).distance;
+        if (gap < nearest) nearest = gap;
+      }
+      return nearest;
+    }
+
+    var best = bounds.center;
+    var bestRoom = contains(best) ? room(best) : -1.0;
+    var area = bounds;
+    for (var pass = 0; pass < 2; pass++) {
+      const steps = 20;
+      for (var i = 0; i < steps; i++) {
+        for (var j = 0; j < steps; j++) {
+          final p = Offset(
+            area.left + area.width * (i + 0.5) / steps,
+            area.top + area.height * (j + 0.5) / steps,
+          );
+          if (!contains(p)) continue;
+          final r = room(p);
+          if (r > bestRoom) {
+            bestRoom = r;
+            best = p;
+          }
+        }
+      }
+      area = Rect.fromCenter(
+        center: best,
+        width: area.width / steps * 2,
+        height: area.height / steps * 2,
+      );
+    }
+    return best;
+  }
+
   String get label =>
       keepout ? 'Keepout' : (netName.isEmpty ? 'No net' : netName);
 

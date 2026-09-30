@@ -574,8 +574,12 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
             Positioned.fill(
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTapUp: (details) =>
-                    _onTap(scene, viewport, details.localPosition),
+                onTapUp: (details) => _onTap(
+                  scene,
+                  viewport,
+                  details.localPosition,
+                  details.globalPosition,
+                ),
                 onScaleStart: (details) {
                   _gestureStartViewport = viewport;
                   _gestureStartFocal = details.localFocalPoint;
@@ -735,6 +739,10 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
               bottom: 10,
               child: _bottomBar(scene, committed, parts, snap),
             ),
+            // More than one thing under the sight: each of them, to take
+            // directly, above the sight's own button.
+            if (_pileChips(committed, viewport) case final chips?)
+              Positioned(right: 10, bottom: 70, child: chips),
             if (ref.watch(crossProbeOnProvider) && !_fabPreview)
               Positioned(
                 top: 52,
@@ -4668,7 +4676,12 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
 
   // --- selection -------------------------------------------------------
 
-  void _onTap(BoardScene scene, SchematicViewport viewport, Offset local) {
+  void _onTap(
+    BoardScene scene,
+    SchematicViewport viewport,
+    Offset local,
+    Offset global,
+  ) {
     if (_fabPreview || _carryingId != null) return;
     final board = viewport.toSheet(local);
     final tolerance = math.max(0.3, 16 / viewport.pixelsPerMm);
@@ -4677,7 +4690,16 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     // way of the thing being drawn.
     if (_points.isNotEmpty) return;
 
-    final pick = _pickAt(scene, board, tolerance);
+    // The top of the pile, as ever. Tapped again when that top one is
+    // already selected, the whole pile is offered instead: nearly every
+    // part sits in a pour, and a list on every tap would be in the way of
+    // the taps that only wanted the part.
+    final picks = _picksAt(scene, board, tolerance);
+    if (picks.length > 1 && picks.first.id == _selectedPickId) {
+      unawaited(_chooseAmong(global, picks));
+      return;
+    }
+    final pick = picks.firstOrNull;
     setState(() {
       _clearSelection();
       pick?.select();
@@ -4694,92 +4716,190 @@ class _PrecisionBoardPanelState extends ConsumerState<PrecisionBoardPanel> {
     BoardScene scene,
     Offset board,
     double tolerance,
+  ) => _picksAt(scene, board, tolerance).firstOrNull;
+
+  /// Everything at [board], within [tolerance], topmost first: what a tap
+  /// or the sight's button takes by default, and the rest beneath it.
+  ///
+  /// A pour lies under the tracks and parts poured round, and a logo sits
+  /// over the pour it is printed on; taking only the top of the pile left
+  /// what was under it all but impossible to reach. So a point over more
+  /// than one thing offers each of them.
+  List<({String label, String id, VoidCallback select})> _picksAt(
+    BoardScene scene,
+    Offset board,
+    double tolerance,
   ) {
+    String on(String? netName) =>
+        netName == null || netName.isEmpty ? '' : '$netName ';
+    final netNames = {
+      for (final net
+          in ref.read(projectNetsProvider(widget.project.id)).value ??
+              const <NetWithEndpoints>[])
+        net.net.id: net.displayName,
+    };
+    final picks = <({String label, String id, VoidCallback select})>[];
     final text = _nearestText(scene, board, tolerance);
     if (text != null) {
-      return (
+      picks.add((
         label: 'TEXT',
         id: 'text:${text.id}',
         select: () => _selectedTextId = text.id,
-      );
+      ));
     }
-    final image = scene.images.reversed
-        .where((i) => i.contains(board))
-        .firstOrNull;
-    if (image != null) {
-      return (
+    for (final image in scene.images.reversed.where((i) => i.contains(board))) {
+      picks.add((
         label: image.name.toUpperCase(),
         id: 'image:${image.id}',
         select: () => _selectedImageId = image.id,
-      );
+      ));
     }
     final labelled = _nearestLabel(scene, board, tolerance);
     if (labelled != null) {
-      return (
+      picks.add((
         label: '${labelled.part.reference} LABEL',
         id: 'label:${labelled.ref.id}',
         select: () => _selectedLabelId = labelled.ref.id,
-      );
+      ));
     }
     final via = _nearestVia(scene, board, tolerance);
     if (via != null) {
-      return (
-        label: 'VIA',
+      picks.add((
+        label: '${on(netNames[via.netId])}VIA',
         id: 'via:${via.id}',
         select: () {
           _selectedViaId = via.id;
           _highlightedNetId = via.netId;
         },
-      );
+      ));
     }
     final edge = _nearestEdge(scene, board, tolerance);
     if (edge != null) {
-      return (
+      picks.add((
         label: 'CUT',
         id: 'edge:${edge.id}',
         select: () => _selectedEdgeId = edge.id,
-      );
+      ));
     }
     final track = scene.trackNear(board, tolerance);
     if (track != null) {
-      return (
-        label: 'TRACK',
+      picks.add((
+        label: '${on(netNames[track.netId])}TRACK',
         id: 'track:${track.id}',
         select: () {
           _selectedTrackId = track.id;
           _highlightedNetId = track.netId;
         },
-      );
+      ));
     }
-    final footprint = scene.footprintAt(board);
-    if (footprint != null) {
-      return (
+    for (final footprint in scene.footprints.reversed.where(
+      (f) => f.bounds.inflate(0.5).contains(board),
+    )) {
+      picks.add((
         label: footprint.part.reference,
         id: 'footprint:${footprint.ref.id}',
         select: () => _selectedFootprintId = footprint.ref.id,
-      );
+      ));
     }
-    final zone = _zoneAt(scene, board);
-    if (zone != null) {
-      return (
-        label: 'POUR',
+    for (final zone in scene.zones.reversed.where(
+      (z) => z.isValid && z.contains(board),
+    )) {
+      picks.add((
+        label: zone.keepout ? 'KEEPOUT' : '${on(zone.netName)}POUR',
         id: 'zone:${zone.id}',
         select: () {
           _selectedZoneId = zone.id;
           _highlightedNetId = zone.netId;
         },
-      );
+      ));
     }
     // The board edge itself, which is as much a drawn thing as the cuts
     // added to it and was the one object that could not be picked up.
     if (_onOutline(scene, board, tolerance)) {
-      return (
+      picks.add((
         label: 'OUTLINE',
         id: 'outline',
         select: () => _outlineSelected = true,
-      );
+      ));
     }
-    return null;
+    return picks;
+  }
+
+  /// Takes one of several things under a tap: each named in a short list
+  /// at the finger, the top one first.
+  Future<void> _chooseAmong(
+    Offset global,
+    List<({String label, String id, VoidCallback select})> picks,
+  ) async {
+    final overlay =
+        Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final chosen = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        global & const Size(1, 1),
+        Offset.zero & overlay.size,
+      ),
+      items: [
+        for (final pick in picks)
+          PopupMenuItem(
+            key: ValueKey('pick-${pick.id}'),
+            value: pick.id,
+            height: 44,
+            child: Text(pick.label),
+          ),
+      ],
+    );
+    final pick = picks.where((p) => p.id == chosen).firstOrNull;
+    if (pick == null || !mounted) return;
+    unawaited(HapticFeedback.selectionClick());
+    setState(() {
+      _clearSelection();
+      pick.select();
+    });
+  }
+
+  /// A chip for each thing under the sight, when there is more than one:
+  /// the rest of the pile the sight's button does not take.
+  Widget? _pileChips(BoardScene scene, SchematicViewport viewport) {
+    if (_tool != AimTool.select ||
+        _points.isNotEmpty ||
+        _fabPreview ||
+        _isCarrying) {
+      return null;
+    }
+    final tolerance = math.max(0.3, 16 / viewport.pixelsPerMm);
+    final picks = _picksAt(scene, _lastSnap, tolerance);
+    if (picks.length < 2) return null;
+    return Material(
+      key: const ValueKey('pile-chips'),
+      color: KicadPalette.surface.withValues(alpha: 0.94),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final pick in picks.take(4))
+              Padding(
+                padding: const EdgeInsets.all(2),
+                child: ChoiceChip(
+                  key: ValueKey('pile-${pick.id}'),
+                  label: Text(pick.label),
+                  selected: pick.id == _selectedPickId,
+                  materialTapTargetSize: MaterialTapTargetSize.padded,
+                  onSelected: (_) {
+                    HapticFeedback.selectionClick();
+                    setState(() {
+                      _clearSelection();
+                      pick.select();
+                    });
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// What is selected, in the same terms as [_pickAt].
