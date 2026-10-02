@@ -93,11 +93,14 @@ Until then you can build it yourself:
 git clone https://github.com/JacobBico/ZoltPCB.git
 cd ZoltPCB
 flutter pub get
-flutter build apk --release
+flutter build apk --release --split-per-abi
 ```
 
-Then install `build/app/outputs/flutter-apk/app-release.apk` on an Android
-phone. Zolt is meant to be used in landscape.
+Then install the APK for your phone's CPU from `build/app/outputs/flutter-apk/`:
+`app-arm64-v8a-release.apk` for nearly every phone from the last several
+years, `app-armeabi-v7a-release.apk` for older 32-bit ones. Leave out
+`--split-per-abi` to get a single, larger `app-release.apk` that runs on any
+of them. Zolt is meant to be used in landscape.
 
 The first time you open it, the home page has a short Get started list. The
 first step downloads KiCad's parts libraries, which you'll want before

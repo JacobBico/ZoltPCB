@@ -5,6 +5,10 @@ publish_to: 'none'
 
 # versionName+versionCode on Android. The code must go up for every build
 # installed over an older one from a store.
+#
+# Builds split per CPU (`--split-per-abi`, as F-Droid's are) number each APK
+# CPU x 1000 + code: 1001 for 32-bit ARM, 2001 for 64-bit ARM, 4001 for
+# x86_64. So the code must stay below 1000, or two CPUs' APKs would collide.
 version: 1.0.0+1
 
 environment:
