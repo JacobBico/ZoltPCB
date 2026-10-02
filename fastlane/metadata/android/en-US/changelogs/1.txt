@@ -1,0 +1,8 @@
+The first Zolt.
+
+- Schematic capture and board layout, with KiCad in and out
+- Board outlines drawn with the Edge cut tool, snapping to corners, middles and centres
+- Silkscreen text in ten fonts, or your own .ttf, and pictures on the silkscreen
+- Component IDs for assembly, in the BOM as LCSC Part #
+- Slotted holes drilled as slots
+- Fab-ready Gerbers, drill files, BOM and pick-and-place

@@ -1,0 +1,39 @@
+<p>Zolt lets you design a circuit board on your phone. You draw the schematic, lay out the board, check it against your fab's rules and export the files to get it made. No laptop needed.</p>
+
+<p>It works with KiCad files, so you can start something on the desktop, carry on with it on your phone, and open it back up in KiCad later. Or skip the desktop completely and send the Gerbers straight to the board house you use.</p>
+
+<p>Everything stays on your phone. There's no account, no cloud and no subscription. The only time Zolt goes online is when you ask it to download KiCad's parts libraries.</p>
+
+<p><b>Made for touch.</b> In the board editor the crosshair stays put in the middle of the screen and you move the board under it, so you can always see exactly where a point will land.</p>
+
+<p><b>Schematic</b></p>
+<ul>
+<li>Common parts one tap away, plus search across every library you've installed</li>
+<li>Drag wires out of pins, or tap them out corner by corner</li>
+<li>Net labels, power symbols, no-connect flags and label ranges like D[0..7]</li>
+<li>Multi-unit parts, sub-sheets, notes, and an electrical rule check</li>
+<li>Undo and redo for everything</li>
+</ul>
+
+<p><b>Board</b></p>
+<ul>
+<li>2, 4, 6 or 8 copper layers, with an editable stackup</li>
+<li>Walk-around routing, buses, differential pairs and curved tracks</li>
+<li>Copper pours with thermal reliefs, keepouts and teardrops</li>
+<li>Through, blind and buried vias</li>
+<li>Net classes with impedance targets, and meanders for length matching</li>
+<li>Silkscreen text in a choice of fonts, and logos on the silkscreen</li>
+<li>Design rule check, plus manufacturability checks for real board houses</li>
+</ul>
+
+<p><b>Manufacturing</b></p>
+<ul>
+<li>Gerbers, Excellon drill files, a BOM and a pick-and-place file, zipped and ready to upload</li>
+<li>Panels with mouse bites or V-scoring, rails, fiducials and tooling holes</li>
+<li>A preview of the finished board and a Gerber viewer</li>
+<li>A schematic PDF, and project backups you can move between phones</li>
+</ul>
+
+<p>KiCad's libraries are © the KiCad Library Team, licensed under CC-BY-SA 4.0 with an exception that leaves your designs entirely yours. Zolt downloads them when you ask; it doesn't ship them.</p>
+
+<p>Zolt is meant to be used in landscape.</p>

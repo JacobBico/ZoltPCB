@@ -1,4 +1,4 @@
-package com.zolt.app
+package com.zoltpcb.app
 
 import io.flutter.embedding.android.FlutterActivity
 

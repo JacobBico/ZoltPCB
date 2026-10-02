@@ -24,7 +24,7 @@ val keyProperties = Properties().apply {
 val hasReleaseKey = keyProperties.getProperty("storeFile") != null
 
 android {
-    namespace = "com.zolt.app"
+    namespace = "com.zoltpcb.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -41,7 +41,7 @@ android {
         // Permanent once published. Changing it makes Android treat the app
         // as a different one: the installed copy, and every design in its
         // database, would be left behind.
-        applicationId = "com.zolt.app"
+        applicationId = "com.zoltpcb.app"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -65,6 +65,14 @@ android {
                 if (hasReleaseKey) "release" else "debug"
             )
         }
+    }
+
+    // The Android Gradle plugin otherwise adds a block listing every
+    // dependency, encrypted with a key only Google can read. F-Droid
+    // refuses APKs that carry it, and Play does not need it.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
     }
 }
 

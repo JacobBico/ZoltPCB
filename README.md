@@ -83,7 +83,11 @@ real board houses that check your design against what they can actually make.
 
 ## Getting Zolt
 
-Zolt will be on Google Play soon. Until then you can build it yourself:
+Zolt will be on F-Droid and Google Play soon. The two are signed
+differently, so to switch from one to the other, back up your projects,
+uninstall, install from the other store and restore them.
+
+Until then you can build it yourself:
 
 ```bash
 git clone https://github.com/JacobBico/ZoltPCB.git

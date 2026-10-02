@@ -114,6 +114,12 @@ class FootprintLibraryRepository {
     if (cleaned.isEmpty) {
       throw const LibraryImportException('The library needs a name');
     }
+    // The nickname becomes a file name, and it can be typed by hand.
+    if (cleaned.contains(RegExp(r'[/\\]')) || cleaned.startsWith('.')) {
+      throw const LibraryImportException(
+        'A library name cannot contain / or \\, or start with a dot',
+      );
+    }
     if (sources.isEmpty) {
       throw const LibraryImportException('No footprint files were given');
     }

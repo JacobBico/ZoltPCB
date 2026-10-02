@@ -69,9 +69,7 @@ class WhatsNewScreen extends ConsumerWidget {
         children: [
           AppTopBar(
             title: "What's new",
-            subtitle: current == null
-                ? null
-                : 'You have ${current.version} · updates come through Google Play',
+            subtitle: current == null ? null : 'You have ${current.version}',
             leading: IconButton(
               tooltip: 'Back',
               icon: const Icon(Icons.arrow_back, size: 20),
