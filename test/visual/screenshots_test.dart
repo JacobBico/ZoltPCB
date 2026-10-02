@@ -38,13 +38,14 @@ void main() {
 
   setUpAll(() async {
     if (skip) return;
-    // Real fonts, so text reads as text rather than the test font's boxes.
-    const mono =
-        '/home/jacob/flutter/bin/cache/dart-sdk/bin/resources/'
+    // Real fonts, so text reads as text rather than the test font's boxes,
+    // from the Flutter SDK whose flutter_tester is running this.
+    final exe = Platform.resolvedExecutable;
+    final cache = exe.substring(0, exe.indexOf('/bin/cache/') + 11);
+    final mono =
+        '${cache}dart-sdk/bin/resources/'
         'devtools/assets/fonts/Roboto_Mono/RobotoMono-Regular.ttf';
-    const icons =
-        '/home/jacob/flutter/bin/cache/artifacts/material_fonts/'
-        'MaterialIcons-Regular.otf';
+    final icons = '${cache}artifacts/material_fonts/MaterialIcons-Regular.otf';
     for (final (family, path) in [
       ('monospace', mono),
       ('MaterialIcons', icons),
